@@ -4,8 +4,10 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { startApp, type App } from "../src/app.ts";
 import { scriptedModel } from "../src/models/scripted.ts";
 import { defineTool } from "../src/core/tool.ts";
+import { freeLiveKitPort } from "./free-port.ts";
 
-const LIVEKIT_PORT = 7920;
+// Free ports, so a running app or another test run never collides with these.
+const LIVEKIT_PORT = await freeLiveKitPort();
 const GEMINI_KEY = "AIza-real-key-must-never-reach-the-window";
 
 let app: App;
@@ -82,9 +84,10 @@ describe("voice app, as the window sees it", () => {
 
 describe("stopping the app", () => {
   test("stops the local LiveKit server too", async () => {
-    const other = await startApp({ model: scriptedModel([]), livekitPort: LIVEKIT_PORT + 10, tools: [] });
+    const otherPort = await freeLiveKitPort();
+    const other = await startApp({ model: scriptedModel([]), livekitPort: otherPort, tools: [] });
     await other.stop();
-    const up = await fetch(`http://127.0.0.1:${LIVEKIT_PORT + 10}`).then(() => true, () => false);
+    const up = await fetch(`http://127.0.0.1:${otherPort}`).then(() => true, () => false);
     expect(up).toBe(false);
   }, 15_000);
 });
@@ -113,7 +116,7 @@ describe("window commands: cancel a job, switch the mode", () => {
         [{ type: "text", text: "Started." }],
         [{ type: "text", text: "It was cancelled." }],
       ]),
-      livekitPort: LIVEKIT_PORT + 20,
+      livekitPort: await freeLiveKitPort(),
       tools: [startWait],
       mode: "auto-edits",
     });

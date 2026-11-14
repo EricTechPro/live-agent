@@ -9,6 +9,7 @@ import { startApp, type App } from "../src/app.ts";
 import type { AgentEvent } from "../src/core/events.ts";
 import { scriptedModel } from "../src/models/scripted.ts";
 import saveSetup from "../tools/save-setup.ts";
+import { freeLiveKitPort } from "./free-port.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "live-agent-app-setup-"));
 const configPath = join(dir, "live-agent.config.json");
@@ -21,7 +22,7 @@ beforeAll(async () => {
       [{ type: "tool.call", id: "s1", name: "save_setup", args: { brainPath: "notes" } }],
       [{ type: "text", text: "Saved." }],
     ]),
-    livekitPort: 7900,
+    livekitPort: await freeLiveKitPort(),
     tools: [saveSetup],
     configPath,
   });

@@ -19,8 +19,10 @@ import type { Model, ModelEvent } from "../src/core/model.ts";
 import { joinVoiceRoom } from "../src/voice/livekit-bridge.ts";
 import { startLiveKit, type LiveKitServer } from "../src/voice/livekit-runner.ts";
 import { createTokenService, type TokenService } from "../src/voice/token-service.ts";
+import { freeLiveKitPort } from "./free-port.ts";
 
-const PORT = 7940;
+// A free port, so a running app or another test run never collides with this one.
+const PORT = await freeLiveKitPort();
 const ROOM = "live-agent";
 
 /** A fake model the test drives by hand: `say` an event, see if mic audio arrived. */

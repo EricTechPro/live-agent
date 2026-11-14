@@ -2,8 +2,10 @@
 // binary and stops it again. Needs `livekit-server` on PATH (brew install livekit).
 import { describe, expect, test } from "bun:test";
 import { startLiveKit } from "../src/voice/livekit-runner.ts";
+import { freeLiveKitPort } from "./free-port.ts";
 
-const PORT = 7960;
+// A free port, so a running app or another test run never collides with this one.
+const PORT = await freeLiveKitPort();
 
 async function isUp(url: string) {
   try {
