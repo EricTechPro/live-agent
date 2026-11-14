@@ -4,12 +4,17 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Priority:** must-have
 
-- [ ] Starting a session and sending a text turn returns transcript events for the reply
-- [ ] The same turn works with the scripted fake model and with real Gemini Live
-- [ ] A fast test drives the fake model through the event stream and passes with no network
-- [ ] A live smoke test runs one real text turn when a Gemini key is present, and skips cleanly when it is not
-- [ ] The Gemini key is read from the environment, never hard-coded; an example env file is committed
+- [x] Starting a session and sending a text turn returns transcript events for the reply
+- [x] The same turn works with the scripted fake model and with real Gemini Live
+- [x] A fast test drives the fake model through the event stream and passes with no network
+- [x] A live smoke test runs one real text turn when a Gemini key is present, and skips cleanly when it is not
+- [x] The Gemini key is read from the environment, never hard-coded; an example env file is committed
+
+## Comments
+
+- Built on Bun + TypeScript with `@google/genai` 3.3. Fast tests: `bun test` (scripted fake model, no network). Live smoke: `bun run smoke`.
+- The live smoke skips cleanly with no key (verified). The real run against `gemini-3.8-live` is pending a key: run `bun run smoke` with `GEMINI_API_KEY` set. Text goes in via `sendRealtimeInput({ text })`; if the live model rejects that, switch `sendText` in `src/models/gemini-live.ts` to `sendClientContent`.

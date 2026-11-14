@@ -1,0 +1,5 @@
+# `bun test` runs only the fast tests in ./test (no network, no key).
+# The live smoke test lives in ./smoke and runs with `bun run smoke`,
+# so a key in .env never turns every test run into a paid network call.
+[test]
+root = "test"
