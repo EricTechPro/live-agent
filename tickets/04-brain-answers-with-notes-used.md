@@ -4,12 +4,12 @@
 
 **Blocked by:** 02 Read-file tool behind the safety gate, 03 Config file
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Priority:** must-have
 
-- [ ] The sample brain ships with a few believable fake notes in each folder
-- [ ] A question answerable from the sample wiki gets an answer plus a notes-used event listing the right notes
-- [ ] Pointing the config at another folder makes the agent read that folder instead
-- [ ] A real brain folder is ignored by git
-- [ ] Reading the brain is a read-class tool and never asks for permission
+- [x] The sample brain ships with a few believable fake notes in each folder
+- [x] A question answerable from the sample wiki gets an answer plus a notes-used event listing the right notes
+- [x] Pointing the config at another folder makes the agent read that folder instead
+- [x] A real brain folder is ignored by git
+- [x] Reading the brain is a read-class tool and never asks for permission

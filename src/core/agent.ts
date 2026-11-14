@@ -8,6 +8,7 @@
 // Why this shape: voice comes later (ticket 08), but a text turn is the same
 // conversation without a microphone, so every test can drive the real core
 // through text alone (the same trick as live-dj's smoke_live).
+import { brainRoot } from "../brain/index.ts";
 import { defaultConfig, type Config } from "../config/index.ts";
 import type { AgentEvent, EventOf } from "./events.ts";
 import type { Model, ModelEvent, ToolResponse } from "./model.ts";
@@ -50,6 +51,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   const mode = options.mode ?? config.safety.mode;
   const overrides = options.overrides ?? config.safety.overrides;
   const workDir = options.workDir ?? process.cwd();
+  const brainPath = brainRoot(config.brainPath);
   const tools = options.tools ?? (await loadTools(options.toolsDir));
   const byName = new Map(tools.map((t) => [t.name, t]));
   const listeners = new Set<(event: AgentEvent) => void>();
@@ -63,6 +65,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     reply: string;
     awaiting: number;
     running: number;
+    notes: Set<string>;
     done: (events: AgentEvent[]) => void;
   } | null = null;
 
@@ -79,6 +82,8 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   function finishTurnIfIdle() {
     if (!turn || turn.awaiting > 0 || turn.running > 0) return;
     const finished = turn;
+    // Why once, at the end: the app shows "notes used" next to the finished answer.
+    if (finished.notes.size) emit({ type: "notes.used", notes: [...finished.notes] });
     emit({ type: "turn.done", reply: finished.reply });
     turn = null;
     finished.done(finished.events);
@@ -101,12 +106,16 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     modelSession.sendToolResponse({ id: call.id, name: call.name, response, ...extra });
   }
 
+  function useNotes(paths: string[]) {
+    for (const path of paths) turn?.notes.add(path);
+  }
+
   function run(call: ToolCall, tool: Tool) {
     if (turn) turn.running++;
     // Why a promise chain (not await): the tool runs on its own while the
     // conversation goes on. Its answer goes back whenever it is ready.
     Promise.resolve()
-      .then(() => tool.run(call.args, { workDir }))
+      .then(() => tool.run(call.args, { workDir, brainPath, useNotes }))
       .then(
         (output) => respond(call, "ok", { output: output ?? null }),
         (err: unknown) => respond(call, "error", { error: err instanceof Error ? err.message : String(err) }),
@@ -193,7 +202,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     sendText(text) {
       if (turn) return Promise.reject(new Error("a turn is already in progress"));
       return new Promise((done) => {
-        turn = { events: [], reply: "", awaiting: 0, running: 0, done };
+        turn = { events: [], reply: "", awaiting: 0, running: 0, notes: new Set(), done };
         emit({ type: "transcript", role: "user", text });
 
         const pending = waiting;

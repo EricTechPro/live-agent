@@ -59,3 +59,28 @@ test.skipIf(!apiKey)(
   },
   45_000,
 );
+
+test.skipIf(!apiKey)(
+  "brain answer reports notes used",
+  async () => {
+    // Default config: the repo's sample brain. Gus is the sample starter's name.
+    const session = await startSession({ model: geminiLiveModel({ apiKey: apiKey! }) });
+    try {
+      const events = await session.sendText(
+        "Check my notes: what is my sourdough starter called, and how often do I feed it on the counter?",
+      );
+      const done = events.find((e) => e.type === "turn.done");
+      const used = events.find((e) => e.type === "notes.used");
+      console.log("  tool calls:", events.filter((e) => e.type === "tool.call"));
+      console.log("  notes used:", used);
+      console.log("  model said:", done?.reply || "(no transcript)");
+
+      expect(events).toContainEqual(expect.objectContaining({ type: "tool.call", name: "search_brain" }));
+      expect(used).toEqual({ type: "notes.used", notes: expect.arrayContaining(["wiki/sourdough-starter.md"]) });
+      expect(done?.reply.toLowerCase()).toContain("gus");
+    } finally {
+      await session.close();
+    }
+  },
+  45_000,
+);
