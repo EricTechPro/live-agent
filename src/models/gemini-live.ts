@@ -15,7 +15,13 @@ export interface GeminiLiveOptions {
 }
 
 export function geminiLiveModel(options: GeminiLiveOptions): Model {
-  const ai = new GoogleGenAI({ apiKey: options.apiKey });
+  // Why pin v1beta: @google/genai 3.3.0 defaults to "v1", and the Live
+  // WebSocket endpoint only answers on v1beta/v1alpha (v1 returns 404, which
+  // shows up as "Expected 101 status code").
+  const ai = new GoogleGenAI({
+    apiKey: options.apiKey,
+    httpOptions: { apiVersion: "v1beta" },
+  });
 
   return {
     async connect(onEvent) {
