@@ -5,9 +5,16 @@
 //   const events = await session.sendText("hi");  // or: just this turn's events
 //   await session.close();
 //
-// Why this shape: voice comes later (ticket 08), but a text turn is the same
-// conversation without a microphone, so every test can drive the real core
-// through text alone (the same trick as live-dj's smoke_live).
+// Why this shape: a text turn is the same conversation without a microphone,
+// so every test can drive the real core through text alone (the same trick as
+// live-dj's smoke_live).
+//
+// Voice (ticket 08): `sendAudio` streams the mic in; there is no "start turn"
+// call, because the model decides when the user has spoken. The first thing
+// the model says back about it (what it heard, or its reply) opens a voice
+// turn, and that turn puts the very same events on the stream as a text turn.
+// The model's voice itself comes out of `onAudio`, not the event stream: it is
+// binary and high-rate, and the stream stays plain JSON.
 import { defaultConfig, type Config } from "../config/index.ts";
 import type { AgentEvent, EventOf } from "./events.ts";
 import type { Model, ModelEvent, ToolResponse } from "./model.ts";
@@ -32,9 +39,16 @@ export interface SessionOptions {
   tools?: Tool[];
 }
 
+/** What `onAudio` hears: a chunk of the model's voice, or "drop what you queued" (interrupted). */
+export type AudioOut = { type: "audio"; data: Int16Array; sampleRate: number } | { type: "clear" };
+
 export interface AgentSession {
   /** Send one text turn. Resolves with every event of that turn, ending with `turn.done`. */
   sendText(text: string): Promise<AgentEvent[]>;
+  /** Stream a chunk of the user's microphone (16-bit mono PCM, 16 kHz for Gemini). */
+  sendAudio(data: Int16Array, sampleRate: number): void;
+  /** Listen to the model's voice. Play `audio` in order; on `clear`, stop and drop anything queued. */
+  onAudio(listener: (out: AudioOut) => void): () => void;
   /** Listen to every event on the stream. Returns a function that stops listening. */
   onEvent(listener: (event: AgentEvent) => void): () => void;
   close(): Promise<void>;
@@ -53,6 +67,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   const tools = options.tools ?? (await loadTools(options.toolsDir));
   const byName = new Map(tools.map((t) => [t.name, t]));
   const listeners = new Set<(event: AgentEvent) => void>();
+  const audioListeners = new Set<(out: AudioOut) => void>();
 
   // The turn in flight. Why only one: a live conversation takes turns, so the core does too.
   // A turn ends when the model has answered everything we sent it (`awaiting`)
@@ -164,11 +179,36 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     }
   }
 
+  // A spoken turn has no sendText to open it, so the model's first word about
+  // it does. It waits for one `turn.complete`, like a text turn. Nobody awaits
+  // its promise; listeners see its events on the stream.
+  function openVoiceTurn() {
+    if (!turn) turn = { events: [], reply: "", awaiting: 1, running: 0, done: () => {} };
+  }
+
+  function playAudio(out: AudioOut) {
+    for (const listener of audioListeners) listener(out);
+  }
+
   // Translate what the model says into what the app sees.
   function onModelEvent(event: ModelEvent) {
     switch (event.type) {
+      case "user.text":
+        openVoiceTurn();
+        emit({ type: "transcript", role: "user", text: event.text });
+        break;
+      case "audio":
+        openVoiceTurn();
+        playAudio(event);
+        break;
+      case "interrupted":
+        // Drop the queued voice first: the user is already talking.
+        playAudio({ type: "clear" });
+        emit({ type: "interrupted" });
+        break;
       case "text":
-        if (turn) turn.reply += event.text;
+        openVoiceTurn();
+        turn!.reply += event.text;
         emit({ type: "transcript", role: "model", text: event.text });
         break;
       case "tool.call":
@@ -218,9 +258,16 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         modelSession.sendText(text);
       });
     },
+    sendAudio(data, sampleRate) {
+      modelSession.sendAudio(data, sampleRate);
+    },
     onEvent(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+    onAudio(listener) {
+      audioListeners.add(listener);
+      return () => audioListeners.delete(listener);
     },
     close: () => modelSession.close(),
   };

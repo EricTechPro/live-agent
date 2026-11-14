@@ -37,6 +37,8 @@ export type AgentEvent =
       output?: unknown;
       error?: string;
     }
+  /** The user talked over the model, so it stopped mid-reply. The turn still ends with `turn.done`. */
+  | { type: "interrupted" }
   /** The model finished its reply. `reply` is the whole reply, joined for you. */
   | { type: "turn.done"; reply: string }
   /** Something went wrong in the session. The session may still be usable. */
