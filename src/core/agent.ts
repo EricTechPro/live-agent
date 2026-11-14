@@ -26,6 +26,7 @@ import type { Model, ModelEvent, ToolResponse } from "./model.ts";
 import { loadTools } from "./registry.ts";
 import { decide, explain, nextMode, type SafetyMode, type SafetyOverrides } from "./safety.ts";
 import type { Tool, ToolContext } from "./tool.ts";
+import chatSummaryPrompt from "../../prompts/chat-summary.md" with { type: "text" };
 
 export interface SessionOptions {
   /** Which model to talk to: `geminiLiveModel(...)` for real, `scriptedModel(...)` in tests. */
@@ -108,10 +109,8 @@ type ToolCall = Extract<ModelEvent, { type: "tool.call" }>;
 // What counts as "yes" when a tool call waits for approval. Anything else declines.
 const YES = /^\s*(yes|yeah|yep|yup|sure|ok|okay|go ahead|do it|please do|approved?)\b/i;
 
-// What close() asks the model for the chat-end note.
-const SUMMARY_REQUEST =
-  "The chat is ending now. Do not call any tools. Summarise this chat for my notes in two to five short " +
-  "bullet points: what was said and what was decided. Reply with the bullet points only.";
+// What close() asks the model for the chat-end note. The words live in prompts/chat-summary.md.
+const SUMMARY_REQUEST = chatSummaryPrompt.trim();
 
 export async function startSession(options: SessionOptions): Promise<AgentSession> {
   const config = options.config ?? defaultConfig();
