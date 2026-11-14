@@ -1,0 +1,66 @@
+<!doctype html>
+<!--
+  Manual voice check (ticket 08), until the Tauri window (ticket 09) exists.
+  Served by the core at GET /check. Open the URL that `bun run start` prints.
+  It does what the window will do: get a room token from /session, join the
+  local LiveKit room as "user", publish the mic, play the agent's voice, and
+  show the agent event stream from /events.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>live-agent voice check</title>
+  <style>
+    body { font: 15px/1.5 system-ui, sans-serif; margin: 2rem auto; max-width: 46rem; padding: 0 1rem; background: #fff; color: #111; }
+    @media (prefers-color-scheme: dark) { body { background: #111; color: #eee; } }
+    button { font: inherit; padding: .5rem 1rem; }
+    #log { white-space: pre-wrap; font: 13px ui-monospace, monospace; margin-top: 1rem; }
+    .user { color: #2563eb; } .model { color: #16a34a; } .interrupted { color: #dc2626; font-weight: bold; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.15.6/dist/livekit-client.umd.min.js"></script>
+</head>
+<body>
+  <h1>live-agent voice check</h1>
+  <p>Use headphones, then press Start and talk. Try talking over the agent while it speaks.</p>
+  <button id="start">Start</button> <span id="state"></span>
+  <div id="log"></div>
+  <script>
+    const launchToken = location.hash.slice(1);
+    const auth = { Authorization: "Bearer " + launchToken };
+    const log = (text, cls) => {
+      const line = document.createElement("div");
+      line.textContent = text;
+      if (cls) line.className = cls;
+      document.getElementById("log").prepend(line);
+    };
+    const state = (s) => (document.getElementById("state").textContent = s);
+
+    document.getElementById("start").onclick = async () => {
+      try {
+        const session = await fetch("/session", { headers: auth }).then((r) => r.json());
+        if (session.error) throw new Error(session.error + " (open the exact URL `bun run start` printed)");
+        log("got room token, expires " + session.expiresAt + " (that is all this page receives)");
+
+        const events = new EventSource("/events?token=" + launchToken);
+        events.onmessage = (m) => {
+          const e = JSON.parse(m.data);
+          if (e.type === "transcript") log((e.role === "user" ? "you: " : "agent: ") + e.text, e.role);
+          else if (e.type === "interrupted") log("-- interrupted --", "interrupted");
+          else log(JSON.stringify(e));
+        };
+
+        const room = new LivekitClient.Room();
+        room.on(LivekitClient.RoomEvent.TrackSubscribed, (track) => {
+          if (track.kind === "audio") document.body.appendChild(track.attach());
+        });
+        await room.connect(session.livekitUrl, session.token);
+        await room.localParticipant.setMicrophoneEnabled(true);
+        state("listening: talk now");
+      } catch (err) {
+        state("failed: " + err.message);
+      }
+    };
+  </script>
+</body>
+</html>

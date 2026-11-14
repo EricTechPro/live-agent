@@ -4,12 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "bun run src/main.ts",
     "test": "bun test",
     "smoke": "bun test ./smoke",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@google/genai": "^3.3.0"
+    "@google/genai": "^3.3.0",
+    "@livekit/rtc-node": "^1.2.2",
+    "livekit-server-sdk": "^2.19.3"
   },
   "devDependencies": {
     "@types/bun": "^1.4.4",

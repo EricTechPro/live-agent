@@ -11,6 +11,12 @@ export type ModelEvent =
   | { type: "text"; text: string }
   /** The model wants a tool run. `id` ties the answer (a ToolResponse) back to this call. */
   | { type: "tool.call"; id: string; name: string; args: Record<string, unknown> }
+  /** A chunk of what the user said out loud (Gemini Live's input transcription). */
+  | { type: "user.text"; text: string }
+  /** A chunk of the model's voice: 16-bit mono PCM (Gemini Live speaks at 24 kHz). */
+  | { type: "audio"; data: Int16Array; sampleRate: number }
+  /** The user talked over the model. Stop playing its voice now; `turn.complete` follows. */
+  | { type: "interrupted" }
   /** The model is done with this turn and is waiting for the user. */
   | { type: "turn.complete" }
   /** The connection or the model reported a problem. */
@@ -36,7 +42,10 @@ export interface ToolResponse {
 }
 
 /** Everything the core can send into the model: a user text turn or a tool answer. */
-export type ModelInput = { type: "text"; text: string } | ({ type: "tool.response" } & ToolResponse);
+export type ModelInput =
+  | { type: "text"; text: string }
+  | { type: "audio"; data: Int16Array; sampleRate: number }
+  | ({ type: "tool.response" } & ToolResponse);
 
 /** What the model is told about a tool, so it knows it can call it. */
 export interface ToolDeclaration {
@@ -50,6 +59,11 @@ export interface ToolDeclaration {
 export interface ModelSession {
   /** Send one user text turn. Replies arrive through the `onEvent` given to `connect`. */
   sendText(text: string): void;
+  /**
+   * Stream a chunk of the user's microphone: 16-bit mono PCM (Gemini wants 16 kHz).
+   * There is no "end of turn" call: the model hears when the user stops talking.
+   */
+  sendAudio(data: Int16Array, sampleRate: number): void;
   /** Answer a `tool.call`. Replies (if any) arrive through `onEvent`. */
   sendToolResponse(response: ToolResponse): void;
   close(): Promise<void>;
