@@ -39,6 +39,8 @@ export type AgentEvent =
     }
   /** The user talked over the model, so it stopped mid-reply. The turn still ends with `turn.done`. */
   | { type: "interrupted" }
+  /** The brain notes this turn's answer used (paths inside the brain, e.g. `wiki/x.md`). Sent once, just before `turn.done`. */
+  | { type: "notes.used"; notes: string[] }
   /** The model finished its reply. `reply` is the whole reply, joined for you. */
   | { type: "turn.done"; reply: string }
   /** Something went wrong in the session. The session may still be usable. */
