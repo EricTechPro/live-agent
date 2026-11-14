@@ -17,4 +17,4 @@
 ## Comments
 
 - Built on Bun + TypeScript with `@google/genai` 3.3. Fast tests: `bun test` (scripted fake model, no network). Live smoke: `bun run smoke`.
-- The live smoke skips cleanly with no key (verified). The real run against `gemini-3.8-live` is pending a key: run `bun run smoke` with `GEMINI_API_KEY` set. Text goes in via `sendRealtimeInput({ text })`; if the live model rejects that, switch `sendText` in `src/models/gemini-live.ts` to `sendClientContent`.
+- The live smoke skips cleanly with no key (verified). 2026-11-13: real run against `gemini-3.8-live` passes ("Hello! How can I help?") after pinning the Live API to `v1beta` (the SDK's default `v1` returns 404 on the WebSocket). `sendRealtimeInput({ text })` works.
