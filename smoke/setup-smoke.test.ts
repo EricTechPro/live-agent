@@ -25,7 +25,7 @@ test.skipIf(!apiKey)(
       for (const line of [
         "My notes are in the folder my-notes.",
         "Ask me mode, please.",
-        "Turn on Gemini CLI and Codex. Leave Claude Code off.",
+        "Turn on the Gemini CLI helper.",
         "Two at once.",
         "Yes, that's everything. Please save it.",
         "Yes, save it now.",
@@ -47,7 +47,7 @@ test.skipIf(!apiKey)(
     console.log("  saved:", JSON.stringify(config));
     expect(config.brainPath).toContain("my-notes");
     expect(config.safety.mode).toBe("ask-me");
-    expect(config.helpers).toEqual({ geminiCli: true, codex: true, claudeCode: false, maxAtOnce: 2 });
+    expect(config.helpers).toEqual({ geminiCli: true, codex: false, claudeCode: false, maxAtOnce: 2 });
   },
   120_000,
 );

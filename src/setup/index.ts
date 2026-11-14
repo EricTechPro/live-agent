@@ -24,7 +24,8 @@ export const SETUP_TOOL = "save_setup";
 export interface SetupAnswers {
   brainPath?: string | null;
   safetyMode?: SafetyMode | null;
-  helpers?: { geminiCli?: boolean | null; codex?: boolean | null; claudeCode?: boolean | null } | null;
+  /** Only Gemini CLI is asked about: Codex and Claude Code keep their config fields but are not built yet. */
+  helpers?: { geminiCli?: boolean | null } | null;
   maxAtOnce?: number | null;
 }
 
@@ -65,10 +66,7 @@ export function saveSetup(configPath: string, answers: SetupAnswers): { config: 
   const next: Record<string, any> = { ...raw, safety: { ...raw.safety }, helpers: { ...raw.helpers } };
   if (given(answers.brainPath)) next.brainPath = expandHome(answers.brainPath.trim());
   if (given(answers.safetyMode)) next.safety.mode = answers.safetyMode;
-  for (const name of ["geminiCli", "codex", "claudeCode"] as const) {
-    const on = answers.helpers?.[name];
-    if (given(on)) next.helpers[name] = on;
-  }
+  if (given(answers.helpers?.geminiCli)) next.helpers.geminiCli = answers.helpers.geminiCli;
   if (given(answers.maxAtOnce)) next.helpers.maxAtOnce = answers.maxAtOnce;
 
   const config = checkConfig(next); // throws ConfigError naming the bad answer; nothing is written
@@ -92,16 +90,13 @@ export function saveSetup(configPath: string, answers: SetupAnswers): { config: 
  * It carries the current answers, so a re-run can say "you have X, keep it?".
  */
 export function setupKickoff(config: Config, firstRun: boolean): string {
-  const on = (["geminiCli", "codex", "claudeCode"] as const)
-    .filter((name) => config.helpers[name])
-    .map((name) => ({ geminiCli: "Gemini CLI", codex: "Codex", claudeCode: "Claude Code" })[name]);
   const values: Record<string, string> = {
     opening: firstRun
       ? "This is my first time using live-agent. Run the setup chat now."
       : "Run the live-agent setup chat again now. I may only want to change one or two things.",
     brainPath: config.brainPath,
     safetyMode: config.safety.mode,
-    helpers: on.length ? on.join(", ") : "none",
+    geminiCli: config.helpers.geminiCli ? "on" : "off",
     maxAtOnce: String(config.helpers.maxAtOnce),
     saveTool: SETUP_TOOL,
   };

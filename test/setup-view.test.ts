@@ -13,7 +13,7 @@ describe("setup in the transcript", () => {
     expect(t.lines).toEqual([
       { role: "note", text: "Setup: a few quick questions. Say skip to keep the default." },
       { role: "model", text: "Where do your notes live?" },
-      { role: "note", text: "Setup saved to /x/live-agent.config.json. Restart live-agent to use it." },
+      { role: "note", text: "Setup saved to /x/live-agent.config.json. The new settings are in use now." },
     ]);
   });
 

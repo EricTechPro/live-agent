@@ -12,3 +12,7 @@
 - [x] Answers are saved to a config that passes the schema
 - [x] Skipping a question keeps the default
 - [x] Running setup again updates the existing config instead of wiping it
+
+## Comments
+
+- 2026-11-14 review fix: setup asks only about the Gemini CLI helper (Codex and Claude Code stay in the config, parked in ticket 18), and saved answers apply at once (safety mode, helper on/off, max at once, brain folder). No restart needed.

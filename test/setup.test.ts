@@ -12,6 +12,7 @@ import type { ModelInput } from "../src/core/model.ts";
 import { scriptedModel } from "../src/models/scripted.ts";
 import { runSetupChat } from "../src/setup/chat.ts";
 import saveSetup from "../tools/save-setup.ts";
+import startHelper from "../tools/start-helper.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "live-agent-setup-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -61,13 +62,13 @@ describe("setup chat", () => {
     const configPath = freshPath();
     const model = scriptedModel([
       said("Where do your notes live?"),
-      save({ brainPath: "my-brain", safetyMode: "ask-me", helpers: { geminiCli: true, codex: true }, maxAtOnce: 2 }),
+      save({ brainPath: "my-brain", safetyMode: "ask-me", helpers: { geminiCli: false }, maxAtOnce: 2 }),
       said("All set."),
     ]);
     const session = await startSession({ model, configPath, tools: [saveSetup], mode: "ask-me" });
     await session.setup.start();
 
-    const events = await session.sendText("my-brain, ask me, gemini and codex, two at once");
+    const events = await session.sendText("my-brain, ask me, no gemini helper, two at once");
 
     expect(ofType(events, "safety.verdict")[0]).toMatchObject({ name: "save_setup", verdict: "allow" });
     expect(ofType(events, "setup.saved")).toEqual([{ type: "setup.saved", configPath, config: expect.any(Object) }]);
@@ -76,9 +77,60 @@ describe("setup chat", () => {
       ...defaultConfig(),
       brainPath: "my-brain",
       safety: { mode: "ask-me", overrides: {} },
-      helpers: { geminiCli: true, codex: true, claudeCode: false, maxAtOnce: 2 },
+      helpers: { geminiCli: false, codex: false, claudeCode: false, maxAtOnce: 2 },
     });
     await session.close();
+  });
+
+  test("setup only offers the Gemini CLI helper (Codex and Claude Code are not built yet)", async () => {
+    const configPath = freshPath();
+    let kickoff = "";
+    const model = scriptedModel([
+      (input: ModelInput) => {
+        if (input.type === "text") kickoff = input.text;
+        return said("Hi!");
+      },
+    ]);
+    const session = await startSession({ model, configPath, tools: [saveSetup] });
+    await session.setup.start();
+
+    expect(kickoff).toContain("Gemini CLI");
+    expect(kickoff).not.toMatch(/codex|claude/i);
+    const helperArgs = (saveSetup.parameters as any).properties.helpers.properties;
+    expect(Object.keys(helperArgs)).toEqual(["geminiCli"]);
+    await session.close();
+  });
+
+  test("saved answers are used at once: safety mode, helper on or off, and max at once", async () => {
+    const configPath = freshPath();
+    const model = scriptedModel([
+      said("Which safety mode?"),
+      save({ safetyMode: "ask-me", helpers: { geminiCli: false }, maxAtOnce: 2 }),
+      said("Saved, and in use now."),
+      [{ type: "tool.call", id: "h1", name: "start_helper", args: { task: "fix it" } }],
+      said("Shall I?"),
+      said("Sorry, the helper is off."),
+    ]);
+    const session = await startSession({ model, configPath, tools: [saveSetup, startHelper], mode: "auto-edits" });
+    await session.setup.start();
+
+    const events = await session.sendText("ask me, no helper, two at once");
+
+    expect(ofType(events, "mode.changed")).toEqual([{ type: "mode.changed", mode: "ask-me" }]);
+    expect(session.mode()).toBe("ask-me");
+    const saved = ofType(events, "tool.result").find((e) => e.name === "save_setup");
+    expect(JSON.stringify(saved?.output)).not.toContain("next time");
+
+    // Two jobs run side by side now (the default was one at a time).
+    const never = () => new Promise<string>(() => {});
+    session.jobs.submit({ kind: "test", title: "a", run: never });
+    session.jobs.submit({ kind: "test", title: "b", run: never });
+    expect(session.jobs.list().map((j) => j.state)).toEqual(["running", "running"]);
+
+    // The helper is off: the call is asked about (ask-me), and a yes finds it turned off.
+    await session.sendText("start a helper to fix it");
+    const yes = await session.sendText("yes");
+    expect(ofType(yes, "tool.result")[0]).toMatchObject({ name: "start_helper", status: "error", error: expect.stringContaining("turned off") });
   });
 
   test("skipping a question keeps the default", async () => {

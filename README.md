@@ -63,9 +63,9 @@ Then:
 
 1. **Allow the microphone** when macOS asks. The reason it shows: "live-agent listens to your
    voice so you can talk to it."
-2. **Answer the setup chat.** Four questions: brain folder, safety mode, helpers, how many
-   helpers at once. Say "keep it" to take the default. It saves `live-agent.config.json`.
-   The new settings apply the next time the app starts, so quit and reopen it.
+2. **Answer the setup chat.** Four questions: brain folder, safety mode, the Gemini CLI
+   helper on or off, how many helpers at once. Say "keep it" to take the default. It saves
+   `live-agent.config.json`, and the new settings are in use straight away.
 3. **Press Start talking** and say "What is my sourdough starter called?" It answers from
    the sample brain, and the bottom bar shows `Notes used wiki/sourdough-starter.md`.
    Use headphones so it doesn't hear itself.

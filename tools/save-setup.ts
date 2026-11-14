@@ -24,11 +24,9 @@ export default defineTool<SetupAnswers>({
       safetyMode: { type: "string", enum: ["ask-me", "auto-edits", "bypass"], description: "The safety mode." },
       helpers: {
         type: "object",
-        description: "Which helpers to turn on (true) or off (false). Leave out helpers the user did not mention.",
+        description: "Turn the Gemini CLI helper on (true) or off (false). Leave it out if the user did not say.",
         properties: {
           geminiCli: { type: "boolean" },
-          codex: { type: "boolean" },
-          claudeCode: { type: "boolean" },
         },
       },
       maxAtOnce: { type: "integer", minimum: 1, description: "The most helpers running at the same time." },
@@ -42,7 +40,7 @@ export default defineTool<SetupAnswers>({
       saved: setup.configPath,
       config,
       ...(warning ? { warning } : {}),
-      note: "The new settings apply the next time live-agent starts.",
+      note: "The new settings are in use now.",
     };
   },
 });

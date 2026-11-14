@@ -45,6 +45,8 @@ export interface Jobs {
   list(): JobInfo[];
   /** Cancel everything and wait until running jobs have stopped. */
   stopAll(): Promise<void>;
+  /** Change how many jobs may run at once (the setup chat). Queued jobs start if there is room now. */
+  setMaxAtOnce(max: number): void;
 }
 
 export interface JobsOptions {
@@ -55,6 +57,7 @@ export interface JobsOptions {
 }
 
 export function createJobs({ maxAtOnce, onState }: JobsOptions): Jobs {
+  // `maxAtOnce` is reassigned by setMaxAtOnce (the setup chat can change it live).
   type Entry = { info: JobInfo; spec: JobSpec; abort: AbortController; settled?: Promise<void> };
   const all = new Map<string, Entry>();
   const queue: Entry[] = [];
@@ -119,6 +122,10 @@ export function createJobs({ maxAtOnce, onState }: JobsOptions): Jobs {
       return false;
     },
     list: () => [...all.values()].map((e) => ({ ...e.info })),
+    setMaxAtOnce(max) {
+      maxAtOnce = max;
+      pump();
+    },
     async stopAll() {
       for (const entry of [...queue]) this.cancel(entry.info.id);
       const settling = [...all.values()].filter((e) => e.info.state === "running").map((e) => e.settled);

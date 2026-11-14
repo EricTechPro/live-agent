@@ -37,7 +37,7 @@ export function addToTranscript(t: Transcript, event: AgentEvent): Transcript {
       return { lines: [...t.lines, { role: "note", text }], open: false };
     }
     case "setup.saved": {
-      const text = `Setup saved to ${event.configPath}. Restart live-agent to use it.`;
+      const text = `Setup saved to ${event.configPath}. The new settings are in use now.`;
       return { lines: [...t.lines, { role: "note", text }], open: false };
     }
     default:

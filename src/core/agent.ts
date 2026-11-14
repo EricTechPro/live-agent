@@ -113,7 +113,8 @@ const YES = /^\s*(yes|yeah|yep|yup|sure|ok|okay|go ahead|do it|please do|approve
 const SUMMARY_REQUEST = chatSummaryPrompt.trim();
 
 export async function startSession(options: SessionOptions): Promise<AgentSession> {
-  const config = options.config ?? defaultConfig();
+  // `let`: a setup chat can save new answers, and they apply at once (applyConfig).
+  let config = options.config ?? defaultConfig();
   // `let`: the window can switch it while the app runs (setMode); the gate reads it per call.
   let mode = options.mode ?? config.safety.mode;
   const overrides = options.overrides ?? config.safety.overrides;
@@ -121,7 +122,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   const configPath = options.configPath ?? defaultConfigPath();
   // True from setup.start() until save_setup has written the file: the only time save_setup may run.
   let setupActive = false;
-  const brainPath = brainRoot(config.brainPath);
+  let brainPath = brainRoot(config.brainPath);
   const tools = options.tools ?? (await loadTools(options.toolsDir));
   const byName = new Map(tools.map((t) => [t.name, t]));
   const listeners = new Set<(event: AgentEvent) => void>();
@@ -255,6 +256,17 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     modelSession.sendToolResponse({ id: call.id, name: call.name, response, ...extra });
   }
 
+  // Use what the setup chat just saved, now. Everything setup asks about is
+  // read per call (brain, helper on/off) or can switch live (mode, max at once),
+  // so no restart is needed. The voice is set per connection: it changes on the
+  // next connection (a new chat or a restart).
+  function applyConfig(next: Config) {
+    config = next;
+    brainPath = brainRoot(next.brainPath);
+    jobs.setMaxAtOnce(next.helpers.maxAtOnce);
+    if (next.safety.mode !== mode) setMode(next.safety.mode);
+  }
+
   function setMode(next: SafetyMode) {
     mode = next;
     emit({ type: "mode.changed", mode });
@@ -348,6 +360,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         configPath,
         saved(saved) {
           setupActive = false;
+          applyConfig(saved);
           emit({ type: "setup.saved", configPath, config: saved });
         },
       },

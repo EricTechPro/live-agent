@@ -66,7 +66,7 @@ export type AgentEvent =
    * `firstRun`: there was no config file yet. The window shows a setup banner.
    */
   | { type: "setup.started"; configPath: string; firstRun: boolean }
-  /** The setup chat wrote the config file. The new settings apply the next time live-agent starts. */
+  /** The setup chat wrote the config file. Its settings are in use at once (a `mode.changed` comes first if the mode changed). */
   | { type: "setup.saved"; configPath: string; config: Config }
   /** The model finished its reply. `reply` is the whole reply, joined for you. */
   | { type: "turn.done"; reply: string }
