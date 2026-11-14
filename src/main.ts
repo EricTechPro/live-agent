@@ -11,6 +11,7 @@
 import { startApp, disposeNative } from "./app.ts";
 import { loadConfig } from "./config/index.ts";
 import { geminiLiveModel } from "./models/gemini-live.ts";
+import { geminiTidyModel } from "./models/gemini-tidy.ts";
 
 const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
 if (!apiKey) {
@@ -24,6 +25,8 @@ const app = await startApp({
   geminiApiKey: apiKey,
   // The Live session connects with a fresh single-use token, never the key itself.
   model: (tokens) => geminiLiveModel({ token: () => tokens.geminiToken() }),
+  // After each chat, a background job tidies new raw notes into wiki pages (ticket 07).
+  tidy: geminiTidyModel({ apiKey }),
   livekitPort: Number(process.env.LIVE_AGENT_LIVEKIT_PORT ?? 7880),
   port: Number(process.env.LIVE_AGENT_PORT ?? 0),
 }).catch(async (err: unknown) => {

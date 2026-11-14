@@ -6,13 +6,15 @@
 // Needs GEMINI_API_KEY (or GOOGLE_API_KEY, the name AI Studio suggests) in your environment or .env.
 // With no key it skips cleanly, so it is safe to run anywhere.
 import { expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultConfig } from "../src/config/index.ts";
 import { startSession } from "../src/core/agent.ts";
 import type { AgentEvent } from "../src/core/events.ts";
 import { geminiLiveModel } from "../src/models/gemini-live.ts";
+import { geminiTidyModel } from "../src/models/gemini-tidy.ts";
+import { scriptedModel } from "../src/models/scripted.ts";
 
 const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
 if (!apiKey) console.log("live smoke: skipped (no GEMINI_API_KEY; copy .env.example to .env)");
@@ -174,4 +176,41 @@ test.skipIf(!apiKey)(
     }
   },
   60_000,
+);
+
+test.skipIf(!apiKey)(
+  "ending a chat tidies the new raw notes into wiki pages with real Gemini",
+  async () => {
+    // A temp copy of the sample brain: its two raw notes plus this chat's note get tidied.
+    const brain = mkdtempSync(join(tmpdir(), "live-agent-smoke-tidy-"));
+    cpSync(join(import.meta.dir, "..", "sample-brain"), brain, { recursive: true });
+    const session = await startSession({
+      // The chat side is scripted: this case smoke-tests the real tidy model.
+      model: scriptedModel([[{ type: "text", text: "Got it." }]]),
+      config: { ...defaultConfig(), brainPath: brain },
+      tidy: geminiTidyModel({ apiKey: apiKey! }),
+      summaryTimeoutMs: 50,
+    });
+    const seen: AgentEvent[] = [];
+    session.onEvent((e) => seen.push(e));
+    try {
+      await session.sendText("My neighbour Tomasz lends me his ladder; he lives at number 12.");
+      await session.close();
+      let ended: AgentEvent | undefined;
+      for (let i = 0; i < 1600 && !ended; i++) {
+        ended = seen.find((e) => e.type === "job.state" && e.kind === "tidy" && e.state !== "queued" && e.state !== "running");
+        if (!ended) await Bun.sleep(50);
+      }
+      console.log("  tidy job:", ended);
+      expect(ended).toEqual(expect.objectContaining({ state: "done" }));
+      const wiki = readdirSync(join(brain, "wiki"));
+      console.log("  wiki now:", wiki);
+      const all = wiki.map((f) => readFileSync(join(brain, "wiki", f), "utf8")).join("\n");
+      expect(all.toLowerCase()).toContain("tomasz");
+      expect(readdirSync(join(brain, "raw")).length).toBeGreaterThanOrEqual(3);
+    } finally {
+      rmSync(brain, { recursive: true, force: true });
+    }
+  },
+  90_000,
 );

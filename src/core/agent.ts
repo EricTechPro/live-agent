@@ -16,6 +16,7 @@
 // The model's voice itself comes out of `onAudio`, not the event stream: it is
 // binary and high-rate, and the stream stays plain JSON.
 import { brainRoot, saveRawNote } from "../brain/index.ts";
+import { tidyJob, type TidyModel } from "../brain/tidy.ts";
 import { defaultConfig, type Config } from "../config/index.ts";
 import type { AgentEvent, EventOf } from "./events.ts";
 import { createJobs, type JobInfo, type Jobs } from "./jobs.ts";
@@ -43,6 +44,11 @@ export interface SessionOptions {
   summaryTimeoutMs?: number;
   /** Where helper CLIs live (tests point these at fake scripts). */
   helpers?: { geminiCliBin?: string; geminiCliHome?: string; cancelGraceMs?: number };
+  /**
+   * Tidies new raw notes into wiki pages after each chat (`geminiTidyModel(...)`).
+   * Unset: no tidy job. See src/brain/tidy.ts.
+   */
+  tidy?: TidyModel;
 }
 
 /** What `onAudio` hears: a chunk of the model's voice, or "drop what you queued" (interrupted). */
@@ -62,7 +68,11 @@ export interface AgentSession {
    * job board's cancel button), list them. State changes arrive as `job.state` events.
    */
   jobs: Pick<Jobs, "submit" | "cancel" | "list">;
-  /** Stops running jobs, then closes the model connection. */
+  /**
+   * Stops running jobs, writes the chat-end note, then closes the model connection.
+   * With `tidy` set, it then queues a tidy job and returns without waiting for it:
+   * its `job.state` events keep arriving on this stream after close.
+   */
   close(): Promise<void>;
 }
 
@@ -425,16 +435,25 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     // Stops running jobs and writes the chat-end note side by side, so close
     // stays prompt. `closed` first: a job ending now is not announced to the
     // model, which is busy writing the chat summary.
+    //
+    // The tidy job is queued only after stopAll has finished, so close never
+    // cancels it: it runs on with no model session (the tidy model is its own
+    // call) and a failure is just a "failed" job, never an error for the next chat.
     async close() {
       closed = true;
-      const saving = saveChatEndNote().catch((err: unknown) => {
-        emit({ type: "error", message: `could not save the chat note: ${err instanceof Error ? err.message : String(err)}` });
-      });
+      let notePath: string | null = null;
+      const saving = saveChatEndNote().then(
+        (path) => void (notePath = path),
+        (err: unknown) => {
+          emit({ type: "error", message: `could not save the chat note: ${err instanceof Error ? err.message : String(err)}` });
+        },
+      );
       try {
         await Promise.all([jobs.stopAll(), saving]);
       } finally {
         await modelSession.close();
       }
+      if (notePath && options.tidy) jobs.submit(tidyJob(brainPath, options.tidy));
     },
   };
 }
