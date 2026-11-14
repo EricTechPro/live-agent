@@ -4,7 +4,7 @@
 
 **Blocked by:** 06 Helper jobs with Gemini CLI
 
-**Status:** ready-for-agent
+**Status:** wontfix (parked until after the Nov 27 talk; set back to ready-for-agent to build)
 
 **Priority:** after-talk
 

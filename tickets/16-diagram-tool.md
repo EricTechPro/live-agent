@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 Read-file tool behind the safety gate, 09 Desktop window: orb, transcript, talk out loud
 
-**Status:** ready-for-agent
+**Status:** wontfix (parked until after the Nov 27 talk; set back to ready-for-agent to build)
 
 **Priority:** after-talk
 

@@ -4,7 +4,7 @@
 
 **Blocked by:** 10 Job board, bottom bar, mode switching
 
-**Status:** ready-for-agent
+**Status:** wontfix (parked until after the Nov 27 talk; set back to ready-for-agent to build)
 
 **Priority:** after-talk
 
