@@ -8,8 +8,8 @@
 
 **Priority:** must-have
 
-- [ ] A missing config file falls back to the documented defaults
-- [ ] An invalid config fails with a clear message naming the bad field
+- [x] A missing config file falls back to the documented defaults
+- [x] An invalid config fails with a clear message naming the bad field
 - [ ] Changing the safety mode in the config changes gate verdicts (checked through the event stream)
 - [ ] A per-tool override beats the mode table
-- [ ] The schema file is committed and describes every field
+- [x] The schema file is committed and describes every field

@@ -1,0 +1,92 @@
+// Config file tests. They go through the public loader, the way the app does
+// at session start: point it at a file (or no file) and read back the config.
+import { describe, expect, test } from "bun:test";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { loadConfig } from "../src/config/index.ts";
+
+function writeConfig(content: unknown): string {
+  const dir = mkdtempSync(join(tmpdir(), "live-agent-config-"));
+  const path = join(dir, "config.json");
+  writeFileSync(path, typeof content === "string" ? content : JSON.stringify(content));
+  return path;
+}
+
+describe("config file", () => {
+  test("a missing config file falls back to the documented defaults", () => {
+    const config = loadConfig("/nowhere/live-agent/config.json");
+
+    expect(config).toEqual({
+      brainPath: "sample-brain",
+      safety: { mode: "auto-edits", overrides: {} },
+      helpers: { geminiCli: true, codex: false, claudeCode: false, maxAtOnce: 1 },
+      worktrees: false,
+      voice: "Puck",
+    });
+  });
+
+  test("a partial config keeps the defaults for every field it leaves out", () => {
+    const path = writeConfig({
+      $schema: "./config.schema.json",
+      safety: { mode: "ask-me" },
+      helpers: { codex: true },
+    });
+
+    const config = loadConfig(path);
+
+    expect(config).toEqual({
+      brainPath: "sample-brain",
+      safety: { mode: "ask-me", overrides: {} },
+      helpers: { geminiCli: true, codex: true, claudeCode: false, maxAtOnce: 1 },
+      worktrees: false,
+      voice: "Puck",
+    });
+  });
+
+  test("an invalid config fails with a clear message naming the bad field", () => {
+    const badMode = writeConfig({ safety: { mode: "yolo" } });
+    expect(() => loadConfig(badMode)).toThrow(
+      'safety.mode must be one of "ask-me", "auto-edits", "bypass" (got "yolo")',
+    );
+
+    const badMax = writeConfig({ helpers: { maxAtOnce: 0 } });
+    expect(() => loadConfig(badMax)).toThrow("helpers.maxAtOnce must be at least 1 (got 0)");
+
+    const badType = writeConfig({ worktrees: "yes" });
+    expect(() => loadConfig(badType)).toThrow('worktrees must be a boolean (got "yes")');
+
+    const badOverride = writeConfig({ safety: { overrides: { run_command: "maybe" } } });
+    expect(() => loadConfig(badOverride)).toThrow("safety.overrides.run_command must be one of");
+
+    const unknown = writeConfig({ helper: {} });
+    expect(() => loadConfig(unknown)).toThrow('unknown field "helper"');
+  });
+
+  test("the committed schema describes every config field", () => {
+    const schema = JSON.parse(readFileSync(join(import.meta.dir, "../src/config/config.schema.json"), "utf8"));
+    const undescribed: string[] = [];
+    const walk = (node: any, field: string) => {
+      if (!node.description) undescribed.push(field || "(root)");
+      for (const [key, child] of Object.entries(node.properties ?? {})) {
+        walk(child, field ? `${field}.${key}` : key);
+      }
+    };
+    walk(schema, "");
+
+    expect(undescribed).toEqual([]);
+    // Every field the app reads is in the schema.
+    expect(Object.keys(schema.properties)).toEqual(
+      expect.arrayContaining(["brainPath", "safety", "helpers", "worktrees", "voice"]),
+    );
+    expect(Object.keys(schema.properties.safety.properties)).toEqual(["mode", "overrides"]);
+    expect(Object.keys(schema.properties.helpers.properties)).toEqual([
+      "geminiCli", "codex", "claudeCode", "maxAtOnce",
+    ]);
+  });
+
+  test("a config that is not valid JSON names the file", () => {
+    const path = writeConfig("{ brainPath: ");
+    expect(() => loadConfig(path)).toThrow(`${path} is not valid JSON`);
+  });
+});

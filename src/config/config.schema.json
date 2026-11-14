@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/erictech/live-agent/config.schema.json",
+  "title": "live-agent config",
+  "description": "One JSON file that controls live-agent. Every field is optional; a missing field (or a missing file) uses the default shown here. The setup chat writes this file.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "description": "Optional pointer to this schema, so editors can autocomplete the file.",
+      "type": "string"
+    },
+    "brainPath": {
+      "description": "Folder of the second brain (raw, wiki, projects). Relative paths resolve from the working directory. Defaults to the sample brain that ships in the repo.",
+      "type": "string",
+      "minLength": 1,
+      "default": "sample-brain"
+    },
+    "safety": {
+      "description": "How the safety gate treats tool calls.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "description": "Safety mode. ask-me: only reads run on their own. auto-edits: reads and edits run, commands and helpers ask. bypass: everything runs.",
+          "type": "string",
+          "enum": ["ask-me", "auto-edits", "bypass"],
+          "default": "auto-edits"
+        },
+        "overrides": {
+          "description": "Per-tool verdicts, keyed by tool name. An override wins over the mode table.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "enum": ["allow", "ask", "block"]
+          },
+          "default": {}
+        }
+      }
+    },
+    "helpers": {
+      "description": "Which helper agent CLIs the boss may start, and how many at once.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "geminiCli": {
+          "description": "Allow the Gemini CLI helper.",
+          "type": "boolean",
+          "default": true
+        },
+        "codex": {
+          "description": "Allow the Codex helper.",
+          "type": "boolean",
+          "default": false
+        },
+        "claudeCode": {
+          "description": "Allow the Claude Code helper.",
+          "type": "boolean",
+          "default": false
+        },
+        "maxAtOnce": {
+          "description": "Most helper jobs running at the same time. Extra jobs wait in the queue.",
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        }
+      }
+    },
+    "worktrees": {
+      "description": "Give each helper job its own git worktree.",
+      "type": "boolean",
+      "default": false
+    },
+    "voice": {
+      "description": "Gemini Live prebuilt voice name, e.g. Puck, Kore, Charon.",
+      "type": "string",
+      "minLength": 1,
+      "default": "Puck"
+    }
+  }
+}

@@ -9,6 +9,8 @@
 # your real brain never goes in the repo (the sample brain does)
 brain/
 !sample-brain/
+# your config holds your brain path; the schema is committed instead
+live-agent.config.json
 
 # python
 __pycache__/
