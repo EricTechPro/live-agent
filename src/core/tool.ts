@@ -21,6 +21,10 @@ export type RiskClass = "read" | "edit" | "command" | "helper";
 export interface ToolContext {
   /** The folder relative paths are read from (the session's `workDir`). */
   workDir: string;
+  /** The brain folder (config `brainPath`, resolved to an absolute path). */
+  brainPath: string;
+  /** Report brain notes (paths inside the brain) this turn's answer used. The core emits `notes.used`. */
+  useNotes(paths: string[]): void;
   /**
    * The orchestrator (src/core/jobs.ts). A job submitted from a tool call is
    * tied to that call: the core tells the model when the job ends.
