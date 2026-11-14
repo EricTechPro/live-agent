@@ -7,7 +7,8 @@
 // me?", and the first run is never stuck behind the gate. Outside a setup chat
 // it is blocked in every mode, even Bypass: a sentence in a brain note must
 // never be able to talk the model into rewriting its own safety mode.
-// A per-tool override in the config still wins, as for every tool.
+// That rule is the tool's own `gate`. A per-tool override in the config still
+// wins, as for every tool.
 import { defineTool } from "../src/core/tool.ts";
 import { saveSetup, SETUP_TOOL, type SetupAnswers } from "../src/setup/index.ts";
 
@@ -32,6 +33,10 @@ export default defineTool<SetupAnswers>({
       maxAtOnce: { type: "integer", minimum: 1, description: "The most helpers running at the same time." },
     },
   },
+  gate: ({ setupActive }) =>
+    setupActive
+      ? { verdict: "allow", reason: "the user is answering the setup chat" }
+      : { verdict: "block", reason: "the config can only be changed in the setup chat the user starts" },
   run(answers, { setup }) {
     if (!setup) throw new Error("setup is not available in this session");
     const { config, warning } = saveSetup(setup.configPath, answers);

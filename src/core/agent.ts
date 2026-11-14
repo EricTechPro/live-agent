@@ -19,12 +19,12 @@ import { existsSync } from "node:fs";
 import { brainRoot, saveRawNote } from "../brain/index.ts";
 import { tidyJob, type TidyModel } from "../brain/tidy.ts";
 import { defaultConfig, defaultConfigPath, type Config } from "../config/index.ts";
-import { currentConfig, SETUP_TOOL, setupKickoff } from "../setup/index.ts";
+import { currentConfig, setupKickoff } from "../setup/index.ts";
 import type { AgentEvent, EventOf } from "./events.ts";
 import { createJobs, type JobInfo, type Jobs } from "./jobs.ts";
 import type { Model, ModelEvent, ToolResponse } from "./model.ts";
 import { loadTools } from "./registry.ts";
-import { decide, explain, nextMode, type SafetyMode, type SafetyOverrides } from "./safety.ts";
+import { nextMode, rule, type SafetyMode, type SafetyOverrides } from "./safety.ts";
 import type { Tool, ToolContext } from "./tool.ts";
 import type { HelperPaths } from "../helpers/gemini-cli.ts";
 import chatSummaryPrompt from "../../prompts/chat-summary.md" with { type: "text" };
@@ -433,17 +433,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     }
 
     const input = { tool: call.name, args: call.args, risk: tool.risk, mode, overrides };
-    let verdict = decide(input);
-    let reason = explain(input, verdict);
-    // save_setup skips the mode table (see tools/save-setup.ts): allowed only
-    // inside a setup chat the user started, blocked anywhere else. A per-tool
-    // override in the config still wins.
-    if (call.name === SETUP_TOOL && !overrides[call.name]) {
-      verdict = setupActive ? "allow" : "block";
-      reason = setupActive
-        ? "the user is answering the setup chat"
-        : "the config can only be changed in the setup chat the user starts";
-    }
+    const { verdict, reason } = rule(input, tool.gate?.({ setupActive }));
     emit({ type: "safety.verdict", id: call.id, name: call.name, risk: tool.risk, mode, verdict, reason });
 
     switch (verdict) {
