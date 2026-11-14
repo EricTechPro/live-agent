@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The main window may call our own core_status command and listen for events. Rust spawns the sidecar, so the window gets no shell access.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

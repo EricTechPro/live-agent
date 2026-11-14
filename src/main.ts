@@ -11,6 +11,9 @@
 import { startApp, disposeNative } from "./app.ts";
 import { loadConfig } from "./config/index.ts";
 import { geminiLiveModel } from "./models/gemini-live.ts";
+import { existsSync } from "node:fs";
+import { TOOLS_DIR } from "./core/registry.ts";
+import { bundledTools } from "./core/bundled-tools.ts";
 
 const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
 if (!apiKey) {
@@ -26,6 +29,8 @@ const app = await startApp({
   model: (tokens) => geminiLiveModel({ token: () => tokens.geminiToken() }),
   livekitPort: Number(process.env.LIVE_AGENT_LIVEKIT_PORT ?? 7880),
   port: Number(process.env.LIVE_AGENT_PORT ?? 0),
+  // From the repo: read tools/ as usual. As the compiled sidecar there is no tools/ folder, so use the baked-in list.
+  tools: existsSync(TOOLS_DIR) ? undefined : bundledTools,
 }).catch(async (err: unknown) => {
   // startApp already stopped LiveKit; say what broke in one line.
   console.error(`live-agent: could not start: ${err instanceof Error ? err.message : String(err)}`);
@@ -47,3 +52,9 @@ async function shutdown() {
 }
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+
+// As the Tauri sidecar: if the app dies without stopping us (crash, force quit),
+// we get re-parented to launchd (ppid 1). Stop then, so no core or LiveKit is left behind.
+if (process.env.LIVE_AGENT_EXIT_WITH_PARENT) {
+  setInterval(() => process.ppid === 1 && shutdown(), 1000).unref();
+}
