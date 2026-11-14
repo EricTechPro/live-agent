@@ -7,7 +7,7 @@
 // Why plain files and a word search (no vector database): the notes are small,
 // people already keep them in folders, and anyone can open the brain in an
 // editor and see exactly what the agent sees.
-import { readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 
 /** The folders answers come from. `raw` is left out on purpose: it is untidy, unchecked input. */
@@ -75,4 +75,40 @@ export async function searchBrain(root: string, query: string, limit = 3): Promi
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map((s) => s.note);
+}
+
+const MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
+
+export interface RawNote {
+  /** A few words; becomes the heading and the file name (`2026-11-13-gate-code.md`). */
+  title: string;
+  /** The note itself, markdown. */
+  text: string;
+  /** The note's date (local time). Default: now. */
+  date?: Date;
+}
+
+/**
+ * Write a new dated note into `raw/` and return its path inside the brain
+ * (e.g. `raw/2026-11-13-chat.md`).
+ *
+ * Never overwrites: if the name is taken it tries `-2`, `-3`, ... The
+ * exclusive-create flag makes that safe even if two notes land at once.
+ */
+export async function saveRawNote(root: string, note: RawNote): Promise<string> {
+  const date = note.date ?? new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const day = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  const slug = words(note.title).slice(0, 6).join("-") || "note";
+  const content = `# ${note.title.trim() || "Note"}, ${date.getDate()} ${MONTHS[date.getMonth()]}\n\n${note.text.trim()}\n`;
+  await mkdir(join(root, "raw"), { recursive: true });
+  for (let n = 1; ; n++) {
+    const name = `${day}-${slug}${n === 1 ? "" : `-${n}`}.md`;
+    try {
+      await writeFile(join(root, "raw", name), content, { flag: "wx" });
+      return `raw/${name}`;
+    } catch (error) {
+      if ((error as { code?: string }).code !== "EEXIST") throw error;
+    }
+  }
 }

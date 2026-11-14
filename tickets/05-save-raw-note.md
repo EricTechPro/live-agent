@@ -4,12 +4,12 @@
 
 **Blocked by:** 04 Brain answers with notes used
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Priority:** must-have
 
-- [ ] Ending a session writes exactly one new raw note
-- [ ] "Remember this" mid-chat writes a raw note immediately
-- [ ] Each write emits a brain-write event with the note's name
-- [ ] Notes never overwrite existing raw notes
-- [ ] Fast tests check both paths through the event stream
+- [x] Ending a session writes exactly one new raw note
+- [x] "Remember this" mid-chat writes a raw note immediately
+- [x] Each write emits a brain-write event with the note's name
+- [x] Notes never overwrite existing raw notes
+- [x] Fast tests check both paths through the event stream

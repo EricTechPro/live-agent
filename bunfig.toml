@@ -3,3 +3,5 @@
 # so a key in .env never turns every test run into a paid network call.
 [test]
 root = "test"
+# Runs every test from a temp copy of the sample brain, so chat-end notes never land in the repo.
+preload = ["./test/preload.ts"]

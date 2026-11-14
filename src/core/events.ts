@@ -39,6 +39,12 @@ export type AgentEvent =
     }
   /** The brain notes this turn's answer used (paths inside the brain, e.g. `wiki/x.md`). Sent once, just before `turn.done`. */
   | { type: "notes.used"; notes: string[] }
+  /**
+   * A note was written into the brain (`path` inside the brain, e.g. `raw/2026-11-13-chat.md`).
+   * `cause`: "tool" (a tool such as `remember`, named in `tool`) or "chat-end" (the one note
+   * `close()` writes about the chat). Ticket 07 queues the tidy job on the "chat-end" one.
+   */
+  | { type: "brain.write"; path: string; cause: "tool" | "chat-end"; tool?: string }
   /** The model finished its reply. `reply` is the whole reply, joined for you. */
   | { type: "turn.done"; reply: string }
   /** Something went wrong in the session. The session may still be usable. */

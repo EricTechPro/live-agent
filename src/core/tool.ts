@@ -23,6 +23,8 @@ export interface ToolContext {
   brainPath: string;
   /** Report brain notes (paths inside the brain) this turn's answer used. The core emits `notes.used`. */
   useNotes(paths: string[]): void;
+  /** Report a note this tool wrote into the brain (path inside the brain). The core emits `brain.write` right away. */
+  brainWrote(path: string): void;
 }
 
 export interface Tool<Args extends Record<string, any> = Record<string, any>> {
