@@ -5,9 +5,11 @@ A light desktop app (Tauri) you talk to. Gemini Live is the boss: it hears, thin
 It reads a second brain (`raw`, `wiki`, `projects`), saves notes, and starts helper agents.
 Full plan: `docs/spec.md`. Decisions and reasons: `docs/plan.md`.
 
-## Issue tracker
-GitHub Issues on this repo. Tickets carry `ready-for-agent` when an agent can pick them up.
-Each ticket lists the tickets that block it. Work only tickets whose blockers are closed.
+## Tickets
+Tickets live in the `tickets/` folder, one file per ticket, numbered in build order.
+Each ticket lists the tickets that block it. Work only tickets whose blockers are done.
+When a ticket is done, tick its boxes and set `**Status:** done` in the same commit.
+`must-have` tickets are needed for DevFest (Nov 27). `after-talk` tickets can wait.
 
 ## Testing
 One seam: the agent core's event stream. Send a text turn in, check the events out
