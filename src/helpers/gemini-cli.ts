@@ -8,18 +8,24 @@
 //   without it the helper could not edit anything. Our own safety gate already
 //   asked the user before a helper starts (helper risk).
 // - --skip-trust: an untrusted folder would make headless mode exit at once.
-// - Our GEMINI_API_KEY / GOOGLE_API_KEY are not passed on: with them Gemini CLI
-//   would bill the user's key instead of their free Google sign-in.
+// - Auth: the same Gemini API key as the voice (Google ended Gemini CLI's free
+//   "Login with Google" tier for this kind of client). It goes in as
+//   GEMINI_API_KEY only: with GOOGLE_API_KEY set too, the CLI prints a warning.
+// - A private CLI home owned by live-agent (GEMINI_CLI_HOME, default under the
+//   OS app-data folder) whose `.gemini/settings.json` selects API-key auth, so
+//   the user's own `gemini` login and settings are never read or touched.
+//   HOME itself is left alone, so git and the project behave as usual.
 // - Spawned in its own process group, so cancel stops the CLI and everything it
 //   started (shell commands, MCP servers).
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { JobSpec } from "../core/jobs.ts";
 
+const KEY_GUIDE = "README.md#get-your-gemini-key";
 export const INSTALL_FIX = "Gemini CLI is not installed. Install it with: npm install -g @google/gemini-cli";
-export const SIGN_IN_FIX =
-  "Gemini CLI isn't signed in. Run `gemini` once in a terminal and choose Login with Google.";
+export const KEY_FIX = `The helper needs a Gemini key. Put GEMINI_API_KEY in your .env file. How to get one: ${KEY_GUIDE}`;
+export const KEY_REJECTED_FIX = `Gemini CLI rejected the Gemini key. Check GEMINI_API_KEY in your .env file. How to get one: ${KEY_GUIDE}`;
 
 export interface GeminiCliOptions {
   /** What the helper should do, in plain words. */
@@ -28,10 +34,43 @@ export interface GeminiCliOptions {
   cwd: string;
   /** The Gemini CLI binary: a name on PATH or a path. Default "gemini". Tests point it at a fake script. */
   bin?: string;
-  /** Where Gemini CLI keeps `.gemini/` (its GEMINI_CLI_HOME). Default: the user's home. */
+  /** live-agent's private Gemini CLI home (its GEMINI_CLI_HOME). Default: `defaultHelperHome()`. */
   home?: string;
+  /** The Gemini API key. Default: GEMINI_API_KEY, else GOOGLE_API_KEY, from the environment. */
+  apiKey?: string;
   /** How long to wait after SIGINT before SIGKILL on cancel. Default 3000 ms. */
   cancelGraceMs?: number;
+}
+
+/** The core's Gemini key, read the same way as for the voice. */
+export function envApiKey(): string | undefined {
+  return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || undefined;
+}
+
+/** live-agent's own folder for the helper's Gemini CLI home (in the OS app-data folder). */
+export function defaultHelperHome(): string {
+  const home = homedir();
+  const base =
+    process.platform === "darwin"
+      ? join(home, "Library", "Application Support")
+      : process.platform === "win32"
+        ? (process.env.APPDATA ?? join(home, "AppData", "Roaming"))
+        : (process.env.XDG_DATA_HOME ?? join(home, ".local", "share"));
+  return join(base, "live-agent", "gemini-cli");
+}
+
+/** Make sure the private home's settings select API-key auth (any other settings in it are kept). */
+function prepareHome(home: string) {
+  const dir = join(home, ".gemini");
+  const file = join(dir, "settings.json");
+  let settings: any = {};
+  try {
+    settings = JSON.parse(readFileSync(file, "utf8")) ?? {};
+  } catch {}
+  if (settings?.security?.auth?.selectedType === "gemini-api-key") return;
+  settings.security = { ...settings.security, auth: { ...settings.security?.auth, selectedType: "gemini-api-key" } };
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(file, `${JSON.stringify(settings, null, 2)}\n`);
 }
 
 /** Find the binary, or undefined if it is not there. */
@@ -46,44 +85,40 @@ export type GeminiCliStatus =
   | { ok: false; installed: false; fix: string };
 
 /**
- * Installed and signed in? Cheap: no network, no model call (the doctor uses it too).
- * A heuristic from `~/.gemini`: the real answer is exit code 41 at run time,
- * which maps to the same fix.
+ * Installed and a key present? Cheap: no network, no model call (the doctor uses it too).
+ * Whether Google accepts the key shows at run time as exit code 41.
  */
-export function geminiCliStatus({ bin = "gemini", home }: { bin?: string; home?: string } = {}): GeminiCliStatus {
+export function geminiCliStatus({ bin = "gemini", apiKey = envApiKey() }: { bin?: string; apiKey?: string } = {}): GeminiCliStatus {
   const path = findGeminiCli(bin);
   if (!path) return { ok: false, installed: false, fix: INSTALL_FIX };
-  const dir = join(home ?? process.env.GEMINI_CLI_HOME ?? homedir(), ".gemini");
-  let selected: string | undefined;
-  try {
-    selected = JSON.parse(readFileSync(join(dir, "settings.json"), "utf8"))?.security?.auth?.selectedType;
-  } catch {}
-  const oauth = existsSync(join(dir, "oauth_creds.json"));
-  // Our API key is never passed to the helper, so it does not count as signed in.
-  const signedIn = selected
-    ? selected !== "oauth-personal" || oauth
-    : oauth || process.env.GOOGLE_GENAI_USE_GCA === "true";
-  return signedIn ? { ok: true, installed: true, bin: path } : { ok: false, installed: true, bin: path, fix: SIGN_IN_FIX };
+  return apiKey ? { ok: true, installed: true, bin: path } : { ok: false, installed: true, bin: path, fix: KEY_FIX };
 }
 
 const MAX_SUMMARY = 2000;
 
-export function geminiCliJob({ task, cwd, bin = "gemini", home, cancelGraceMs = 3000 }: GeminiCliOptions): JobSpec {
+export function geminiCliJob({
+  task,
+  cwd,
+  bin = "gemini",
+  home = defaultHelperHome(),
+  apiKey = envApiKey(),
+  cancelGraceMs = 3000,
+}: GeminiCliOptions): JobSpec {
   return {
     kind: "gemini-cli",
     title: task.length > 80 ? `${task.slice(0, 77)}...` : task,
     async run({ signal }) {
-      const status = geminiCliStatus({ bin, home });
+      const status = geminiCliStatus({ bin, apiKey });
       if (!status.ok) throw new Error(status.fix);
       const path = status.bin;
+      prepareHome(home);
 
-      const { GEMINI_API_KEY: _k1, GOOGLE_API_KEY: _k2, ...env } = process.env;
-      if (home) env.GEMINI_CLI_HOME = home;
+      const { GEMINI_API_KEY: _k1, GOOGLE_API_KEY: _k2, GEMINI_CLI_HOME: _h, ...env } = process.env;
       const proc = Bun.spawn(
         [path, "-p", task, "--output-format", "stream-json", "--approval-mode", "yolo", "--skip-trust"],
         {
           cwd,
-          env: { ...env, GEMINI_CLI_TRUST_WORKSPACE: "true" },
+          env: { ...env, GEMINI_API_KEY: apiKey, GEMINI_CLI_HOME: home, GEMINI_CLI_TRUST_WORKSPACE: "true" },
           // -p appends stdin to the prompt, so give it none.
           stdin: "ignore",
           stdout: "pipe",
@@ -112,8 +147,8 @@ export function geminiCliJob({ task, cwd, bin = "gemini", home, cancelGraceMs = 
         // The shell may be gone while children it left behind still hold the group.
         if (signal.aborted) group("SIGKILL");
         if (signal.aborted) return "cancelled";
-        if (code === 41) throw new Error(SIGN_IN_FIX);
-        if (code === 52) throw new Error("Gemini CLI settings are broken: check ~/.gemini/settings.json");
+        if (code === 41) throw new Error(KEY_REJECTED_FIX);
+        if (code === 52) throw new Error(`Gemini CLI settings are broken: check ${join(home, ".gemini", "settings.json")}`);
         if (code !== 0 || error) {
           const tail = (await stderr).trim().split("\n").slice(-5).join("\n");
           throw new Error(error ?? `Gemini CLI stopped with exit code ${code}${tail ? `: ${tail}` : ""}`);

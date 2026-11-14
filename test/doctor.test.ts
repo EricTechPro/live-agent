@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import { defaultConfig } from "../src/config/index.ts";
 import { formatReport, runDoctor, type DoctorDeps } from "../src/doctor/index.ts";
-import { INSTALL_FIX, SIGN_IN_FIX } from "../src/helpers/gemini-cli.ts";
+import { INSTALL_FIX, KEY_FIX } from "../src/helpers/gemini-cli.ts";
 
 const KEY_GUIDE = "README.md#get-your-gemini-key";
 
@@ -160,13 +160,19 @@ describe("doctor", () => {
     expect(r.exitCode).toBe(1);
   });
 
-  test("Gemini CLI installed but not signed in gives the sign-in fix", async () => {
+  test("Gemini CLI installed and a key present is ready (no sign-in needed)", async () => {
+    const r = await runDoctor(healthy());
+    expect(find(r, "Gemini CLI")).toMatchObject({ status: "ok", detail: "installed, uses your Gemini key" });
+  });
+
+  test("Gemini CLI installed but no key gives the key fix", async () => {
     const r = await runDoctor(
-      healthy({ geminiCliStatus: () => ({ ok: false, installed: true, bin: "/bin/gemini", fix: SIGN_IN_FIX }) }),
+      healthy({ geminiCliStatus: () => ({ ok: false, installed: true, bin: "/bin/gemini", fix: KEY_FIX }) }),
     );
     const cli = find(r, "Gemini CLI");
     expect(cli.status).toBe("fail");
-    expect(cli.fix).toBe(SIGN_IN_FIX);
+    expect(cli.detail).toBe("installed, no Gemini key (turned on)");
+    expect(cli.fix).toContain(KEY_GUIDE);
   });
 
   test("Codex and Claude Code missing are warnings while off, failures when on", async () => {

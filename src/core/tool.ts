@@ -44,8 +44,10 @@ export interface HelperSettings {
   geminiCli: boolean;
   /** The Gemini CLI binary. Default "gemini" on PATH. */
   geminiCliBin: string;
-  /** Where Gemini CLI keeps `.gemini/`. Default: the user's home. */
+  /** live-agent's private Gemini CLI home. Default: under the OS app-data folder. */
   geminiCliHome?: string;
+  /** The Gemini key the helper runs on. Default: GEMINI_API_KEY / GOOGLE_API_KEY from the environment. */
+  geminiApiKey?: string;
   /** Wait this long after SIGINT before SIGKILL when cancelling. */
   cancelGraceMs?: number;
 }

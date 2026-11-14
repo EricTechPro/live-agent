@@ -73,13 +73,13 @@ At DevFest, people mainly want to take a working kit home: the repo, the prompts
 ### Helper agents
 
 31. As a user, I want to say "fix this bug in project X" and have it start a helper agent, so that real work happens while I keep talking.
-32. As a user, I want Gemini CLI as the default helper, so that it works with a free Google sign-in.
+32. As a user, I want Gemini CLI as the default helper, so that it runs on the same Gemini key as the voice and needs no extra sign-in.
 33. As a user, I want to turn on Codex or Claude Code in the JSON, so that I can use the tools I already pay for.
 34. As a user, I want to set how many helpers run at once (default 1), so that my computer doesn't slow down.
 35. As a user, I want helpers to work in a git worktree when I turn it on, so that they don't mess up my main branch.
 36. As a user, I want each job on the board to show waiting, working, done or failed, so that I can follow along.
 37. As a user, I want to cancel a job by voice or by click, so that I can stop mistakes.
-38. As a user, I want a clear message if a helper CLI isn't installed or signed in, so that I know how to fix it.
+38. As a user, I want a clear message if a helper CLI isn't installed or can't authenticate (for Gemini CLI: no Gemini key, or the key is rejected), so that I know how to fix it.
 
 ### Safety modes
 
@@ -132,7 +132,7 @@ Modules (deep modules, small interfaces):
 - **Brain.** Reads `wiki` and `projects` for answers and reports which notes were used. Writes one raw note at chat end. "Remember this" writes a raw note right away.
 - **Tidy job.** A helper job that turns new raw notes into wiki pages (Karpathy-style raw to wiki). Runs in the background after each chat. Never blocks the voice.
 - **Orchestrator.** Gemini Live is the boss. Starts helper agents as background jobs. Enforces max-at-once. Optionally creates a git worktree per job. Job states: queued, running, done, failed, cancelled. Reports finished jobs back so the voice can announce them.
-- **Helper adapters.** One adapter per CLI: Gemini CLI (default on), Codex and Claude Code (default off). Each adapter checks "installed and signed in" before running.
+- **Helper adapters.** One adapter per CLI: Gemini CLI (default on), Codex and Claude Code (default off). Each adapter checks it is ready before running. Gemini CLI: installed and a Gemini key present; it runs on the core's key (passed as GEMINI_API_KEY) with a private CLI home owned by live-agent, so the user's own `gemini` login and settings are never touched. Codex and Claude Code: installed and signed in.
 - **Config.** One JSON file, with a JSON Schema (like super-board's config schema). Holds: brain path, safety mode, helpers on/off, max at once, worktrees on/off, per-tool risk overrides, voice choice. The setup chat writes it.
 - **Setup chat.** First-run flow, like super-board's setup script, but spoken or typed. Asks a few questions, writes the config.
 - **Doctor.** Checks Gemini key, mic, LiveKit server, helper CLIs. Prints one fix per failure.
