@@ -17,6 +17,12 @@ export type ModelEvent =
   | { type: "audio"; data: Int16Array; sampleRate: number }
   /** The user talked over the model. Stop playing its voice now; `turn.complete` follows. */
   | { type: "interrupted" }
+  /**
+   * The model has generated its whole reply (all of its text is in). Its voice
+   * may still be playing: Gemini Live sends `turn.complete` only once the
+   * spoken reply would have finished, which can be 15+ seconds later.
+   */
+  | { type: "generation.complete" }
   /** The model is done with this turn and is waiting for the user. */
   | { type: "turn.complete" }
   /** The connection or the model reported a problem. */

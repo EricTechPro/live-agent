@@ -128,7 +128,7 @@ const OUTPUT_RATE = 24000;
 
 // One server message can carry several things at once: tool calls, voice,
 // transcription chunks, an interruption and the end of the turn.
-// Order matters: interrupted just before done, done comes last.
+// Order matters: the last words, then generation complete, then interrupted, done comes last.
 export function toModelEvents(message: LiveServerMessage): ModelEvent[] {
   const events: ModelEvent[] = [];
   for (const call of message.toolCall?.functionCalls ?? []) {
@@ -148,6 +148,7 @@ export function toModelEvents(message: LiveServerMessage): ModelEvent[] {
   }
   const text = content.outputTranscription?.text;
   if (text) events.push({ type: "text", text });
+  if (content.generationComplete) events.push({ type: "generation.complete" });
   if (content.interrupted) events.push({ type: "interrupted" });
   if (content.turnComplete) events.push({ type: "turn.complete" });
   return events;

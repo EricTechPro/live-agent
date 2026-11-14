@@ -250,7 +250,10 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       summary = {
         take(event) {
           if (event.type === "text") text += event.text;
-          else if (event.type === "turn.complete") finish(text);
+          // Why not wait for turn.complete: the summary is spoken too, and the
+          // model only completes the turn once that voice would have finished
+          // (~15 s live). The text is all in at generation.complete (~4 s).
+          else if (event.type === "generation.complete" || event.type === "turn.complete") finish(text);
           // The summary is spoken too (ticket 08): its voice is nobody's to play, so drop it.
           else if (event.type === "audio" || event.type === "user.text" || event.type === "interrupted") return;
           else finish(""); // an error, or a tool call we will not run while closing
@@ -426,6 +429,9 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         break;
       case "tool.call":
         onToolCall(event);
+        break;
+      case "generation.complete":
+        // Chat turns wait for turn.complete: the user is still hearing the reply.
         break;
       case "turn.complete":
         if (!turn) return;

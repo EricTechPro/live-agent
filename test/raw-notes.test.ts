@@ -136,6 +136,40 @@ describe("chat end", () => {
     expect(afterClose.map((e) => e.type)).toEqual(["brain.write"]);
   });
 
+  test("close finishes as soon as the summary is generated, not when its voice would end", async () => {
+    // Like Gemini Live: the summary text and generation.complete arrive within a
+    // few seconds, but turn.complete only comes once the spoken version would
+    // have finished playing (15+ s later).
+    const brain = tempBrain();
+    let inputs = 0;
+    const model: Model = {
+      async connect(onEvent) {
+        return {
+          sendText() {
+            const n = ++inputs;
+            queueMicrotask(() => {
+              onEvent({ type: "text", text: n === 1 ? "Hi Eric." : "- Decided: move pots south." });
+              onEvent({ type: "generation.complete" });
+              if (n === 1) onEvent({ type: "turn.complete" });
+              else setTimeout(() => onEvent({ type: "turn.complete" }), 5000);
+            });
+          },
+          sendToolResponse() {},
+          sendAudio() {},
+          async close() {},
+        };
+      },
+    };
+    const session = await startSession({ model, config: { ...defaultConfig(), brainPath: brain } });
+    await session.sendText("hello");
+
+    const started = Date.now();
+    await session.close();
+
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(readFileSync(join(brain, "raw", rawFiles(brain)[0]!), "utf8")).toContain("Decided: move pots south.");
+  });
+
   test("if the summary request fails, the note falls back to the plain transcript", async () => {
     const brain = tempBrain();
     // The script has no entry for the summary request, so the fake reports an error.
