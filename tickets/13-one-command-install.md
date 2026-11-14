@@ -11,8 +11,8 @@
 - [ ] One command on a fresh Mac ends with the app open in the setup chat
 - [x] The Desktop folder contains the sample brain and a config after setup
 - [x] Running the command again upgrades without touching the user's brain or config
-- [ ] Releases are built by CI, not by hand
-- [ ] The install is tested on a clean machine in CI
+- [x] Releases are built by CI, not by hand
+- [x] The install is tested on a clean machine in CI
 
 ## Comments
 
@@ -49,3 +49,5 @@ the folder byte-identical. Opened with `open` (launchd env, only `LIVE_AGENT_HOM
 **Still open (needs the real GitHub run):** box 1 (fresh Mac ends in the setup chat with a real key),
 box 4 (Releases built by CI) and box 5 (install tested on a clean machine in CI) tick after the first
 `v*` tag run of `release.yml` passes.
+
+CI 2026-11-14: tag v0.1.0-rc.2 ran the release workflow green on the first try (run 43619612650: build 3m8s, install-test on a clean macos runner 20s, release 16s). Release https://github.com/EricTechPro/live-agent/releases/tag/v0.1.0-rc.2 holds live-agent-darwin-arm64.tar.gz (69 MB) + .sha256. (The first tag, rc.1, never triggered a run: GitHub missed the push event; it was deleted.) Box 1 still needs a person to run the curl one-liner on a Mac with a real key, after get.sh is on main.
