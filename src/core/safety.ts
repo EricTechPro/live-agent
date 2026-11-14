@@ -17,6 +17,14 @@ import type { RiskClass } from "./tool.ts";
 export type { SafetyMode, Verdict };
 export type SafetyOverrides = Record<string, Verdict>;
 
+/** The modes in Shift+Tab order: Ask me -> Auto edits -> Bypass -> back to Ask me. */
+export const MODES: readonly SafetyMode[] = ["ask-me", "auto-edits", "bypass"];
+
+/** The mode after `mode` in the Shift+Tab cycle. */
+export function nextMode(mode: SafetyMode): SafetyMode {
+  return MODES[(MODES.indexOf(mode) + 1) % MODES.length]!;
+}
+
 const TABLE: Record<RiskClass, Record<SafetyMode, Verdict>> = {
   read: { "ask-me": "allow", "auto-edits": "allow", bypass: "allow" },
   edit: { "ask-me": "ask", "auto-edits": "allow", bypass: "allow" },

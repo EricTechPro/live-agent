@@ -5,12 +5,14 @@
 //   GET  /events   server-sent AgentEvents (the one event stream)
 //   GET  /session  a short-lived LiveKit room token for the mic
 //   POST /text     a typed turn
+//   GET/POST /mode the safety mode; POST /jobs/:id/cancel the board's cancel button
 //   POST /setup    start the setup chat (ticket 12)
-// Every call carries the per-launch token. New commands (cancel job, set mode)
-// get one small method here each, so the rest of the window never builds URLs.
+// Every call carries the per-launch token. Each command gets one small method
+// here, so the rest of the window never builds URLs.
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AgentEvent } from "../../src/core/events.ts";
+import type { SafetyMode } from "../../src/core/safety.ts";
 
 export interface CoreInfo {
   url: string;
@@ -33,6 +35,12 @@ export interface CoreClient {
   session(): Promise<RoomSession>;
   /** Send a typed turn. Rejects if a turn is already running (409). */
   sendText(text: string): Promise<void>;
+  /** The safety mode now (first draw only; after that, `mode.changed` events). */
+  getMode(): Promise<SafetyMode>;
+  /** Switch the safety mode (`"cycle"` = Shift+Tab). The core announces it with `mode.changed`. */
+  setMode(mode: SafetyMode | "cycle"): Promise<void>;
+  /** The job board's cancel button. The board updates from the job's `job.state` events. */
+  cancelJob(id: string): Promise<void>;
   /** Start the setup chat. `ifNeeded`: only on a first launch (the core checks for a config file). */
   startSetup(ifNeeded: boolean): Promise<void>;
 }
@@ -80,6 +88,23 @@ export function connectCore(info: CoreInfo): CoreClient {
         body: JSON.stringify({ text }),
       });
       if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? `core /text: ${res.status}`);
+    },
+    async getMode() {
+      const res = await fetch(`${info.url}/mode`, { headers: auth });
+      if (!res.ok) throw new Error(`core /mode: ${res.status}`);
+      return ((await res.json()) as { mode: SafetyMode }).mode;
+    },
+    async setMode(mode) {
+      const res = await fetch(`${info.url}/mode`, {
+        method: "POST",
+        headers: { ...auth, "Content-Type": "application/json" },
+        body: JSON.stringify(mode === "cycle" ? { cycle: true } : { mode }),
+      });
+      if (!res.ok) throw new Error(`core /mode: ${res.status}`);
+    },
+    async cancelJob(id) {
+      const res = await fetch(`${info.url}/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST", headers: auth });
+      if (!res.ok) throw new Error(`core cancel ${id}: ${res.status}`);
     },
     async startSetup(ifNeeded) {
       const res = await fetch(`${info.url}/setup`, {

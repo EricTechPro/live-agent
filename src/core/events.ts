@@ -56,6 +56,11 @@ export type AgentEvent =
    */
   | { type: "brain.write"; path: string; cause: "tool" | "chat-end"; tool?: string }
   /**
+   * The safety mode changed (the window's dropdown or Shift+Tab). The window draws
+   * the mode only from this event, so the dropdown and Shift+Tab never disagree.
+   */
+  | { type: "mode.changed"; mode: SafetyMode }
+  /**
    * A setup chat began (ticket 12): the model is about to ask the setup questions.
    * `firstRun`: there was no config file yet. The window shows a setup banner.
    */
