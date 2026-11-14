@@ -115,6 +115,27 @@ describe("chat end", () => {
     ]);
   });
 
+  test("a spoken summary (audio alongside the text, as Gemini Live sends it) still lands in the note", async () => {
+    const brain = tempBrain();
+    const voice = { type: "audio", data: new Int16Array([1, 2]), sampleRate: 24000 } as const;
+    const model = scriptedModel([
+      [voice, { type: "text", text: "Tomatoes like six hours of sun." }],
+      [voice, { type: "text", text: "- Decided: move pots south." }, voice],
+    ]);
+    const session = await startSession({ model, config: { ...defaultConfig(), brainPath: brain } });
+    await session.sendText("How much sun do tomatoes need?");
+    const afterClose: AgentEvent[] = [];
+    session.onEvent((e) => afterClose.push(e));
+    await session.close();
+    const files = rawFiles(brain);
+    expect(files).toHaveLength(1);
+    const note = readFileSync(join(brain, "raw", files[0]!), "utf8");
+    expect(note).toContain("Decided: move pots south.");
+    expect(note).not.toContain("- You:"); // the model's summary, not the transcript fallback
+    // The summary never shows up as chat.
+    expect(afterClose.map((e) => e.type)).toEqual(["brain.write"]);
+  });
+
   test("if the summary request fails, the note falls back to the plain transcript", async () => {
     const brain = tempBrain();
     // The script has no entry for the summary request, so the fake reports an error.
