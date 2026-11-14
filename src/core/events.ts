@@ -6,6 +6,7 @@
 //   { type: "job.state" }, { type: "notes.used" }, { type: "brain.write" }
 // Every event is plain JSON, so the core can later pipe it to the app as
 // JSON lines without a translation layer.
+import type { JobInfo } from "./jobs.ts";
 import type { SafetyMode, Verdict } from "./safety.ts";
 import type { RiskClass } from "./tool.ts";
 
@@ -37,6 +38,12 @@ export type AgentEvent =
       output?: unknown;
       error?: string;
     }
+  /**
+   * A background job changed state: queued -> running -> done | failed | cancelled
+   * (a queued job can go straight to cancelled). `message` is the summary (done)
+   * or what went wrong and how to fix it (failed).
+   */
+  | ({ type: "job.state" } & JobInfo)
   /** The model finished its reply. `reply` is the whole reply, joined for you. */
   | { type: "turn.done"; reply: string }
   /** Something went wrong in the session. The session may still be usable. */

@@ -13,12 +13,30 @@
 // Why a risk class on every tool: the safety gate decides by risk class and
 // mode (see src/core/safety.ts), so a new tool is safe by declaring one word.
 
+import type { Jobs } from "./jobs.ts";
+
 export type RiskClass = "read" | "edit" | "command" | "helper";
 
 /** What a running tool gets besides its args. */
 export interface ToolContext {
   /** The folder relative paths are read from (the session's `workDir`). */
   workDir: string;
+  /**
+   * The orchestrator (src/core/jobs.ts). A job submitted from a tool call is
+   * tied to that call: the core tells the model when the job ends.
+   */
+  jobs?: Pick<Jobs, "submit" | "cancel" | "list">;
+  /** Helper settings: which helpers are on (config `helpers`) and where their CLIs are. */
+  helpers?: HelperSettings;
+}
+
+export interface HelperSettings {
+  /** Config `helpers.geminiCli`. */
+  geminiCli: boolean;
+  /** The Gemini CLI binary. Default "gemini" on PATH. */
+  geminiCliBin: string;
+  /** Wait this long after SIGINT before SIGKILL when cancelling. */
+  cancelGraceMs?: number;
 }
 
 export interface Tool<Args extends Record<string, any> = Record<string, any>> {
