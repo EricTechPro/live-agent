@@ -4,12 +4,35 @@
 
 **Blocked by:** 06 Helper jobs with Gemini CLI, 08 Voice over local LiveKit with ephemeral tokens
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Priority:** must-have
 
-- [ ] All checks pass on a working machine
-- [ ] A missing or bad Gemini key gives a fix that points to the key guide
-- [ ] LiveKit not starting gives a clear fix
-- [ ] A missing helper CLI is a warning with an install hint, not a failure, unless that helper is turned on
-- [ ] Exit code is non-zero only when something required fails
+- [x] All checks pass on a working machine
+- [x] A missing or bad Gemini key gives a fix that points to the key guide
+- [x] LiveKit not starting gives a clear fix
+- [x] A missing helper CLI is a warning with an install hint, not a failure, unless that helper is turned on
+- [x] Exit code is non-zero only when something required fails
+
+## Comments
+
+`bun run doctor` (dev) or `live-agent doctor` (compiled core binary): `src/doctor/index.ts`, tests in `test/doctor.test.ts`.
+Required: Gemini key, microphone, LiveKit. Helper CLIs fail only when turned on in config, otherwise warn with an install hint.
+LiveKit is started on a free port (never 7880 or 7990-7992) and stopped right away. The key fix points to `README.md#get-your-gemini-key` (ticket 14 writes that section).
+
+Real run on the dev Mac (2026-11-14). Every check passes except the Gemini CLI sign-in, which is waiting on the user (it is on by default, so it fails with the sign-in fix):
+
+```
+live-agent doctor
+
+✓ Gemini key: key works, gemini-3.8-live is available
+✓ Microphone: default input: Bose QC Headphones
+✓ LiveKit: local server starts (port 60639)
+✗ Gemini CLI: installed, not signed in (turned on)
+    Fix: Gemini CLI isn't signed in. Run `gemini` once in a terminal and choose Login with Google.
+✓ Codex: installed (turned off)
+✓ Claude Code: installed (turned off)
+
+1 problem(s) to fix.
+```
+Exit code 1. No livekit-server left running afterwards.

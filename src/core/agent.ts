@@ -86,6 +86,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   const byName = new Map(tools.map((t) => [t.name, t]));
   const listeners = new Set<(event: AgentEvent) => void>();
   const audioListeners = new Set<(out: AudioOut) => void>();
+  // Set when close() begins: job ends are no longer announced and late model events are dropped.
   let closed = false;
 
   // Jobs started by a tool call stay tied to it: each job end gives the call
@@ -141,8 +142,6 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   const chat: { role: "user" | "model"; text: string }[] = [];
   // Set while close() waits for the model's chat summary.
   let summary: { take(event: ModelEvent): void } | null = null;
-  // After close(), late model events are dropped.
-  let ended = false;
   const summaryTimeoutMs = options.summaryTimeoutMs ?? 8000;
 
   // Every event goes through here, so listeners and the current turn always
@@ -207,6 +206,8 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         take(event) {
           if (event.type === "text") text += event.text;
           else if (event.type === "turn.complete") finish(text);
+          // The summary is spoken too (ticket 08): its voice is nobody's to play, so drop it.
+          else if (event.type === "audio" || event.type === "user.text" || event.type === "interrupted") return;
           else finish(""); // an error, or a tool call we will not run while closing
         },
       };
@@ -339,7 +340,8 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   function onModelEvent(event: ModelEvent) {
     // While close() asks for the chat summary, the model's answer is the core's, not the chat's.
     if (!turn && summary) return summary.take(event);
-    if (ended) return;
+    // Once close() has begun, the chat is over: late model events open no new turn.
+    if (closed) return;
     switch (event.type) {
       case "user.text":
         openVoiceTurn();
@@ -431,7 +433,6 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       try {
         await Promise.all([jobs.stopAll(), saving]);
       } finally {
-        ended = true;
         await modelSession.close();
       }
     },
