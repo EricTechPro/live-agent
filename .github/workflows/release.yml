@@ -1,0 +1,132 @@
+# Build the macOS app, test the one-line installer on a clean Mac, then publish.
+#
+#   git tag v0.1.0 && git push origin v0.1.0     -> build, install test, GitHub Release
+#   Actions tab > release > Run workflow         -> build and install test only (no release)
+#
+# get.sh downloads the release asset by a stable name, so the latest release must hold
+# live-agent-darwin-arm64.tar.gz (+ .sha256). The release is only created after the
+# install test passed, so `releases/latest` never points at a broken build.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest # Apple Silicon
+    steps:
+      - uses: actions/checkout@v4
+      # bun 1.4.4, not 1.3.x: 1.3's --compile output gets SIGKILLed on current macOS.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "app/src-tauri -> target"
+      # livekit-server has no macOS release binaries; app/scripts/fetch-livekit.sh builds the pinned tag.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: false
+      - name: install
+        run: |
+          bun install --frozen-lockfile
+          cd app && bun install --frozen-lockfile
+      - name: typecheck and fast tests
+        run: |
+          bunx tsc --noEmit
+          bun test test/get-sh.test.ts test/home.test.ts test/config.test.ts test/setup.test.ts
+      # beforeBuildCommand builds the core sidecar (bun --compile + codesign -v) and livekit-server.
+      - name: build app
+        working-directory: app
+        run: bunx tauri build
+      - name: check and pack
+        working-directory: app
+        run: |
+          codesign -v src-tauri/binaries/live-agent-core-aarch64-apple-darwin
+          sh scripts/package-release.sh ../release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: live-agent-darwin-arm64
+          path: release/
+          if-no-files-found: error
+
+  install-test:
+    needs: build
+    runs-on: macos-latest # a fresh VM: no Rust build, no brew livekit, no live-agent folder
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: live-agent-darwin-arm64
+          path: ${{ runner.temp }}/rel
+      - name: fresh install (like a new user, opens the app)
+        env:
+          LIVE_AGENT_TARBALL: file://${{ runner.temp }}/rel/live-agent-darwin-arm64.tar.gz
+        run: |
+          # A dummy key, typed at the prompt. It lets the core get as far as starting LiveKit;
+          # Gemini then rejects it, which is the expected end in CI (no real key, no setup).
+          echo "dummy-ci-key" > "$RUNNER_TEMP/tty"
+          LIVE_AGENT_TTY="$RUNNER_TEMP/tty" bash get.sh
+          F="$HOME/Desktop/live-agent"
+          test -x /Applications/live-agent.app/Contents/MacOS/live-agent-core
+          test -f "$F/sample-brain/wiki/tomato-garden.md"
+          test "$(stat -f %Lp "$F/.env")" = 600
+          grep -qx "GEMINI_API_KEY=dummy-ci-key" "$F/.env"
+          test ! -e "$F/live-agent.config.json"   # the setup chat writes it on first launch
+      - name: the opened app starts its core and the bundled LiveKit
+        run: |
+          for i in $(seq 1 200); do
+            if pgrep -f /Applications/live-agent.app/Contents/MacOS/livekit-server >/dev/null; then
+              echo "bundled livekit-server started by the app"; exit 0
+            fi
+            sleep 0.1
+          done
+          echo "the app did not start its bundled livekit-server" >&2
+          ps -axo pid,ppid,command | grep live-agent || true
+          exit 1
+      - name: the core reads its key from the Desktop folder (no terminal env)
+        run: |
+          pkill -f /Applications/live-agent.app/Contents/MacOS/ || true
+          sleep 1
+          out=$(env -i PATH=/usr/bin:/bin LIVE_AGENT_HOME="$HOME/Desktop/live-agent" \
+            /Applications/live-agent.app/Contents/MacOS/live-agent-core 2>&1 || true)
+          echo "$out" | tail -3
+          echo "$out" | grep -q API_KEY_INVALID
+      - name: setup config and upgrade keep the user's files
+        env:
+          LIVE_AGENT_TARBALL: file://${{ runner.temp }}/rel/live-agent-darwin-arm64.tar.gz
+        run: |
+          F="$HOME/Desktop/live-agent"
+          echo "my note" > "$F/sample-brain/raw/mine.md"
+          # What the setup chat writes (it needs a real model, so CI writes it the same way the core does).
+          printf '{\n  "brainPath": "sample-brain",\n  "safety": { "mode": "ask-me" }\n}\n' > "$F/live-agent.config.json"
+          before=$(cd "$F" && find . -type f -exec shasum {} \; | sort)
+          LIVE_AGENT_TTY=/dev/null bash get.sh --no-open
+          after=$(cd "$F" && find . -type f -exec shasum {} \; | sort)
+          [ "$before" = "$after" ] || { echo "upgrade changed the user's folder" >&2; diff <(echo "$before") <(echo "$after"); exit 1; }
+          echo "upgrade kept brain, config and key"
+
+  release:
+    needs: install-test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: live-agent-darwin-arm64
+          path: rel
+      - name: publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" rel/live-agent-darwin-arm64.tar.gz rel/live-agent-darwin-arm64.tar.gz.sha256 \
+            --repo "$GITHUB_REPOSITORY" --title "live-agent $GITHUB_REF_NAME" --generate-notes

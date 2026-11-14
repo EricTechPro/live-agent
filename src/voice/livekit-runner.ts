@@ -15,6 +15,7 @@
 // never run and a bare child would be orphaned on its port. The watchdog
 // polls our PID and takes the server down with us. (A stdin pipe would be
 // neater, but Bun's FileSink.end() did not reliably close the pipe.)
+import { livekitBinary } from "../home.ts";
 import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -31,7 +32,7 @@ export interface LiveKitServer {
 export interface LiveKitOptions {
   /** HTTP/WebSocket port. The RTC ports use port+1 (TCP) and port+2 (UDP). Default 7880. */
   port?: number;
-  /** Path to the binary. Default `livekit-server` on PATH (later: the bundled sidecar). */
+  /** Path to the binary. Default: the one bundled next to the core, else `livekit-server` on PATH. */
   binary?: string;
   /** How long to wait for the server to answer. Default 10 s. */
   readyTimeoutMs?: number;
@@ -41,7 +42,7 @@ const HOST = "127.0.0.1";
 
 export async function startLiveKit(options: LiveKitOptions = {}): Promise<LiveKitServer> {
   const port = options.port ?? 7880;
-  const binary = options.binary ?? "livekit-server";
+  const binary = options.binary ?? livekitBinary();
   const apiKey = "live-agent";
   const apiSecret = randomBytes(24).toString("hex");
   const url = `ws://${HOST}:${port}`;

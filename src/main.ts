@@ -21,15 +21,31 @@ import { TOOLS_DIR } from "./core/registry.ts";
 import { bundledTools } from "./core/bundled-tools.ts";
 import { doctorMain } from "./doctor/index.ts";
 import { setupMain } from "./setup/chat.ts";
+import { useHome } from "./home.ts";
+import pkg from "../package.json" with { type: "json" };
+
+// The installed app sets LIVE_AGENT_HOME (~/Desktop/live-agent): work from there and
+// read the key from its .env, because opened from Finder there is no terminal (src/home.ts).
+const home = useHome();
 
 // `live-agent doctor` (or `bun run doctor`): check the machine, print fixes, exit.
 if (process.argv[2] === "doctor") process.exit(await doctorMain());
+// `live-agent-core --version`: the release build's smoke check. It only prints, but every
+// import above has loaded by then (incl. rtc-node's native addon), so a broken bundle fails here.
+if (process.argv[2] === "--version") {
+  console.log(`live-agent ${pkg.version}`);
+  process.exit(0);
+}
 // `live-agent setup` (or `bun run setup`): the setup chat, typed in the terminal (ticket 12).
 if (process.argv[2] === "setup") process.exit(await setupMain());
 
 const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
 if (!apiKey) {
-  console.error("live-agent: no Gemini key. Copy .env.example to .env and set GEMINI_API_KEY.");
+  console.error(
+    home
+      ? `live-agent: no Gemini key. Put GEMINI_API_KEY=... in ${home}/.env (or run the installer again).`
+      : "live-agent: no Gemini key. Copy .env.example to .env and set GEMINI_API_KEY.",
+  );
   process.exit(1);
 }
 

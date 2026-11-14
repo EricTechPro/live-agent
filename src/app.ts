@@ -28,6 +28,8 @@ import type { Model } from "./core/model.ts";
 import { MODES, type SafetyMode } from "./core/safety.ts";
 import { defaultConfigPath } from "./config/index.ts";
 import { joinVoiceRoom } from "./voice/livekit-bridge.ts";
+// `type: "text"` embeds the file in the compiled binary; bun-types calls *.html an HTMLBundle.
+import checkPage from "./voice/check-page.html" with { type: "text" };
 import { startLiveKit, type LiveKitServer } from "./voice/livekit-runner.ts";
 import { createTokenService, type TokenService } from "./voice/token-service.ts";
 
@@ -95,9 +97,9 @@ export async function startApp(options: AppOptions): Promise<App> {
         const url = new URL(req.url);
         if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
         // The manual voice check page holds no secrets; it reads the launch token from its URL hash.
-        // TODO(ticket 13): embed it in the compiled sidecar (it is read from disk here).
+        // Imported as text, so it is baked into the compiled sidecar (there is no src/ folder there).
         if (req.method === "GET" && url.pathname === "/check") {
-          return new Response(Bun.file(new URL("./voice/check-page.html", import.meta.url)), {
+          return new Response(checkPage as unknown as string, {
             headers: { "Content-Type": "text/html; charset=utf-8" },
           });
         }

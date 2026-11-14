@@ -49,12 +49,24 @@ fn parse_ready(line: &str) -> Option<CoreInfo> {
     })
 }
 
+/// The core's home folder: $LIVE_AGENT_HOME if set, else ~/Desktop/live-agent (made by get.sh).
+/// Opened from Finder there is no terminal, so the core works from here: it reads the config,
+/// the brain and the Gemini key (`.env`) from this folder (see src/home.ts).
+fn live_agent_home() -> String {
+    std::env::var("LIVE_AGENT_HOME")
+        .ok()
+        .filter(|h| !h.is_empty())
+        .unwrap_or_else(|| format!("{}/Desktop/live-agent", std::env::var("HOME").unwrap_or_default()))
+}
+
 fn start_core(app: &tauri::AppHandle) -> Result<(), String> {
-    // The sidecar inherits our environment (GEMINI_API_KEY / GOOGLE_API_KEY, PATH for livekit-server).
+    // The sidecar inherits our environment; LIVE_AGENT_HOME tells it where its folder is.
+    // livekit-server is bundled next to it (Contents/MacOS), so PATH does not matter.
     let (mut rx, child) = app
         .shell()
         .sidecar("live-agent-core")
         .map_err(|e| e.to_string())?
+        .env("LIVE_AGENT_HOME", live_agent_home())
         // The core stops itself if this app dies without stopping it (see src/main.ts).
         .env("LIVE_AGENT_EXIT_WITH_PARENT", "1")
         .spawn()

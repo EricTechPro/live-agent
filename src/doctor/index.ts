@@ -10,6 +10,7 @@
 //
 // Every probe is injectable (`DoctorDeps`), so tests run with no network,
 // no LiveKit and no real CLIs.
+import { livekitBinary } from "../home.ts";
 import { createSocket } from "node:dgram";
 import { createServer } from "node:net";
 import { ConfigError, defaultConfig, loadConfig, type Config } from "../config/index.ts";
@@ -188,6 +189,8 @@ function defaultDeps(): DoctorDeps {
     // The helper runs on the same key the voice uses (installed + key = ready).
     geminiCliStatus: () => geminiCliStatus({ apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY }),
     which: (bin) => Bun.which(bin) ?? undefined,
+    // Inside the installed app: the livekit-server bundled next to the core.
+    livekitBinary: livekitBinary() === "livekit-server" ? undefined : livekitBinary(),
     config: defaultConfig(),
     model: MODEL,
   };
