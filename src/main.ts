@@ -6,11 +6,16 @@
 //   {"type":"ready","url":"http://127.0.0.1:53121","launchToken":"..."}
 //
 // Everything else (logs, rtc-node's debug JSON) goes to stderr.
+// `doctor` as the first argument runs the doctor check instead (src/doctor).
 // Stops LiveKit on SIGINT/SIGTERM, on normal exit, and (via the runner's
 // watchdog) even if this process is killed hard.
 import { startApp, disposeNative } from "./app.ts";
 import { loadConfig } from "./config/index.ts";
 import { geminiLiveModel } from "./models/gemini-live.ts";
+import { doctorMain } from "./doctor/index.ts";
+
+// `live-agent doctor` (or `bun run doctor`): check the machine, print fixes, exit.
+if (process.argv[2] === "doctor") process.exit(await doctorMain());
 
 const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
 if (!apiKey) {
