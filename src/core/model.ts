@@ -25,6 +25,12 @@ export type ModelEvent =
   | { type: "generation.complete" }
   /** The model is done with this turn and is waiting for the user. */
   | { type: "turn.complete" }
+  /**
+   * The connection dropped. Anything the model still owed us (a reply, the end
+   * of a turn) is lost. The adapter reconnects by itself; this is said once
+   * per drop (and again if it gives up reconnecting).
+   */
+  | { type: "disconnected"; message: string }
   /** The connection or the model reported a problem. */
   | { type: "error"; message: string };
 
@@ -78,6 +84,8 @@ export interface ModelSession {
 export interface ConnectOptions {
   /** The tools the model may call. All of them run NON_BLOCKING. */
   tools: ToolDeclaration[];
+  /** The prebuilt voice to speak with (config `voice`, e.g. "Puck"). */
+  voice?: string;
 }
 
 export interface Model {

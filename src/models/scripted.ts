@@ -40,7 +40,8 @@ export function scriptedModel(script: ScriptEntry[]): Model {
           for (const event of events) onEvent(event);
           // Every reply ends; the script only lists `turn.complete` when it
           // wants it somewhere unusual.
-          if (!events.some((e) => e.type === "turn.complete")) onEvent({ type: "turn.complete" });
+          // A dropped connection never completes its turn.
+          if (!events.some((e) => e.type === "turn.complete" || e.type === "disconnected")) onEvent({ type: "turn.complete" });
           replying = false;
         });
       }

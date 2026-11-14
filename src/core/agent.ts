@@ -177,6 +177,10 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
 
   // Calls the gate said "ask" about, waiting for the user's next turn.
   let waiting: ToolCall[] = [];
+  // Calls made on the connection we have now. Why track it: after a drop the
+  // model is on a fresh connection that never heard of older calls, so their
+  // late answers go on our stream but not to the model.
+  const liveCalls = new Set<string>();
 
   // What was said, for the chat-end note: user texts and the model's joined replies.
   const chat: { role: "user" | "model"; text: string }[] = [];
@@ -215,6 +219,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       ...("output" in response ? { output: response.output } : {}),
       ...(typeof response.error === "string" ? { error: response.error } : {}),
     });
+    if (!liveCalls.has(call.id)) return;
     // A non-silent answer makes the model speak again, so the turn waits for it.
     if (extra.scheduling !== "silent" && turn) turn.awaiting++;
     modelSession.sendToolResponse({ id: call.id, name: call.name, response, ...extra });
@@ -282,7 +287,9 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   }
 
   function run(call: ToolCall, tool: Tool) {
-    if (turn) turn.running++;
+    // The turn this run holds open. Only a dropped connection ends it early.
+    const owner = turn;
+    if (owner) owner.running++;
     const watch: Watch = { call, open: 0, answered: false, ended: [] };
     const context: ToolContext = {
       workDir,
@@ -329,13 +336,15 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         (err: unknown) => respond(call, "error", { error: err instanceof Error ? err.message : String(err) }),
       )
       .finally(() => {
-        if (turn) turn.running--;
+        if (!owner || owner !== turn) return;
+        owner.running--;
         finishTurnIfIdle();
       });
   }
 
   // The door every tool call goes through. Nothing runs without a verdict.
   function onToolCall(call: ToolCall) {
+    liveCalls.add(call.id);
     const tool = byName.get(call.name);
     emit({ type: "tool.call", id: call.id, name: call.name, args: call.args, risk: tool?.risk });
 
@@ -441,7 +450,23 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       case "error":
         emit({ type: "error", message: event.message });
         break;
+      case "disconnected":
+        onDisconnected(event.message);
+        break;
     }
+  }
+
+  // The connection dropped: whatever the model owed us will never come. End
+  // the turn now (a tool still running finishes on its own) so nothing waits
+  // forever, and forget calls the new connection never heard of.
+  function onDisconnected(message: string) {
+    emit({ type: "error", message });
+    liveCalls.clear();
+    for (const call of waiting.splice(0)) {
+      respond(call, "cancelled", { status: "cancelled", reason: "the connection to the model dropped" });
+    }
+    if (turn) turn.awaiting = turn.running = 0;
+    finishTurnIfIdle();
   }
 
   const modelSession = await options.model.connect(onModelEvent, {

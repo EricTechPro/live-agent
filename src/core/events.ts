@@ -29,13 +29,14 @@ export type AgentEvent =
   /**
    * What the core told the model about a call:
    * ok (with output), error, blocked (never ran), waiting (for the user's yes),
-   * declined (the user did not say yes, so it never ran).
+   * declined (the user did not say yes, so it never ran), cancelled (the model
+   * dropped the call, e.g. the user talked over it or the connection dropped).
    */
   | {
       type: "tool.result";
       id: string;
       name: string;
-      status: "ok" | "error" | "blocked" | "waiting" | "declined";
+      status: "ok" | "error" | "blocked" | "waiting" | "declined" | "cancelled";
       output?: unknown;
       error?: string;
     }
