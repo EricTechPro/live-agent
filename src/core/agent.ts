@@ -18,10 +18,11 @@
 import { brainRoot, saveRawNote } from "../brain/index.ts";
 import { defaultConfig, type Config } from "../config/index.ts";
 import type { AgentEvent, EventOf } from "./events.ts";
+import { createJobs, type JobInfo, type Jobs } from "./jobs.ts";
 import type { Model, ModelEvent, ToolResponse } from "./model.ts";
 import { loadTools } from "./registry.ts";
 import { decide, explain, type SafetyMode, type SafetyOverrides } from "./safety.ts";
-import type { Tool } from "./tool.ts";
+import type { Tool, ToolContext } from "./tool.ts";
 
 export interface SessionOptions {
   /** Which model to talk to: `geminiLiveModel(...)` for real, `scriptedModel(...)` in tests. */
@@ -40,6 +41,8 @@ export interface SessionOptions {
   tools?: Tool[];
   /** How long `close()` waits for the model's chat summary before using the plain transcript. Default 8000. */
   summaryTimeoutMs?: number;
+  /** Where helper CLIs live (tests point these at fake scripts). */
+  helpers?: { geminiCliBin?: string; geminiCliHome?: string; cancelGraceMs?: number };
 }
 
 /** What `onAudio` hears: a chunk of the model's voice, or "drop what you queued" (interrupted). */
@@ -54,6 +57,12 @@ export interface AgentSession {
   onAudio(listener: (out: AudioOut) => void): () => void;
   /** Listen to every event on the stream. Returns a function that stops listening. */
   onEvent(listener: (event: AgentEvent) => void): () => void;
+  /**
+   * The orchestrator: submit any job (e.g. a tidy job), cancel one by id (the
+   * job board's cancel button), list them. State changes arrive as `job.state` events.
+   */
+  jobs: Pick<Jobs, "submit" | "cancel" | "list">;
+  /** Stops running jobs, then closes the model connection. */
   close(): Promise<void>;
 }
 
@@ -77,6 +86,38 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   const byName = new Map(tools.map((t) => [t.name, t]));
   const listeners = new Set<(event: AgentEvent) => void>();
   const audioListeners = new Set<(out: AudioOut) => void>();
+  let closed = false;
+
+  // Jobs started by a tool call stay tied to it: each job end gives the call
+  // one more answer, so the model announces the result.
+  type Watch = { call: ToolCall; open: number; answered: boolean; ended: JobInfo[] };
+  const watchByJob = new Map<string, Watch>();
+  const jobs = createJobs({
+    maxAtOnce: config.helpers.maxAtOnce,
+    onState(job) {
+      emit({ type: "job.state", ...job });
+      const watch = watchByJob.get(job.id);
+      if (!watch || job.state === "queued" || job.state === "running") return;
+      watchByJob.delete(job.id);
+      watch.ended.push(job);
+      if (watch.answered) announceEnded(watch);
+    },
+  });
+
+  // Why wait for `answered`: a job can end before the tool's first answer has
+  // gone out, and the model must hear "started" before "finished".
+  function announceEnded(watch: Watch) {
+    for (const job of watch.ended.splice(0)) {
+      watch.open--;
+      if (closed) continue;
+      respond(
+        watch.call,
+        "ok",
+        { output: { jobId: job.id, state: job.state, message: job.message ?? null } },
+        { willContinue: watch.open > 0 },
+      );
+    }
+  }
 
   // The turn in flight. Why only one: a live conversation takes turns, so the core does too.
   // A turn ends when the model has answered everything we sent it (`awaiting`)
@@ -193,12 +234,41 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
 
   function run(call: ToolCall, tool: Tool) {
     if (turn) turn.running++;
+    const watch: Watch = { call, open: 0, answered: false, ended: [] };
+    const context: ToolContext = {
+      workDir,
+      brainPath,
+      useNotes,
+      brainWrote: (path) => brainWrote(path, call.name),
+      jobs: {
+        submit(spec) {
+          // A job never ends inside submit, so watching right after is safe.
+          const id = jobs.submit(spec);
+          watch.open++;
+          watchByJob.set(id, watch);
+          return id;
+        },
+        cancel: jobs.cancel,
+        list: jobs.list,
+      },
+      helpers: {
+        geminiCli: config.helpers.geminiCli,
+        geminiCliBin: options.helpers?.geminiCliBin ?? "gemini",
+        geminiCliHome: options.helpers?.geminiCliHome,
+        cancelGraceMs: options.helpers?.cancelGraceMs,
+      },
+    };
     // Why a promise chain (not await): the tool runs on its own while the
     // conversation goes on. Its answer goes back whenever it is ready.
     Promise.resolve()
-      .then(() => tool.run(call.args, { workDir, brainPath, useNotes, brainWrote: (path) => brainWrote(path, call.name) }))
+      .then(() => tool.run(call.args, context))
       .then(
-        (output) => respond(call, "ok", { output: output ?? null }),
+        (output) => {
+          // A call that started jobs gets more answers later, so this one says "more to come".
+          respond(call, "ok", { output: output ?? null }, watch.open ? { willContinue: true } : {});
+          watch.answered = true;
+          announceEnded(watch);
+        },
         (err: unknown) => respond(call, "error", { error: err instanceof Error ? err.message : String(err) }),
       )
       .finally(() => {
@@ -349,11 +419,17 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       audioListeners.add(listener);
       return () => audioListeners.delete(listener);
     },
+    jobs: { submit: jobs.submit, cancel: jobs.cancel, list: jobs.list },
+    // Stops running jobs and writes the chat-end note side by side, so close
+    // stays prompt. `closed` first: a job ending now is not announced to the
+    // model, which is busy writing the chat summary.
     async close() {
-      try {
-        await saveChatEndNote();
-      } catch (err) {
+      closed = true;
+      const saving = saveChatEndNote().catch((err: unknown) => {
         emit({ type: "error", message: `could not save the chat note: ${err instanceof Error ? err.message : String(err)}` });
+      });
+      try {
+        await Promise.all([jobs.stopAll(), saving]);
       } finally {
         ended = true;
         await modelSession.close();

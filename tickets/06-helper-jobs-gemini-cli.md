@@ -4,13 +4,13 @@
 
 **Blocked by:** 02 Read-file tool behind the safety gate, 03 Config file
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Priority:** must-have
 
-- [ ] A helper request produces a job-started event and the voice reply does not wait for the job
-- [ ] Job state changes appear on the event stream in order
-- [ ] With max-at-once 1, a second job waits in queued until the first ends
-- [ ] Cancelling a running job moves it to cancelled and stops the process
-- [ ] If Gemini CLI is missing or not signed in, the job fails with a message saying how to fix it
-- [ ] When a job finishes, the agent says so in the conversation
+- [x] A helper request produces a job-started event and the voice reply does not wait for the job
+- [x] Job state changes appear on the event stream in order
+- [x] With max-at-once 1, a second job waits in queued until the first ends
+- [x] Cancelling a running job moves it to cancelled and stops the process
+- [x] If Gemini CLI is missing or not signed in, the job fails with a message saying how to fix it
+- [x] When a job finishes, the agent says so in the conversation

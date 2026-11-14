@@ -6,6 +6,7 @@
 //   { type: "job.state" }, { type: "notes.used" }, { type: "brain.write" }
 // Every event is plain JSON, so the core can later pipe it to the app as
 // JSON lines without a translation layer.
+import type { JobInfo } from "./jobs.ts";
 import type { SafetyMode, Verdict } from "./safety.ts";
 import type { RiskClass } from "./tool.ts";
 
@@ -39,6 +40,12 @@ export type AgentEvent =
     }
   /** The user talked over the model, so it stopped mid-reply. The turn still ends with `turn.done`. */
   | { type: "interrupted" }
+  /**
+   * A background job changed state: queued -> running -> done | failed | cancelled
+   * (a queued job can go straight to cancelled). `message` is the summary (done)
+   * or what went wrong and how to fix it (failed).
+   */
+  | ({ type: "job.state" } & JobInfo)
   /** The brain notes this turn's answer used (paths inside the brain, e.g. `wiki/x.md`). Sent once, just before `turn.done`. */
   | { type: "notes.used"; notes: string[] }
   /**

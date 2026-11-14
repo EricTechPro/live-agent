@@ -13,6 +13,8 @@
 // Why a risk class on every tool: the safety gate decides by risk class and
 // mode (see src/core/safety.ts), so a new tool is safe by declaring one word.
 
+import type { Jobs } from "./jobs.ts";
+
 export type RiskClass = "read" | "edit" | "command" | "helper";
 
 /** What a running tool gets besides its args. */
@@ -25,6 +27,24 @@ export interface ToolContext {
   useNotes(paths: string[]): void;
   /** Report a note this tool wrote into the brain (path inside the brain). The core emits `brain.write` right away. */
   brainWrote(path: string): void;
+  /**
+   * The orchestrator (src/core/jobs.ts). A job submitted from a tool call is
+   * tied to that call: the core tells the model when the job ends.
+   */
+  jobs?: Pick<Jobs, "submit" | "cancel" | "list">;
+  /** Helper settings: which helpers are on (config `helpers`) and where their CLIs are. */
+  helpers?: HelperSettings;
+}
+
+export interface HelperSettings {
+  /** Config `helpers.geminiCli`. */
+  geminiCli: boolean;
+  /** The Gemini CLI binary. Default "gemini" on PATH. */
+  geminiCliBin: string;
+  /** Where Gemini CLI keeps `.gemini/`. Default: the user's home. */
+  geminiCliHome?: string;
+  /** Wait this long after SIGINT before SIGKILL when cancelling. */
+  cancelGraceMs?: number;
 }
 
 export interface Tool<Args extends Record<string, any> = Record<string, any>> {
