@@ -14,6 +14,8 @@ Specs and tickets for this repo live as markdown files in the repo. There is no 
 
 A ticket is ready when its status is `ready-for-agent` and every ticket in its `Blocked by` line is `done`. Lowest number first. Do `must-have` before `after-talk`.
 
+A blocker that is `ready-for-human` because its only open boxes need a person (a manual check on a real machine, a mic, a clean Mac) counts as `done` for its dependents: the code they build on is finished, and agents can't tick those boxes anyway. The user decided this on 2026-11-14 (tickets 10 to 14 were built while 08 and 09 waited on manual checks).
+
 ## When a skill says "publish to the issue tracker"
 
 Create a new file in `tickets/` with the next free number.
