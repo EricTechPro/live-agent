@@ -4,13 +4,13 @@
 
 **Blocked by:** 01 Text turn through the agent core
 
-**Status:** ready-for-human
+**Status:** done
 
 **Priority:** must-have
 
 - [x] Starting live-agent starts the local LiveKit server and stops it on exit
-- [ ] A spoken turn gets a spoken reply in real time
-- [ ] Speaking while the agent talks interrupts it
+- [x] A spoken turn gets a spoken reply in real time
+- [x] Speaking while the agent talks interrupts it
 - [x] The front end only ever receives short-lived tokens, never the real key
 - [x] Voice turns produce the same events on the stream as text turns
 
@@ -28,3 +28,5 @@ Notes:
 - The window gets only a 10-minute LiveKit JWT. The core's own Gemini Live session connects with a single-use ephemeral token (v1alpha). The real key stays in the token service.
 - LiveKit runs with a random API secret on every launch, not dev mode's well-known `devkey/secret`, and binds to 127.0.0.1 only.
 - Known gap: in Ask me mode, a spoken "yes" does not yet approve a waiting tool call. Only a typed yes does (ticket 02's approval path is text-only).
+
+Manual check by Eric, 2026-11-14 (debug build at 10d1b10+, launched with `open --env`): the macOS mic prompt showed with the plain reason, a spoken question ("What's my sourdough starter called?") got a spoken answer ("Gus") in real time, and talking over the agent interrupted it.
