@@ -224,8 +224,8 @@ How it flows:
 - **Tidy.** A background job reads new raw notes and folds them into `wiki/` pages,
   Karpathy-style: update a page when the topic exists, make a new one when it doesn't, never
   invent facts. It only ever writes inside `wiki/`, and it shows on the job board. The prompt
-  it uses is [`prompts/tidy.md`](prompts/tidy.md). Today a chat ends (and the tidy runs)
-  when the app quits.
+  it uses is [`prompts/tidy.md`](prompts/tidy.md). A chat ends (note saved, tidy queued)
+  when you press **New chat**, after ten quiet minutes, or when the app quits.
 
 Use your own notes: the [`bring-your-brain`](skills/bring-your-brain/SKILL.md) skill walks
 through it. In short, make `raw/`, `wiki/` and `projects/` in a folder, then set `brainPath`.
