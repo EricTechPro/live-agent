@@ -10,6 +10,7 @@
 //
 // Every probe is injectable (`DoctorDeps`), so tests run with no network,
 // no LiveKit and no real CLIs.
+import { errorMessage } from "../errors.ts";
 import { geminiApiKey } from "../gemini-key.ts";
 import { livekitBinary } from "../home.ts";
 import { createSocket } from "node:dgram";
@@ -120,7 +121,7 @@ async function checkLiveKit(d: DoctorDeps): Promise<CheckResult> {
     await server.stop();
     return ok(name, `local server starts (port ${port})`);
   } catch (err) {
-    const why = err instanceof Error ? err.message : String(err);
+    const why = errorMessage(err);
     return fail(name, `LiveKit did not start: ${why}`, `Run "${binary} --dev" in a terminal to see why. If it is missing: ${LIVEKIT_INSTALL}`);
   }
 }

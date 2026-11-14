@@ -14,6 +14,7 @@
 // one conversation that outlives its connections: the server keeps handing us
 // a resumption handle, and a new connection made with it carries on the same
 // chat. Context window compression lifts the 15-minute audio session limit.
+import { errorMessage } from "../errors.ts";
 import {
   Behavior,
   FunctionResponseScheduling,
@@ -171,7 +172,7 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
           // Give up for now. Input that was waiting is lost, so say so: the core
           // ends the turn. The next send tries again.
           pending = [];
-          const why = lastError instanceof Error ? lastError.message : String(lastError);
+          const why = errorMessage(lastError);
           onEvent({ type: "disconnected", message: `could not reconnect to Gemini Live: ${why}` });
         })().finally(() => (reconnecting = undefined));
         return reconnecting;

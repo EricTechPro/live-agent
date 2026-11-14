@@ -15,19 +15,30 @@
 // turn, and that turn puts the very same events on the stream as a text turn.
 // The model's voice itself comes out of `onAudio`, not the event stream: it is
 // binary and high-rate, and the stream stays plain JSON.
+//
+// This file wires the session together. Each idea lives in its own module:
+//   turn.ts        one exchange at a time, and when it is over
+//   tool-calls.ts  the door every tool call goes through (gate, run, answer, jobs)
+//   approvals.ts   calls waiting for the user's yes, typed or spoken
+//   chat-end.ts    the note every chat leaves in the brain
+//   jobs.ts        background jobs (helpers, tidy) with states and cancel
+//   safety.ts      the gate's mode table
 import { existsSync } from "node:fs";
-import { brainRoot, saveRawNote } from "../brain/index.ts";
+import { brainRoot } from "../brain/index.ts";
 import { tidyJob, type TidyModel } from "../brain/tidy.ts";
 import { defaultConfig, defaultConfigPath, type Config } from "../config/index.ts";
-import { currentConfig, setupKickoff } from "../setup/index.ts";
-import type { AgentEvent, EventOf } from "./events.ts";
-import { createJobs, type JobInfo, type Jobs } from "./jobs.ts";
-import type { Model, ModelEvent, ToolResponse } from "./model.ts";
-import { loadTools } from "./registry.ts";
-import { nextMode, rule, type SafetyMode, type SafetyOverrides } from "./safety.ts";
-import type { Tool, ToolContext } from "./tool.ts";
+import { errorMessage } from "../errors.ts";
 import type { HelperPaths } from "../helpers/gemini-cli.ts";
-import chatSummaryPrompt from "../../prompts/chat-summary.md" with { type: "text" };
+import { currentConfig, setupKickoff } from "../setup/index.ts";
+import { saveChatNote, SUMMARY_REQUEST, summaryCollector, type ChatLine, type SummaryCollector } from "./chat-end.ts";
+import type { AgentEvent } from "./events.ts";
+import { createJobs, type Jobs } from "./jobs.ts";
+import type { Model, ModelEvent } from "./model.ts";
+import { loadTools } from "./registry.ts";
+import { nextMode, type SafetyMode, type SafetyOverrides } from "./safety.ts";
+import type { Tool } from "./tool.ts";
+import { createToolCalls } from "./tool-calls.ts";
+import { newTurn, turnIsOver, type Turn } from "./turn.ts";
 
 export interface SessionOptions {
   /** Which model to talk to: `geminiLiveModel(...)` for real, `scriptedModel(...)` in tests. */
@@ -118,181 +129,83 @@ export interface AgentSession {
   close(): Promise<void>;
 }
 
-type ToolCall = Extract<ModelEvent, { type: "tool.call" }>;
-
-// What counts as "yes" when a tool call waits for approval. Anything else declines.
-const YES = /^\s*(yes|yeah|yep|yup|sure|ok|okay|go ahead|do it|please do|approved?)\b/i;
-
-// What close() asks the model for the chat-end note. The words live in prompts/chat-summary.md.
-const SUMMARY_REQUEST = chatSummaryPrompt.trim();
-
 export async function startSession(options: SessionOptions): Promise<AgentSession> {
+  // ---- settings -----------------------------------------------------------
   // `let`: a setup chat can save new answers, and they apply at once (applyConfig).
   let config = options.config ?? defaultConfig();
   // `let`: the window can switch it while the app runs (setMode); the gate reads it per call.
   let mode = options.mode ?? config.safety.mode;
   const overrides = options.overrides ?? config.safety.overrides;
+  let brainPath = brainRoot(config.brainPath);
   const workDir = options.workDir ?? process.cwd();
   const configPath = options.configPath ?? defaultConfigPath();
-  // True from setup.start() until save_setup has written the file: the only time save_setup may run.
-  let setupActive = false;
-  let brainPath = brainRoot(config.brainPath);
+  const summaryTimeoutMs = options.summaryTimeoutMs ?? 8000;
   const tools = options.tools ?? (await loadTools(options.toolsDir));
-  const byName = new Map(tools.map((t) => [t.name, t]));
+
+  // ---- the event stream ---------------------------------------------------
   const listeners = new Set<(event: AgentEvent) => void>();
   const audioListeners = new Set<(out: AudioOut) => void>();
-  // Set when close() begins: job ends are no longer announced and late model events are dropped.
-  let closed = false;
-  // Set while newChat() saves the old chat and reconnects: no turn may start then.
-  let switching = false;
-
-  // Jobs started by a tool call stay tied to it: each job end gives the call
-  // one more answer, so the model announces the result.
-  type Watch = { call: ToolCall; open: number; answered: boolean; ended: JobInfo[] };
-  const watchByJob = new Map<string, Watch>();
-  const jobs = createJobs({
-    maxAtOnce: config.helpers.maxAtOnce,
-    onState(job) {
-      emit({ type: "job.state", ...job });
-      const watch = watchByJob.get(job.id);
-      if (!watch || job.state === "queued" || job.state === "running") return;
-      watchByJob.delete(job.id);
-      watch.ended.push(job);
-      if (watch.answered) announceEnded(watch);
-    },
-  });
-
-  // Why wait for `answered`: a job can end before the tool's first answer has
-  // gone out, and the model must hear "started" before "finished".
-  function announceEnded(watch: Watch) {
-    for (const job of watch.ended.splice(0)) {
-      watch.open--;
-      if (closed) continue;
-      respond(
-        watch.call,
-        "ok",
-        { output: { jobId: job.id, state: job.state, message: job.message ?? null } },
-        { willContinue: watch.open > 0 },
-      );
-    }
-  }
-
-  // The turn in flight. Why only one: a live conversation takes turns, so the core does too.
-  // A turn ends when the model has answered everything we sent it (`awaiting`)
-  // and no tool is still running (`running`). Tools are NON_BLOCKING, so the
-  // model may finish speaking ("let me look...") before a tool's answer lands.
-  let turn: {
-    events: AgentEvent[];
-    reply: string;
-    awaiting: number;
-    running: number;
-    notes: Set<string>;
-    /** What the user said in a voice turn (its transcription arrives in pieces). */
-    heard: string;
-    /** Calls that waited for a yes when this turn began: the user's words answer them. */
-    answering: ToolCall[];
-    done: (events: AgentEvent[]) => void;
-  } | null = null;
-
-  // Every turn starts the same way; `done` is how its sender hears it ended.
-  function newTurn(done: (events: AgentEvent[]) => void = () => {}): NonNullable<typeof turn> {
-    clearTimeout(idleTimer);
-    return { events: [], reply: "", awaiting: 0, running: 0, notes: new Set(), heard: "", answering: [], done };
-  }
-
-  // A yes runs what was waiting. The tool's answer tells the model it was approved.
-  function approve(calls: ToolCall[]) {
-    for (const call of calls) {
-      const tool = byName.get(call.name)!;
-      emit({
-        type: "safety.verdict", id: call.id, name: call.name, risk: tool.risk, mode,
-        verdict: "allow", reason: "the user said yes",
-      });
-      run(call, tool);
-    }
-  }
-
-  // Anything else declines. Silent: the model hears it with the user's words,
-  // and answers both at once.
-  function decline(calls: ToolCall[], reason: string) {
-    for (const call of calls) respond(call, "declined", { status: "declined", reason }, { scheduling: "silent" });
-  }
-
-  // Calls the gate said "ask" about, waiting for the user's next turn.
-  let waiting: ToolCall[] = [];
-  // Calls made on the connection we have now. Why track it: after a drop the
-  // model is on a fresh connection that never heard of older calls, so their
-  // late answers go on our stream but not to the model.
-  const liveCalls = new Set<string>();
-  // Calls the model took back (tool.cancel): their late answers are not shown or sent.
-  const cancelledCalls = new Set<string>();
-  const callNames = new Map<string, string>();
-
-  // What was said, for the chat-end note: user texts and the model's joined replies.
-  const chat: { role: "user" | "model"; text: string }[] = [];
-  // Set while close() waits for the model's chat summary.
-  let summary: { take(event: ModelEvent): void } | null = null;
-  const summaryTimeoutMs = options.summaryTimeoutMs ?? 8000;
-
   // Every event goes through here, so listeners and the current turn always
   // see exactly the same stream.
   function emit(event: AgentEvent) {
     turn?.events.push(event);
     for (const listener of listeners) listener(event);
   }
-
-  // Why one check: a new turn, setup and a new chat all need the model to themselves.
-  function busy(): Error | null {
-    if (turn) return new Error("a turn is already in progress");
-    if (switching) return new Error("a new chat is starting");
-    return null;
+  function playAudio(out: AudioOut) {
+    for (const listener of audioListeners) listener(out);
   }
 
-  // The quiet-spell timer (`chatIdleMs`): armed after each turn of a chat, so a
-  // chat nobody has touched for a while ends by itself and leaves its note.
-  let idleTimer: ReturnType<typeof setTimeout> | undefined;
-  function armIdleTimer() {
-    clearTimeout(idleTimer);
-    if (!options.chatIdleMs || closed || !chat.length) return;
-    idleTimer = setTimeout(() => void newChat().catch(() => {}), options.chatIdleMs);
-    idleTimer.unref?.();
-  }
+  // ---- session state ------------------------------------------------------
+  // The turn in flight (src/core/turn.ts): only one at a time.
+  let turn: Turn | null = null;
+  // What was said in this chat, for the chat-end note (src/core/chat-end.ts).
+  const chat: ChatLine[] = [];
+  // Set while the model writes the chat summary: its events go there, not to the chat.
+  let summary: SummaryCollector | null = null;
+  // True from setup.start() until save_setup has written the file: the only time save_setup may run.
+  let setupActive = false;
+  // Set while newChat() saves the old chat and reconnects: no turn may start then.
+  let switching = false;
+  // Set when close() begins: job ends are no longer announced and late model events are dropped.
+  let closed = false;
 
-  function finishTurnIfIdle() {
-    if (!turn || turn.awaiting > 0 || turn.running > 0) return;
-    const finished = turn;
-    // A spoken turn that was not a yes declines what waited. A turn with no
-    // words from the user (the model announcing a job) leaves it waiting.
-    const unanswered = finished.answering.splice(0);
-    if (finished.heard.trim()) decline(unanswered, "the user did not say yes");
-    else waiting.push(...unanswered);
-    // Why once, at the end: the app shows "notes used" next to the finished answer.
-    if (finished.notes.size) emit({ type: "notes.used", notes: [...finished.notes] });
-    emit({ type: "turn.done", reply: finished.reply });
-    turn = null;
-    if (finished.heard.trim()) chat.push({ role: "user", text: finished.heard.trim() });
-    if (finished.reply.trim()) chat.push({ role: "model", text: finished.reply.trim() });
-    finished.done(finished.events);
-    armIdleTimer();
-  }
+  // ---- jobs and tool calls -------------------------------------------------
+  const jobs = createJobs({
+    maxAtOnce: config.helpers.maxAtOnce,
+    onState(job) {
+      emit({ type: "job.state", ...job });
+      toolCalls.onJobState(job);
+    },
+  });
+  const toolCalls = createToolCalls({
+    tools,
+    jobs,
+    emit,
+    send: (response) => modelSession.sendToolResponse(response),
+    turn: () => turn,
+    turnMayEnd: finishTurnIfOver,
+    gate: () => ({ mode, overrides, state: { setupActive } }),
+    context: () => ({
+      workDir,
+      brainPath,
+      helpers: { ...options.helpers, geminiCli: config.helpers.geminiCli },
+      setup: {
+        configPath,
+        saved(saved) {
+          setupActive = false;
+          applyConfig(saved);
+          emit({ type: "setup.saved", configPath, config: saved });
+        },
+      },
+    }),
+    closing: () => closed,
+  });
+  const { approvals } = toolCalls;
 
-  // Tell the model about a call, and put the same thing on the stream.
-  function respond(
-    call: ToolCall,
-    status: EventOf<"tool.result">["status"],
-    response: ToolResponse["response"],
-    extra: Pick<ToolResponse, "scheduling" | "willContinue"> = {},
-  ) {
-    if (cancelledCalls.has(call.id)) return;
-    emit({
-      type: "tool.result", id: call.id, name: call.name, status,
-      ...("output" in response ? { output: response.output } : {}),
-      ...(typeof response.error === "string" ? { error: response.error } : {}),
-    });
-    if (!liveCalls.has(call.id)) return;
-    // A non-silent answer makes the model speak again, so the turn waits for it.
-    if (extra.scheduling !== "silent" && turn) turn.awaiting++;
-    modelSession.sendToolResponse({ id: call.id, name: call.name, response, ...extra });
+  // ---- settings that change while running ---------------------------------
+  function setMode(next: SafetyMode) {
+    mode = next;
+    emit({ type: "mode.changed", mode });
   }
 
   // Use what the setup chat just saved, now. Everything setup asks about is
@@ -306,195 +219,74 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     if (next.safety.mode !== mode) setMode(next.safety.mode);
   }
 
-  function setMode(next: SafetyMode) {
-    mode = next;
-    emit({ type: "mode.changed", mode });
+  // ---- turns --------------------------------------------------------------
+  // Why one check: a new turn, setup and a new chat all need the model to themselves.
+  function busy(): Error | null {
+    if (turn) return new Error("a turn is already in progress");
+    if (switching) return new Error("a new chat is starting");
+    return null;
   }
 
-  function useNotes(paths: string[]) {
-    for (const path of paths) turn?.notes.add(path);
+  // Every turn starts here: the calls waiting for a yes now wait for this turn's words.
+  function startTurn(done?: (events: AgentEvent[]) => void): Turn {
+    clearTimeout(idleTimer);
+    turn = newTurn(done);
+    approvals.openTurn();
+    return turn;
   }
 
-  // Why right away (not at turn end): "remember this" should show as saved the moment it is.
-  function brainWrote(path: string, tool: string) {
-    emit({ type: "brain.write", path, cause: "tool", tool });
-  }
-
-  // Ask the live model for a short summary of the chat, off the record (no
-  // transcript events). Resolves "" if the model errors, calls a tool, or
-  // takes longer than `summaryTimeoutMs`: the caller then falls back to the
-  // plain transcript, so close() never hangs on an unreachable model.
-  function askForSummary(): Promise<string> {
-    return new Promise((resolve) => {
-      let text = "";
-      const finish = (result: string) => {
-        clearTimeout(timer);
-        summary = null;
-        resolve(result);
-      };
-      const timer = setTimeout(() => finish(""), summaryTimeoutMs);
-      summary = {
-        take(event) {
-          if (event.type === "text") text += event.text;
-          // Why not wait for turn.complete: the summary is spoken too, and the
-          // model only completes the turn once that voice would have finished
-          // (~15 s live). The text is all in at generation.complete (~4 s).
-          else if (event.type === "generation.complete" || event.type === "turn.complete") finish(text);
-          // The summary is spoken too (ticket 08): its voice is nobody's to play, so drop it.
-          else if (event.type === "audio" || event.type === "user.text" || event.type === "interrupted") return;
-          else finish(""); // an error, or a tool call we will not run while closing
-        },
-      };
-      try {
-        modelSession.sendText(SUMMARY_REQUEST);
-      } catch {
-        finish("");
-      }
-    });
-  }
-
-  // The one raw note a chat leaves behind. Returns its path, or null when
-  // nothing was said. Not a tool call, so the safety gate is not asked: the
-  // spec saves this note after every chat, in every mode, and it only ever
-  // adds a new file to raw/. Ticket 07 queues the tidy job on its brain.write.
-  async function saveChatEndNote(): Promise<string | null> {
-    if (!chat.length || options.chatEndNote === false) return null;
-    // A turn still in flight means the model is busy: skip straight to the transcript.
-    const summarised = turn ? "" : (await askForSummary()).trim();
-    const text = summarised || chat.map((line) => `- ${line.role === "user" ? "You" : "Agent"}: ${line.text}`).join("\n");
-    const path = await saveRawNote(brainPath, { title: "Chat", text });
-    emit({ type: "brain.write", path, cause: "chat-end" });
-    return path;
-  }
-
-  function run(call: ToolCall, tool: Tool) {
-    // The turn this run holds open. Only a dropped connection ends it early.
-    const owner = turn;
-    if (owner) owner.running++;
-    const watch: Watch = { call, open: 0, answered: false, ended: [] };
-    const context: ToolContext = {
-      workDir,
-      brainPath,
-      useNotes,
-      brainWrote: (path) => brainWrote(path, call.name),
-      jobs: {
-        submit(spec) {
-          // A job never ends inside submit, so watching right after is safe.
-          const id = jobs.submit(spec);
-          watch.open++;
-          watchByJob.set(id, watch);
-          return id;
-        },
-        cancel: jobs.cancel,
-        list: jobs.list,
-      },
-      helpers: { ...options.helpers, geminiCli: config.helpers.geminiCli },
-      setup: {
-        configPath,
-        saved(saved) {
-          setupActive = false;
-          applyConfig(saved);
-          emit({ type: "setup.saved", configPath, config: saved });
-        },
-      },
-    };
-    // Why a promise chain (not await): the tool runs on its own while the
-    // conversation goes on. Its answer goes back whenever it is ready.
-    Promise.resolve()
-      .then(() => tool.run(call.args, context))
-      .then(
-        (output) => {
-          // A call that started jobs gets more answers later, so this one says "more to come".
-          respond(call, "ok", { output: output ?? null }, watch.open ? { willContinue: true } : {});
-          watch.answered = true;
-          announceEnded(watch);
-        },
-        (err: unknown) => respond(call, "error", { error: err instanceof Error ? err.message : String(err) }),
-      )
-      .finally(() => {
-        if (!owner || owner !== turn) return;
-        owner.running--;
-        finishTurnIfIdle();
-      });
-  }
-
-  // The door every tool call goes through. Nothing runs without a verdict.
-  function onToolCall(call: ToolCall) {
-    liveCalls.add(call.id);
-    callNames.set(call.id, call.name);
-    const tool = byName.get(call.name);
-    emit({ type: "tool.call", id: call.id, name: call.name, args: call.args, risk: tool?.risk });
-
-    if (!tool) {
-      const reason = `there is no tool named ${call.name}`;
-      emit({ type: "safety.verdict", id: call.id, name: call.name, mode, verdict: "block", reason });
-      respond(call, "blocked", { status: "blocked", reason, instruction: "Tell the user briefly that you cannot do that." });
-      return;
-    }
-
-    const input = { tool: call.name, args: call.args, risk: tool.risk, mode, overrides };
-    const { verdict, reason } = rule(input, tool.gate?.({ setupActive }));
-    emit({ type: "safety.verdict", id: call.id, name: call.name, risk: tool.risk, mode, verdict, reason });
-
-    switch (verdict) {
-      case "allow":
-        run(call, tool);
-        break;
-      case "block":
-        // Like live-dj: the tool is skipped and the model gets the reason, so
-        // it explains the refusal in its own voice.
-        respond(call, "blocked", {
-          status: "blocked",
-          reason,
-          instruction: `Do not retry. Tell the user in one short spoken sentence that you did not run ${call.name}, and why.`,
-        });
-        break;
-      case "ask":
-        waiting.push(call);
-        // willContinue: the real answer for this call comes later, after the user's turn.
-        respond(
-          call,
-          "waiting",
-          {
-            status: "waiting_for_approval",
-            reason,
-            instruction: `Ask the user out loud for a yes before ${call.name} runs. Say what it will do. The result arrives after they answer.`,
-          },
-          { willContinue: true },
-        );
-        break;
-    }
+  function finishTurnIfOver() {
+    if (!turn || !turnIsOver(turn)) return;
+    const finished = turn;
+    const heard = finished.heard.trim();
+    // A spoken turn that was not a yes declines what waited (a typed one already did).
+    approvals.closeTurn(heard !== "");
+    // Why once, at the end: the app shows "notes used" next to the finished answer.
+    if (finished.notes.size) emit({ type: "notes.used", notes: [...finished.notes] });
+    emit({ type: "turn.done", reply: finished.reply });
+    turn = null;
+    if (heard) chat.push({ role: "user", text: heard });
+    if (finished.reply.trim()) chat.push({ role: "model", text: finished.reply.trim() });
+    finished.done(finished.events);
+    armIdleTimer();
   }
 
   // A spoken turn has no sendText to open it, so the model's first word about
   // it does. It waits for one `turn.complete`, like a text turn. Nobody awaits
   // its promise; listeners see its events on the stream.
-  function openVoiceTurn() {
-    if (turn) return;
-    turn = newTurn();
-    turn.awaiting = 1;
-    turn.answering = waiting.splice(0);
+  function openVoiceTurn(): Turn {
+    if (turn) return turn;
+    const voice = startTurn();
+    voice.awaiting = 1;
+    return voice;
   }
 
-  function playAudio(out: AudioOut) {
-    for (const listener of audioListeners) listener(out);
+  // The quiet-spell timer (`chatIdleMs`): armed after each turn of a chat, so a
+  // chat nobody has touched for a while ends by itself and leaves its note.
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  function armIdleTimer() {
+    clearTimeout(idleTimer);
+    if (!options.chatIdleMs || closed || !chat.length) return;
+    idleTimer = setTimeout(() => void newChat().catch(() => {}), options.chatIdleMs);
+    idleTimer.unref?.();
   }
 
-  // Translate what the model says into what the app sees.
+  // ---- what the model says -> what the app sees ---------------------------
   function onModelEvent(event: ModelEvent) {
-    // While close() asks for the chat summary, the model's answer is the core's, not the chat's.
+    // While the model writes the chat summary, its answer is the core's, not the chat's.
     if (!turn && summary) return summary.take(event);
     // Once close() has begun, the chat is over: late model events open no new turn.
     if (closed) return;
     switch (event.type) {
-      case "user.text":
-        openVoiceTurn();
-        turn!.heard += event.text;
+      case "user.text": {
+        const voice = openVoiceTurn();
+        voice.heard += event.text;
         emit({ type: "transcript", role: "user", text: event.text });
         // A spoken yes approves like a typed one. Why at the first match (not at
         // turn end): "yes" leads the sentence, and the model is already replying.
-        if (turn!.answering.length && YES.test(turn!.heard)) approve(turn!.answering.splice(0));
+        approvals.hear(voice.heard);
         break;
+      }
       case "audio":
         openVoiceTurn();
         playAudio(event);
@@ -505,15 +297,14 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         emit({ type: "interrupted" });
         break;
       case "text":
-        openVoiceTurn();
-        turn!.reply += event.text;
+        openVoiceTurn().reply += event.text;
         emit({ type: "transcript", role: "model", text: event.text });
         break;
       case "tool.call":
-        onToolCall(event);
+        toolCalls.onCall(event);
         break;
       case "tool.cancel":
-        onToolCancel(event.ids);
+        toolCalls.onCancel(event.ids);
         break;
       case "generation.complete":
         // Chat turns wait for turn.complete: the user is still hearing the reply.
@@ -521,51 +312,23 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       case "turn.complete":
         if (!turn) return;
         turn.awaiting--;
-        finishTurnIfIdle();
+        finishTurnIfOver();
         break;
       case "error":
         emit({ type: "error", message: event.message });
         break;
       case "disconnected":
-        onDisconnected(event.message);
+        // Whatever the model owed us will never come. End the turn now (a tool
+        // still running finishes on its own) so nothing waits forever.
+        emit({ type: "error", message: event.message });
+        toolCalls.forgetConnection("the connection to the model dropped");
+        if (turn) turn.awaiting = turn.running = 0;
+        finishTurnIfOver();
         break;
     }
   }
 
-  // The model took these calls back. A call waiting for a yes stops waiting; a
-  // running tool cannot be stopped mid-way, but its answer is dropped. Either
-  // way the stream shows "cancelled" once, and the model hears nothing more.
-  function onToolCancel(ids: string[]) {
-    for (const id of ids) {
-      if (!liveCalls.has(id)) continue;
-      const call = [...waiting, ...(turn?.answering ?? [])].find((c) => c.id === id);
-      waiting = waiting.filter((c) => c.id !== id);
-      if (turn) turn.answering = turn.answering.filter((c) => c.id !== id);
-      liveCalls.delete(id);
-      cancelledCalls.add(id);
-      emit({ type: "tool.result", id, name: call?.name ?? callNames.get(id) ?? "", status: "cancelled" });
-    }
-  }
-
-  // The connection dropped: whatever the model owed us will never come. End
-  // the turn now (a tool still running finishes on its own) so nothing waits
-  // forever, and forget calls the new connection never heard of.
-  function onDisconnected(message: string) {
-    emit({ type: "error", message });
-    forgetConnection("the connection to the model dropped");
-    if (turn) turn.awaiting = turn.running = 0;
-    finishTurnIfIdle();
-  }
-
-  // The model is on a new connection: it never heard of the calls made on the
-  // old one, so stop waiting for the user's yes on them.
-  function forgetConnection(reason: string) {
-    liveCalls.clear();
-    for (const call of [...waiting.splice(0), ...(turn?.answering.splice(0) ?? [])]) {
-      respond(call, "cancelled", { status: "cancelled", reason });
-    }
-  }
-
+  // ---- the model connection -----------------------------------------------
   // Each connection gets a number; events from an older one (still in flight
   // after a new chat reconnected) are dropped.
   let connection = 0;
@@ -578,20 +341,44 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   }
   let modelSession = await connectModel();
 
-  // Write the chat-end note and forget the chat. Never throws: a note that
-  // cannot be written is an error event, not a reason to stop.
+  // ---- ending a chat ------------------------------------------------------
+  // Ask the model for the summary. A turn still in flight means the model is
+  // busy: skip straight to the transcript.
+  async function askForSummary(): Promise<string> {
+    if (turn) return "";
+    const collector = summaryCollector(summaryTimeoutMs);
+    summary = collector;
+    try {
+      modelSession.sendText(SUMMARY_REQUEST);
+    } catch {
+      collector.take({ type: "error", message: "could not ask for a summary" });
+    }
+    try {
+      return await collector.result;
+    } finally {
+      summary = null;
+    }
+  }
+
+  // Write the chat-end note and forget the chat. Returns the note's path, or
+  // null when nothing was said. Never throws: a note that cannot be written
+  // is an error event, not a reason to stop.
   async function endChat(): Promise<string | null> {
     clearTimeout(idleTimer);
     try {
-      return await saveChatEndNote();
+      if (!chat.length || options.chatEndNote === false) return null;
+      const path = await saveChatNote(brainPath, chat, await askForSummary());
+      emit({ type: "brain.write", path, cause: "chat-end" });
+      return path;
     } catch (err) {
-      emit({ type: "error", message: `could not save the chat note: ${err instanceof Error ? err.message : String(err)}` });
+      emit({ type: "error", message: `could not save the chat note: ${errorMessage(err)}` });
       return null;
     } finally {
       chat.length = 0;
     }
   }
 
+  // Ticket 07: a chat that left a note gets tidied into wiki pages, as a job on the board.
   function queueTidy(notePath: string | null) {
     if (notePath && options.tidy) jobs.submit(tidyJob(brainPath, options.tidy));
   }
@@ -602,7 +389,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     switching = true;
     try {
       const notePath = await endChat();
-      forgetConnection("a new chat started");
+      toolCalls.forgetConnection("a new chat started");
       await modelSession.close();
       modelSession = await connectModel();
       queueTidy(notePath);
@@ -612,23 +399,20 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     }
   }
 
+  // ---- the session --------------------------------------------------------
   return {
     sendText(text) {
       const error = busy();
       if (error) return Promise.reject(error);
       return new Promise((done) => {
-        turn = newTurn(done);
+        const typed = startTurn(done);
         emit({ type: "transcript", role: "user", text });
         chat.push({ role: "user", text });
-
-        const pending = waiting.splice(0);
-        if (pending.length && YES.test(text)) {
-          // The tools' answers tell the model it was approved, so the "yes" text is not sent.
-          approve(pending);
-          return;
-        }
-        decline(pending, "the user did not say yes");
-        turn.awaiting++;
+        // A yes runs what was waiting. The tools' answers tell the model it was
+        // approved, so the "yes" text itself is not sent.
+        if (approvals.hear(text)) return;
+        approvals.closeTurn(true);
+        typed.awaiting++;
         modelSession.sendText(text);
       });
     },
@@ -665,17 +449,18 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         }
         setupActive = true;
         return new Promise((done) => {
-          turn = newTurn(done);
+          const setup = startTurn(done);
           emit({ type: "setup.started", configPath, firstRun });
           // Like any new turn, it declines calls still waiting for a yes.
-          decline(waiting.splice(0), "the user started setup");
+          approvals.closeTurn(true, "the user started setup");
           // The kickoff is the core speaking to the model, not the user: no
           // transcript line, and it stays out of the chat-end note.
-          turn.awaiting++;
+          setup.awaiting++;
           modelSession.sendText(kickoff);
         });
       },
     },
+    newChat,
     // Stops running jobs and writes the chat-end note side by side, so close
     // stays prompt. `closed` first: a job ending now is not announced to the
     // model, which is busy writing the chat summary.
@@ -683,7 +468,6 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     // The tidy job is queued only after stopAll has finished, so close never
     // cancels it: it runs on with no model session (the tidy model is its own
     // call) and a failure is just a "failed" job, never an error for the next chat.
-    newChat,
     async close() {
       closed = true;
       let notePath: string | null = null;

@@ -10,8 +10,9 @@
 // A Gemini CLI helper (src/helpers/gemini-cli.ts), a brain tidy job (ticket 07)
 // or anything else is just `run({ signal }) -> summary`, and all of them show
 // the same states on the job board.
+import { errorMessage } from "../errors.ts";
 
-export type JobState = "queued" | "running" | "done" | "failed" | "cancelled";
+export type JobState ="queued" | "running" | "done" | "failed" | "cancelled";
 
 /** A job as the app sees it. Plain JSON. */
 export interface JobInfo {
@@ -83,7 +84,7 @@ export function createJobs({ maxAtOnce, onState }: JobsOptions): Jobs {
       .then(
         (summary) => (signal.aborted ? set(entry, "cancelled") : set(entry, "done", summary)),
         (err: unknown) =>
-          signal.aborted ? set(entry, "cancelled") : set(entry, "failed", err instanceof Error ? err.message : String(err)),
+          signal.aborted ? set(entry, "cancelled") : set(entry, "failed", errorMessage(err)),
       )
       .finally(() => {
         running--;
