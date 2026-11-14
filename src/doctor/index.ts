@@ -4,7 +4,8 @@
 //   live-agent doctor         (the compiled core binary)
 //
 // Checks: Gemini key works, a microphone is there, local LiveKit starts, and
-// which helper CLIs are installed and signed in. Exit code is 1 only when
+// which helper CLIs are installed (Gemini CLI also needs the Gemini key, which
+// it runs on; Codex and Claude Code sign-in is not checked). Exit code is 1 only when
 // something required fails. A helper CLI is only required when it is turned on.
 //
 // Every probe is injectable (`DoctorDeps`), so tests run with no network,
@@ -129,8 +130,8 @@ function checkHelpers(d: DoctorDeps): CheckResult[] {
 
   const g = d.geminiCliStatus();
   const gemini = g.ok
-    ? ok("Gemini CLI", `installed and signed in${h.geminiCli ? "" : " (turned off)"}`)
-    : missingOrBad("Gemini CLI", h.geminiCli, g.installed ? "installed, not signed in" : "not installed", g.fix);
+    ? ok("Gemini CLI", `installed, uses your Gemini key${h.geminiCli ? "" : " (turned off)"}`)
+    : missingOrBad("Gemini CLI", h.geminiCli, g.installed ? "installed, no Gemini key" : "not installed", g.fix);
 
   // v1 only checks that Codex and Claude Code are installed (sign-in is not checked).
   const other = (name: string, bin: string, on: boolean, install: string) =>
@@ -184,7 +185,8 @@ function defaultDeps(): DoctorDeps {
     audioDevices: () => Bun.$`system_profiler SPAudioDataType -json`.quiet().json(),
     freePort: findFreePort,
     startLiveKit: (o) => startLiveKit({ port: o.port, binary: o.binary, readyTimeoutMs: 5000 }),
-    geminiCliStatus: () => geminiCliStatus(),
+    // The helper runs on the same key the voice uses (installed + key = ready).
+    geminiCliStatus: () => geminiCliStatus({ apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY }),
     which: (bin) => Bun.which(bin) ?? undefined,
     config: defaultConfig(),
     model: MODEL,

@@ -16,6 +16,8 @@
 //   GET  /mode     -> { mode }: the safety mode now
 //   POST /mode     -> { mode } or { cycle: true } in, { mode } out; emits `mode.changed`
 //   POST /jobs/:id/cancel -> { cancelled } (404 for an unknown id)
+//   GET  /setup    -> { needed, configPath }: is this a first launch (no config file)?
+//   POST /setup    -> { ifNeeded? } in, { events } out: start the setup chat (ticket 12)
 //
 // Why HTTP + SSE (not a WebSocket): the window only reads the stream, and
 // fetch/EventSource exist in every webview with no library.
@@ -24,6 +26,7 @@ import { dispose } from "@livekit/rtc-node";
 import { startSession, type SessionOptions } from "./core/agent.ts";
 import type { Model } from "./core/model.ts";
 import { MODES, type SafetyMode } from "./core/safety.ts";
+import { defaultConfigPath } from "./config/index.ts";
 import { joinVoiceRoom } from "./voice/livekit-bridge.ts";
 import { startLiveKit, type LiveKitServer } from "./voice/livekit-runner.ts";
 import { createTokenService, type TokenService } from "./voice/token-service.ts";
@@ -141,6 +144,20 @@ export async function startApp(options: AppOptions): Promise<App> {
           }
           // false = it had already ended; the board already shows how.
           return Response.json({ cancelled: session.jobs.cancel(id) }, { headers: CORS });
+        }
+        // The setup chat (ticket 12). The window POSTs { ifNeeded: true } on boot, so
+        // the core decides: setup starts only on a first launch (no config file).
+        // Its Setup button POSTs {} to run setup again.
+        if (req.method === "GET" && url.pathname === "/setup") {
+          return Response.json({ needed: session.setup.needed(), configPath: sessionOptions.configPath ?? defaultConfigPath() }, { headers: CORS });
+        }
+        if (req.method === "POST" && url.pathname === "/setup") {
+          const { ifNeeded } = ((await req.json().catch(() => ({}))) ?? {}) as { ifNeeded?: unknown };
+          try {
+            return Response.json({ events: await session.setup.start({ ifNeeded: ifNeeded === true }) }, { headers: CORS });
+          } catch (err) {
+            return Response.json({ error: String((err as Error).message ?? err) }, { status: 409, headers: CORS });
+          }
         }
         if (req.method === "GET" && url.pathname === "/events") {
           let off = () => {};

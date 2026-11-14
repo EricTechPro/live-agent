@@ -34,6 +34,13 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 }
 .talk:disabled { opacity: .4; cursor: default; }
 .talk[aria-pressed="true"] { border-color: var(--user); }
+/* Setup (ticket 12): a quiet text button under Start talking. */
+.setup {
+  font: inherit; font-size: .85em; color: var(--text); background: transparent;
+  border: 0; padding: 2px 8px; cursor: pointer; opacity: .6;
+}
+.setup:hover { opacity: 1; }
+.setup:disabled { opacity: .3; cursor: default; }
 
 /* The orb: same gradient as assets/logo.svg. One element, CSS-only animation. */
 .orb {

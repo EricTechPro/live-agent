@@ -36,3 +36,16 @@ live-agent doctor
 1 problem(s) to fix.
 ```
 Exit code 1. No livekit-server left running afterwards.
+
+Update 2026-11-14: Google shut off Gemini CLI's free "Login with Google" tier, so the helper now runs Gemini CLI on the Gemini key (see ticket 06 comments) and doctor no longer checks a sign-in. Real run after that change, exit code 0:
+
+```
+✓ Gemini key: key works, gemini-3.8-live is available
+✓ Microphone: default input: Bose QC Headphones
+✓ LiveKit: local server starts (port 52689)
+✓ Gemini CLI: installed, uses your Gemini key
+✓ Codex: installed (turned off)
+✓ Claude Code: installed (turned off)
+
+All checks pass.
+```

@@ -1,9 +1,9 @@
 // Fast tests for helper jobs (ticket 06), through the agent core's event stream.
 // Gemini CLI is never needed: each test points the adapter at a tiny fake CLI
-// script (succeeds, fails, hangs, "not signed in", missing).
+// script (succeeds, fails, hangs, "key rejected", missing).
 import { afterAll, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultConfig } from "../src/config/index.ts";
 import { startSession, type SessionOptions } from "../src/core/agent.ts";
@@ -11,7 +11,7 @@ import type { AgentEvent, EventOf } from "../src/core/events.ts";
 import type { ModelEvent, ModelInput } from "../src/core/model.ts";
 import { loadTools } from "../src/core/registry.ts";
 import { scriptedModel, type ScriptEntry } from "../src/models/scripted.ts";
-import { geminiCliStatus, INSTALL_FIX, SIGN_IN_FIX } from "../src/helpers/gemini-cli.ts";
+import { defaultHelperHome, geminiCliStatus, INSTALL_FIX, KEY_FIX } from "../src/helpers/gemini-cli.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "live-agent-jobs-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -29,7 +29,8 @@ const ok = fakeCli(
   "ok.sh",
   `echo "$PWD" > "${dir}/ok-cwd"
 echo "$@" > "${dir}/ok-args"
-echo "key=\${GEMINI_API_KEY:-none}" > "${dir}/ok-env"
+echo "key=\${GEMINI_API_KEY:-none} google=\${GOOGLE_API_KEY:-none} cli_home=\${GEMINI_CLI_HOME:-none} home=\${HOME:-none}" > "${dir}/ok-env"
+cat "\${GEMINI_CLI_HOME}/.gemini/settings.json" > "${dir}/ok-settings" 2>/dev/null
 echo 'not json, a warning'
 echo '{"type":"init","session_id":"s1","model":"gemini"}'
 echo '{"type":"message","role":"assistant","content":"Fixed the ","delta":true}'
@@ -37,7 +38,7 @@ echo '{"type":"message","role":"assistant","content":"bug.","delta":true}'
 echo '{"type":"result","status":"success"}'`,
 );
 const fails = fakeCli("fails.sh", `echo "boom: tests are red" >&2\nexit 1`);
-const notSignedIn = fakeCli("auth.sh", `echo "auth needed" >&2\nexit 41`);
+const keyRejected = fakeCli("auth.sh", `echo "auth needed" >&2\nexit 41`);
 // Hangs until killed. The background sleep ignores SIGINT (non-interactive sh),
 // so only killing the whole process group stops it.
 const hangs = fakeCli(
@@ -51,23 +52,13 @@ const startHelper = (id: string, task = "fix the bug", folder?: string): ModelEv
 });
 const say = (text: string): ModelEvent[] => [{ type: "text", text }];
 
-/** A fake Gemini CLI home (what `~/.gemini` holds), signed in or not. */
-function cliHome(name: string, files: Record<string, string>) {
-  const home = join(dir, name);
-  mkdirSync(join(home, ".gemini"), { recursive: true });
-  for (const [file, text] of Object.entries(files)) writeFileSync(join(home, ".gemini", file), text);
-  return home;
-}
-const signedInHome = cliHome("home-signed-in", {
-  "settings.json": JSON.stringify({ security: { auth: { selectedType: "oauth-personal" } } }),
-  "oauth_creds.json": "{}",
-});
-const signedOutHome = cliHome("home-signed-out", { "settings.json": "{}" });
+/** The private Gemini CLI home live-agent owns in these tests (it starts empty). */
+const helperHome = join(dir, "helper-home");
 
 function session(script: ScriptEntry[], bin: string, extra: Partial<SessionOptions> = {}) {
   return startSession({
     model: scriptedModel(script), tools, mode: "bypass", workDir: dir,
-    helpers: { geminiCliBin: bin, geminiCliHome: signedInHome, cancelGraceMs: 200 }, ...extra,
+    helpers: { geminiCliBin: bin, geminiCliHome: helperHome, geminiApiKey: "secret-test-key", cancelGraceMs: 200 }, ...extra,
   });
 }
 
@@ -119,9 +110,9 @@ describe("starting a helper job", () => {
     await s.close();
   });
 
-  test("the helper runs Gemini CLI headless in the folder, without our API key", async () => {
-    const saved = process.env.GEMINI_API_KEY;
-    process.env.GEMINI_API_KEY = "secret-test-key";
+  test("the helper runs Gemini CLI headless on our key, in a private CLI home", async () => {
+    const saved = process.env.GOOGLE_API_KEY;
+    process.env.GOOGLE_API_KEY = "other-key-in-env";
     try {
       const s = await session([[startHelper("c1")], say("Started."), say("Done.")], ok);
       const rec = recorder(s);
@@ -132,12 +123,25 @@ describe("starting a helper job", () => {
       expect(args).toContain("--output-format stream-json");
       expect(args).toContain("--approval-mode yolo");
       expect(args).toContain("--skip-trust");
-      expect(readFileSync(join(dir, "ok-env"), "utf8").trim()).toBe("key=none");
+      // Our key goes in as GEMINI_API_KEY only (GOOGLE_API_KEY too would make the CLI warn).
+      // The CLI's home is ours; HOME stays the user's, so git and the project work as usual.
+      expect(readFileSync(join(dir, "ok-env"), "utf8").trim()).toBe(
+        `key=secret-test-key google=none cli_home=${helperHome} home=${process.env.HOME}`,
+      );
+      expect(JSON.parse(readFileSync(join(dir, "ok-settings"), "utf8"))).toEqual({
+        security: { auth: { selectedType: "gemini-api-key" } },
+      });
       await s.close();
     } finally {
-      if (saved === undefined) delete process.env.GEMINI_API_KEY;
-      else process.env.GEMINI_API_KEY = saved;
+      if (saved === undefined) delete process.env.GOOGLE_API_KEY;
+      else process.env.GOOGLE_API_KEY = saved;
     }
+  });
+
+  test("by default the private CLI home is live-agent's own folder, never the user's ~/.gemini", () => {
+    const home = defaultHelperHome();
+    expect(home).toContain("live-agent");
+    expect(home).not.toBe(homedir());
   });
 });
 
@@ -272,7 +276,7 @@ describe("cancelling", () => {
   });
 });
 
-describe("Gemini CLI missing or not signed in", () => {
+describe("Gemini CLI missing or no key", () => {
   test("a missing binary fails the job with how to install it", async () => {
     const s = await session([[startHelper("c1")], say("Started."), say("It failed.")], join(dir, "no-such-gemini"));
     const rec = recorder(s);
@@ -283,38 +287,34 @@ describe("Gemini CLI missing or not signed in", () => {
     await s.close();
   });
 
-  test("installed but not signed in fails the job with how to sign in, without running the CLI", async () => {
+  test("with no Gemini key the job fails with where to get one, without running the CLI", async () => {
     const s = await session([[startHelper("c1")], say("Started."), say("It failed.")], ok, {
-      helpers: { geminiCliBin: ok, geminiCliHome: signedOutHome },
+      helpers: { geminiCliBin: ok, geminiCliHome: helperHome, geminiApiKey: "" },
     });
     rmSync(join(dir, "ok-args"), { force: true });
     const rec = recorder(s);
     await s.sendText("Fix the bug.");
     const end = (await rec.until(jobEnded("job-1"))) as EventOf<"job.state">;
     expect(end.state).toBe("failed");
-    expect(end.message).toContain("isn't signed in");
+    expect(end.message).toContain("README.md#get-your-gemini-key");
     expect(existsSync(join(dir, "ok-args"))).toBe(false);
     await s.close();
   });
 
-  test("the status check tells missing, signed out and ready apart", () => {
-    expect(geminiCliStatus({ bin: join(dir, "nope"), home: signedInHome })).toEqual({ ok: false, installed: false, fix: INSTALL_FIX });
-    expect(geminiCliStatus({ bin: ok, home: signedOutHome })).toEqual({ ok: false, installed: true, bin: ok, fix: SIGN_IN_FIX });
-    expect(geminiCliStatus({ bin: ok, home: signedInHome })).toEqual({ ok: true, installed: true, bin: ok });
-    const apiKeyHome = cliHome("home-api-key", {
-      "settings.json": JSON.stringify({ security: { auth: { selectedType: "gemini-api-key" } } }),
-    });
-    expect(geminiCliStatus({ bin: ok, home: apiKeyHome }).ok).toBe(true);
+  test("the status check tells missing, no key and ready apart", () => {
+    expect(geminiCliStatus({ bin: join(dir, "nope"), apiKey: "k" })).toEqual({ ok: false, installed: false, fix: INSTALL_FIX });
+    expect(geminiCliStatus({ bin: ok, apiKey: "" })).toEqual({ ok: false, installed: true, bin: ok, fix: KEY_FIX });
+    expect(geminiCliStatus({ bin: ok, apiKey: "k" })).toEqual({ ok: true, installed: true, bin: ok });
   });
 
-  test("exit code 41 fails the job with how to sign in", async () => {
-    const s = await session([[startHelper("c1")], say("Started."), say("It failed.")], notSignedIn);
+  test("exit code 41 fails the job saying the key was rejected", async () => {
+    const s = await session([[startHelper("c1")], say("Started."), say("It failed.")], keyRejected);
     const rec = recorder(s);
     await s.sendText("Fix the bug.");
     const end = (await rec.until(jobEnded("job-1"))) as EventOf<"job.state">;
     expect(end.state).toBe("failed");
-    expect(end.message).toContain("isn't signed in");
-    expect(end.message).toContain("gemini");
+    expect(end.message).toContain("rejected the Gemini key");
+    expect(end.message).toContain("README.md#get-your-gemini-key");
     await s.close();
   });
 
@@ -355,11 +355,11 @@ describe("announcing finished jobs", () => {
   });
 
   test("a failed job is announced with its fix", async () => {
-    const s = await session([[startHelper("c1")], say("On it."), announce], notSignedIn);
+    const s = await session([[startHelper("c1")], say("On it."), announce], keyRejected);
     const rec = recorder(s);
     await s.sendText("Fix the bug.");
     const said = await rec.until((e) => e.type === "transcript" && e.role === "model" && e.text.startsWith("Your helper"));
-    expect((said as EventOf<"transcript">).text).toContain("failed: Gemini CLI isn't signed in");
+    expect((said as EventOf<"transcript">).text).toContain("failed: Gemini CLI rejected the Gemini key");
     await s.close();
   });
 });

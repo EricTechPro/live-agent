@@ -6,6 +6,7 @@
 //   { type: "job.state" }, { type: "notes.used" }, { type: "brain.write" }
 // Every event is plain JSON, so the core can later pipe it to the app as
 // JSON lines without a translation layer.
+import type { Config } from "../config/index.ts";
 import type { JobInfo } from "./jobs.ts";
 import type { SafetyMode, Verdict } from "./safety.ts";
 import type { RiskClass } from "./tool.ts";
@@ -59,6 +60,13 @@ export type AgentEvent =
    * the mode only from this event, so the dropdown and Shift+Tab never disagree.
    */
   | { type: "mode.changed"; mode: SafetyMode }
+  /**
+   * A setup chat began (ticket 12): the model is about to ask the setup questions.
+   * `firstRun`: there was no config file yet. The window shows a setup banner.
+   */
+  | { type: "setup.started"; configPath: string; firstRun: boolean }
+  /** The setup chat wrote the config file. The new settings apply the next time live-agent starts. */
+  | { type: "setup.saved"; configPath: string; config: Config }
   /** The model finished its reply. `reply` is the whole reply, joined for you. */
   | { type: "turn.done"; reply: string }
   /** Something went wrong in the session. The session may still be usable. */

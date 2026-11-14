@@ -29,6 +29,17 @@ export function addToTranscript(t: Transcript, event: AgentEvent): Transcript {
       return { lines: [...t.lines, { role: "note", text: "(interrupted)" }], open: false };
     case "error":
       return { lines: [...t.lines, { role: "note", text: `error: ${event.message}` }], open: false };
+    // The setup chat (ticket 12): a note before the questions and after the save.
+    case "setup.started": {
+      const text = event.firstRun
+        ? "Setup: a few quick questions. Say skip to keep the default."
+        : "Setup again: change what you like, skip the rest.";
+      return { lines: [...t.lines, { role: "note", text }], open: false };
+    }
+    case "setup.saved": {
+      const text = `Setup saved to ${event.configPath}. Restart live-agent to use it.`;
+      return { lines: [...t.lines, { role: "note", text }], open: false };
+    }
     default:
       return t;
   }

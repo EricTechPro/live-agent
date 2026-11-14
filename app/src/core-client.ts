@@ -6,6 +6,7 @@
 //   GET  /session  a short-lived LiveKit room token for the mic
 //   POST /text     a typed turn
 //   GET/POST /mode the safety mode; POST /jobs/:id/cancel the board's cancel button
+//   POST /setup    start the setup chat (ticket 12)
 // Every call carries the per-launch token. Each command gets one small method
 // here, so the rest of the window never builds URLs.
 import { invoke } from "@tauri-apps/api/core";
@@ -40,6 +41,8 @@ export interface CoreClient {
   setMode(mode: SafetyMode | "cycle"): Promise<void>;
   /** The job board's cancel button. The board updates from the job's `job.state` events. */
   cancelJob(id: string): Promise<void>;
+  /** Start the setup chat. `ifNeeded`: only on a first launch (the core checks for a config file). */
+  startSetup(ifNeeded: boolean): Promise<void>;
 }
 
 /** Wait for Rust to report the core is up. Rejects with the reason if it failed to start. */
@@ -102,6 +105,14 @@ export function connectCore(info: CoreInfo): CoreClient {
     async cancelJob(id) {
       const res = await fetch(`${info.url}/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST", headers: auth });
       if (!res.ok) throw new Error(`core cancel ${id}: ${res.status}`);
+    },
+    async startSetup(ifNeeded) {
+      const res = await fetch(`${info.url}/setup`, {
+        method: "POST",
+        headers: { ...auth, "Content-Type": "application/json" },
+        body: JSON.stringify({ ifNeeded }),
+      });
+      if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? `core /setup: ${res.status}`);
     },
   };
 }

@@ -6,6 +6,7 @@
   "scripts": {
     "start": "bun run src/main.ts",
     "doctor": "bun run src/main.ts doctor",
+    "setup": "bun run src/main.ts setup",
     "test": "bun test",
     "smoke": "bun test ./smoke",
     "typecheck": "tsc --noEmit"
