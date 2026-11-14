@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { defaultConfig } from "../src/config/index.ts";
 import { startSession } from "../src/core/agent.ts";
 import type { AgentEvent } from "../src/core/events.ts";
+import { GoogleGenAI } from "@google/genai";
 import { geminiLiveModel } from "../src/models/gemini-live.ts";
 import { geminiTidyModel } from "../src/models/gemini-tidy.ts";
 import { scriptedModel } from "../src/models/scripted.ts";
@@ -39,6 +40,39 @@ test.skipIf(!apiKey)(
     }
   },
   30_000,
+);
+
+test.skipIf(!apiKey)(
+  "after the connection drops, the chat carries on over a resumed session",
+  async () => {
+    // The real Live connect, keeping hold of each socket so the test can cut one.
+    const sockets: { close(): void }[] = [];
+    const model = geminiLiveModel({
+      apiKey: apiKey!,
+      connect: async (params) => {
+        const ai = new GoogleGenAI({ apiKey: apiKey!, httpOptions: { apiVersion: "v1beta" } });
+        const socket = await ai.live.connect(params);
+        sockets.push(socket);
+        return socket;
+      },
+    });
+    const session = await startSession({ model, tools: [], chatEndNote: false });
+    try {
+      await session.sendText("Remember the code word: giraffe. Just say OK.");
+      await Bun.sleep(1000); // let the server send a resumption handle after the turn
+      sockets[0]!.close(); // closed from outside the adapter: looks like a drop
+      for (let i = 0; i < 100 && sockets.length < 2; i++) await Bun.sleep(100);
+      expect(sockets.length).toBe(2);
+
+      const events = await session.sendText("What was the code word? One word.");
+      const done = events.find((e) => e.type === "turn.done");
+      console.log("  after reconnect:", done?.reply || "(no transcript)");
+      expect(done?.reply.toLowerCase()).toContain("giraffe");
+    } finally {
+      await session.close();
+    }
+  },
+  60_000,
 );
 
 test.skipIf(!apiKey)(
