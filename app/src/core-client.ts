@@ -7,6 +7,7 @@
 //   POST /text     a typed turn
 //   GET/POST /mode the safety mode; POST /jobs/:id/cancel the board's cancel button
 //   POST /setup    start the setup chat (ticket 12)
+//   POST /chat/new end this chat (note + tidy job) and start the next
 // Every call carries the per-launch token. Each command gets one small method
 // here, so the rest of the window never builds URLs.
 import { invoke } from "@tauri-apps/api/core";
@@ -43,6 +44,8 @@ export interface CoreClient {
   cancelJob(id: string): Promise<void>;
   /** Start the setup chat. `ifNeeded`: only on a first launch (the core checks for a config file). */
   startSetup(ifNeeded: boolean): Promise<void>;
+  /** New chat: the core saves this chat to the brain, tidies it on the job board, and starts fresh. */
+  newChat(): Promise<void>;
 }
 
 /** Wait for Rust to report the core is up. Rejects with the reason if it failed to start. */
@@ -113,6 +116,10 @@ export function connectCore(info: CoreInfo): CoreClient {
         body: JSON.stringify({ ifNeeded }),
       });
       if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? `core /setup: ${res.status}`);
+    },
+    async newChat() {
+      const res = await fetch(`${info.url}/chat/new`, { method: "POST", headers: auth });
+      if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? `core /chat/new: ${res.status}`);
     },
   };
 }

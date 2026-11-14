@@ -41,6 +41,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 }
 .setup:hover { opacity: 1; }
 .setup:disabled { opacity: .3; cursor: default; }
+.quiet-buttons { display: flex; gap: 4px; }
 
 /* The orb: same gradient as assets/logo.svg. One element, CSS-only animation. */
 .orb {

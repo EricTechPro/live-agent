@@ -14,6 +14,7 @@ const transcriptEl = $<HTMLOListElement>("transcript");
 const typeForm = $<HTMLFormElement>("type");
 const typeInput = $<HTMLInputElement>("type-input");
 const setupBtn = $<HTMLButtonElement>("setup");
+const newChatBtn = $<HTMLButtonElement>("new-chat");
 
 const LABELS: Record<OrbState, string> = {
   connecting: "Starting…",
@@ -117,6 +118,7 @@ async function boot() {
     talkBtn.disabled = true;
     typeInput.disabled = true;
     setupBtn.disabled = true;
+    newChatBtn.disabled = true;
   });
 
   core.onEvent((event) => {
@@ -152,6 +154,21 @@ async function boot() {
   setupBtn.onclick = () => runSetup(core, false);
   // First launch: the core starts setup only if there is no config file yet.
   runSetup(core, true);
+
+  // New chat: the core saves this one (its note and tidy job) and starts fresh;
+  // the transcript clears on the core's `chat.started`.
+  newChatBtn.disabled = false;
+  newChatBtn.onclick = async () => {
+    newChatBtn.disabled = true;
+    try {
+      await core.newChat();
+    } catch (err) {
+      transcript = addToTranscript(transcript, { type: "error", message: `new chat: ${(err as Error).message}` });
+      renderTranscript();
+    } finally {
+      newChatBtn.disabled = false;
+    }
+  };
 }
 
 async function runSetup(core: CoreClient, ifNeeded: boolean) {

@@ -61,6 +61,8 @@ const app = await startApp({
   port: Number(process.env.LIVE_AGENT_PORT ?? 0),
   // From the repo: read tools/ as usual. As the compiled sidecar there is no tools/ folder, so use the baked-in list.
   tools: existsSync(TOOLS_DIR) ? undefined : bundledTools,
+  // Ten quiet minutes end a chat on their own (note + tidy), like pressing New chat.
+  chatIdleMs: 10 * 60_000,
 }).catch(async (err: unknown) => {
   // startApp already stopped LiveKit; say what broke in one line.
   console.error(`live-agent: could not start: ${err instanceof Error ? err.message : String(err)}`);

@@ -68,6 +68,11 @@ export type AgentEvent =
   | { type: "setup.started"; configPath: string; firstRun: boolean }
   /** The setup chat wrote the config file. Its settings are in use at once (a `mode.changed` comes first if the mode changed). */
   | { type: "setup.saved"; configPath: string; config: Config }
+  /**
+   * A new chat began (New chat, or a quiet spell): the last one left its note
+   * and tidy job, and the model starts fresh. The window clears the transcript.
+   */
+  | { type: "chat.started" }
   /** The model finished its reply. `reply` is the whole reply, joined for you. */
   | { type: "turn.done"; reply: string }
   /** Something went wrong in the session. The session may still be usable. */

@@ -29,6 +29,9 @@ export function addToTranscript(t: Transcript, event: AgentEvent): Transcript {
       return { lines: [...t.lines, { role: "note", text: "(interrupted)" }], open: false };
     case "error":
       return { lines: [...t.lines, { role: "note", text: `error: ${event.message}` }], open: false };
+    // New chat: the last chat is in the brain now, so the screen starts clean.
+    case "chat.started":
+      return { lines: [{ role: "note", text: "New chat. The last one was saved to your brain." }], open: false };
     // The setup chat (ticket 12): a note before the questions and after the save.
     case "setup.started": {
       const text = event.firstRun

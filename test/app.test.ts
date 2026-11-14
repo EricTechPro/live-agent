@@ -180,7 +180,20 @@ describe("window commands: cancel a job, switch the mode", () => {
     await reader.cancel();
   });
 
+  test("POST /chat/new ends this chat (note saved) and starts the next", async () => {
+    const stream = events();
+    const reader = await stream.ready;
+
+    const res = await post("/chat/new");
+
+    expect(res.status).toBe(200);
+    await until(() => stream.seen.some((e) => e.type === "chat.started"));
+    expect(stream.seen).toContainEqual(expect.objectContaining({ type: "brain.write", cause: "chat-end" }));
+    await reader.cancel();
+  });
+
   test("both commands need the per-launch token", async () => {
+    expect((await post("/chat/new", undefined, "guess")).status).toBe(401);
     expect((await post("/mode", { mode: "bypass" }, "guess")).status).toBe(401);
     expect((await post("/jobs/job-1/cancel", undefined, "guess")).status).toBe(401);
     expect((await fetch(`${cmd.url}/mode`)).status).toBe(401);

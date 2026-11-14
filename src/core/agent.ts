@@ -56,6 +56,11 @@ export interface SessionOptions {
    * Unset: no tidy job. See src/brain/tidy.ts.
    */
   tidy?: TidyModel;
+  /**
+   * End the chat on its own after this long with no turn (ms), as if the user
+   * pressed New chat. Unset: chats only end on `newChat()` or `close()`.
+   */
+  chatIdleMs?: number;
 }
 
 /** What `onAudio` hears: a chunk of the model's voice, or "drop what you queued" (interrupted). */
@@ -97,6 +102,14 @@ export interface AgentSession {
     start(options?: { ifNeeded?: boolean }): Promise<AgentEvent[]>;
   };
   /**
+   * End this chat and start the next one in the same session (the window's
+   * New chat button, or `chatIdleMs` of quiet). Writes the chat-end note,
+   * queues the tidy job (it shows on the job board), then reconnects the
+   * model so the next chat starts fresh, and emits `chat.started`. Helper
+   * jobs keep running. Rejects while a turn is in progress.
+   */
+  newChat(): Promise<void>;
+  /**
    * Stops running jobs, writes the chat-end note, then closes the model connection.
    * With `tidy` set, it then queues a tidy job and returns without waiting for it:
    * its `job.state` events keep arriving on this stream after close.
@@ -129,6 +142,8 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   const audioListeners = new Set<(out: AudioOut) => void>();
   // Set when close() begins: job ends are no longer announced and late model events are dropped.
   let closed = false;
+  // Set while newChat() saves the old chat and reconnects: no turn may start then.
+  let switching = false;
 
   // Jobs started by a tool call stay tied to it: each job end gives the call
   // one more answer, so the model announces the result.
@@ -180,6 +195,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
 
   // Every turn starts the same way; `done` is how its sender hears it ended.
   function newTurn(done: (events: AgentEvent[]) => void = () => {}): NonNullable<typeof turn> {
+    clearTimeout(idleTimer);
     return { events: [], reply: "", awaiting: 0, running: 0, notes: new Set(), heard: "", answering: [], done };
   }
 
@@ -221,6 +237,23 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     for (const listener of listeners) listener(event);
   }
 
+  // Why one check: a new turn, setup and a new chat all need the model to themselves.
+  function busy(): Error | null {
+    if (turn) return new Error("a turn is already in progress");
+    if (switching) return new Error("a new chat is starting");
+    return null;
+  }
+
+  // The quiet-spell timer (`chatIdleMs`): armed after each turn of a chat, so a
+  // chat nobody has touched for a while ends by itself and leaves its note.
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  function armIdleTimer() {
+    clearTimeout(idleTimer);
+    if (!options.chatIdleMs || closed || !chat.length) return;
+    idleTimer = setTimeout(() => void newChat().catch(() => {}), options.chatIdleMs);
+    idleTimer.unref?.();
+  }
+
   function finishTurnIfIdle() {
     if (!turn || turn.awaiting > 0 || turn.running > 0) return;
     const finished = turn;
@@ -236,6 +269,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     if (finished.heard.trim()) chat.push({ role: "user", text: finished.heard.trim() });
     if (finished.reply.trim()) chat.push({ role: "model", text: finished.reply.trim() });
     finished.done(finished.events);
+    armIdleTimer();
   }
 
   // Tell the model about a call, and put the same thing on the stream.
@@ -510,22 +544,70 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   // forever, and forget calls the new connection never heard of.
   function onDisconnected(message: string) {
     emit({ type: "error", message });
-    liveCalls.clear();
-    for (const call of [...waiting.splice(0), ...(turn?.answering.splice(0) ?? [])]) {
-      respond(call, "cancelled", { status: "cancelled", reason: "the connection to the model dropped" });
-    }
+    forgetConnection("the connection to the model dropped");
     if (turn) turn.awaiting = turn.running = 0;
     finishTurnIfIdle();
   }
 
-  const modelSession = await options.model.connect(onModelEvent, {
-    tools: tools.map(({ name, description, parameters }) => ({ name, description, parameters })),
-    voice: config.voice,
-  });
+  // The model is on a new connection: it never heard of the calls made on the
+  // old one, so stop waiting for the user's yes on them.
+  function forgetConnection(reason: string) {
+    liveCalls.clear();
+    for (const call of [...waiting.splice(0), ...(turn?.answering.splice(0) ?? [])]) {
+      respond(call, "cancelled", { status: "cancelled", reason });
+    }
+  }
+
+  // Each connection gets a number; events from an older one (still in flight
+  // after a new chat reconnected) are dropped.
+  let connection = 0;
+  function connectModel() {
+    const mine = ++connection;
+    return options.model.connect((event) => mine === connection && onModelEvent(event), {
+      tools: tools.map(({ name, description, parameters }) => ({ name, description, parameters })),
+      voice: config.voice,
+    });
+  }
+  let modelSession = await connectModel();
+
+  // Write the chat-end note and forget the chat. Never throws: a note that
+  // cannot be written is an error event, not a reason to stop.
+  async function endChat(): Promise<string | null> {
+    clearTimeout(idleTimer);
+    try {
+      return await saveChatEndNote();
+    } catch (err) {
+      emit({ type: "error", message: `could not save the chat note: ${err instanceof Error ? err.message : String(err)}` });
+      return null;
+    } finally {
+      chat.length = 0;
+    }
+  }
+
+  function queueTidy(notePath: string | null) {
+    if (notePath && options.tidy) jobs.submit(tidyJob(brainPath, options.tidy));
+  }
+
+  async function newChat() {
+    const error = busy();
+    if (error) throw error;
+    switching = true;
+    try {
+      const notePath = await endChat();
+      forgetConnection("a new chat started");
+      await modelSession.close();
+      modelSession = await connectModel();
+      queueTidy(notePath);
+      emit({ type: "chat.started" });
+    } finally {
+      switching = false;
+    }
+  }
 
   return {
     sendText(text) {
-      if (turn) return Promise.reject(new Error("a turn is already in progress"));
+      const error = busy();
+      if (error) return Promise.reject(error);
       return new Promise((done) => {
         turn = newTurn(done);
         emit({ type: "transcript", role: "user", text });
@@ -565,7 +647,8 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       start({ ifNeeded = false } = {}) {
         const firstRun = !existsSync(configPath);
         if (ifNeeded && !firstRun) return Promise.resolve([]);
-        if (turn) return Promise.reject(new Error("a turn is already in progress"));
+        const error = busy();
+        if (error) return Promise.reject(error);
         let kickoff: string;
         try {
           kickoff = setupKickoff(currentConfig(configPath), firstRun);
@@ -592,21 +675,16 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     // The tidy job is queued only after stopAll has finished, so close never
     // cancels it: it runs on with no model session (the tidy model is its own
     // call) and a failure is just a "failed" job, never an error for the next chat.
+    newChat,
     async close() {
       closed = true;
       let notePath: string | null = null;
-      const saving = saveChatEndNote().then(
-        (path) => void (notePath = path),
-        (err: unknown) => {
-          emit({ type: "error", message: `could not save the chat note: ${err instanceof Error ? err.message : String(err)}` });
-        },
-      );
       try {
-        await Promise.all([jobs.stopAll(), saving]);
+        [, notePath] = await Promise.all([jobs.stopAll(), endChat()]);
       } finally {
         await modelSession.close();
       }
-      if (notePath && options.tidy) jobs.submit(tidyJob(brainPath, options.tidy));
+      queueTidy(notePath);
     },
   };
 }

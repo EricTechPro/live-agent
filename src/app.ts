@@ -122,6 +122,15 @@ export async function startApp(options: AppOptions): Promise<App> {
             return Response.json({ error: String((err as Error).message ?? err) }, { status: 409, headers: CORS });
           }
         }
+        // The window's New chat button: end this chat (note + tidy job), start the next.
+        if (req.method === "POST" && url.pathname === "/chat/new") {
+          try {
+            await session.newChat();
+            return Response.json({ ok: true }, { headers: CORS });
+          } catch (err) {
+            return Response.json({ error: String((err as Error).message ?? err) }, { status: 409, headers: CORS });
+          }
+        }
         // The safety mode (ticket 10). The window draws it from `mode.changed` events;
         // GET is only for the first draw, before any change.
         if (url.pathname === "/mode" && req.method === "GET") {
