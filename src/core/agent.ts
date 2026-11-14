@@ -43,7 +43,7 @@ export interface SessionOptions {
   /** How long `close()` waits for the model's chat summary before using the plain transcript. Default 8000. */
   summaryTimeoutMs?: number;
   /** Where helper CLIs live (tests point these at fake scripts). */
-  helpers?: { geminiCliBin?: string; geminiCliHome?: string; cancelGraceMs?: number };
+  helpers?: { geminiCliBin?: string; geminiCliHome?: string; geminiApiKey?: string; cancelGraceMs?: number };
   /**
    * Tidies new raw notes into wiki pages after each chat (`geminiTidyModel(...)`).
    * Unset: no tidy job. See src/brain/tidy.ts.
@@ -266,6 +266,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         geminiCli: config.helpers.geminiCli,
         geminiCliBin: options.helpers?.geminiCliBin ?? "gemini",
         geminiCliHome: options.helpers?.geminiCliHome,
+        geminiApiKey: options.helpers?.geminiApiKey,
         cancelGraceMs: options.helpers?.cancelGraceMs,
       },
     };

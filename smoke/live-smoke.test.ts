@@ -68,7 +68,7 @@ test.skipIf(!apiKey)(
   "a real model starts a helper job and announces when it is done",
   async () => {
     // Gemini CLI stands in as a tiny fake script, so the job reaches done
-    // without a real CLI or a Google sign-in.
+    // without a real CLI installed (the next case uses the real one).
     const dir = mkdtempSync(join(tmpdir(), "live-agent-smoke-"));
     const bin = join(dir, "fake-gemini.sh");
     writeFileSync(
@@ -76,9 +76,6 @@ test.skipIf(!apiKey)(
       `#!/bin/sh\nsleep 8\necho '{"type":"message","role":"assistant","content":"Fixed the off-by-one bug in counter.ts."}'\necho '{"type":"result","status":"success"}'\n`,
     );
     chmodSync(bin, 0o755);
-    // A fake signed-in Gemini CLI home, so the sign-in check passes on any machine.
-    mkdirSync(join(dir, "home", ".gemini"), { recursive: true });
-    writeFileSync(join(dir, "home", ".gemini", "oauth_creds.json"), "{}");
     // Bypass: helper risk asks in auto-edits; this smoke is about the job, not the gate.
     const session = await startSession({
       model: geminiLiveModel({ apiKey: apiKey! }), workDir: dir, mode: "bypass",
@@ -120,6 +117,70 @@ test.skipIf(!apiKey)(
     }
   },
   90_000,
+);
+
+const realGemini = Bun.which("gemini");
+if (apiKey && !realGemini) console.log("live smoke: real helper case skipped (gemini not installed)");
+
+test.skipIf(!apiKey || !realGemini)(
+  "a real model starts the real Gemini CLI, which fixes an off-by-one bug on disk",
+  async () => {
+    const dir = mkdtempSync(join(tmpdir(), "live-agent-smoke-real-helper-"));
+    const project = join(dir, "counter-app");
+    mkdirSync(project);
+    const buggy = [
+      "// Counts from 1 to n, inclusive.",
+      "export function countTo(n: number): number[] {",
+      "  const out: number[] = [];",
+      "  for (let i = 1; i < n; i++) out.push(i);",
+      "  return out;",
+      "}",
+      "",
+    ].join("\n");
+    writeFileSync(join(project, "counter.ts"), buggy);
+    writeFileSync(
+      join(project, "counter.test.ts"),
+      `import { expect, test } from "bun:test";\nimport { countTo } from "./counter.ts";\ntest("countTo(3)", () => expect(countTo(3)).toEqual([1, 2, 3]));\n`,
+    );
+    const brain = join(dir, "brain");
+    cpSync(join(import.meta.dir, "..", "sample-brain"), brain, { recursive: true });
+    const session = await startSession({
+      model: geminiLiveModel({ apiKey: apiKey! }), workDir: project, mode: "bypass",
+      config: { ...defaultConfig(), brainPath: brain },
+      // A throwaway private CLI home; the helper runs on the same key as the voice.
+      helpers: { geminiCliBin: realGemini!, geminiCliHome: join(dir, "cli-home") },
+    });
+    const all: AgentEvent[] = [];
+    session.onEvent((e) => all.push(e));
+    try {
+      const events = await session.sendText(
+        "Start a helper to fix the off-by-one bug in counter.ts in this project. Tell me when it is done.",
+      );
+      expect(events).toContainEqual(expect.objectContaining({ type: "tool.call", name: "start_helper" }));
+
+      const ended = () => all.findIndex((e) => e.type === "job.state" && ["done", "failed", "cancelled"].includes(e.state));
+      const announced = () => ended() >= 0 && all.slice(ended()).some((e) => e.type === "transcript" && e.role === "model");
+      const deadline = Date.now() + 200_000;
+      while (!announced() && Date.now() < deadline) await Bun.sleep(500);
+      await Bun.sleep(3000); // let the spoken announcement finish
+      const said = all
+        .slice(Math.max(ended(), 0))
+        .filter((e) => e.type === "transcript" && e.role === "model")
+        .map((e) => (e as { text: string }).text)
+        .join("");
+      console.log("  job states:", all.filter((e) => e.type === "job.state").map((e) => (e as { state: string }).state));
+      console.log("  announced: ", said || "(nothing)");
+
+      expect(all[ended()]).toEqual(expect.objectContaining({ type: "job.state", kind: "gemini-cli", state: "done" }));
+      expect(said.trim()).not.toBe("");
+      const { countTo } = await import(join(project, "counter.ts"));
+      expect(countTo(3)).toEqual([1, 2, 3]);
+    } finally {
+      await session.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+  240_000,
 );
 
 test.skipIf(!apiKey)(
