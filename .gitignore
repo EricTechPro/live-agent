@@ -1,0 +1,25 @@
+.DS_Store
+*.swp
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# your real brain never goes in the repo (the sample brain does)
+brain/
+!sample-brain/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# node / tauri
+node_modules/
+dist/
+target/
+
+# editor
+.idea/
+.vscode/
