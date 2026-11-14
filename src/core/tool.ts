@@ -14,6 +14,7 @@
 // mode (see src/core/safety.ts), so a new tool is safe by declaring one word.
 
 import type { Config } from "../config/index.ts";
+import type { HelperPaths } from "../helpers/gemini-cli.ts";
 import type { Jobs } from "./jobs.ts";
 
 export type RiskClass = "read" | "edit" | "command" | "helper";
@@ -39,17 +40,9 @@ export interface ToolContext {
   setup?: { configPath: string; saved(config: Config): void };
 }
 
-export interface HelperSettings {
-  /** Config `helpers.geminiCli`. */
+export interface HelperSettings extends HelperPaths {
+  /** Config `helpers.geminiCli`: is the Gemini CLI helper turned on? */
   geminiCli: boolean;
-  /** The Gemini CLI binary. Default "gemini" on PATH. */
-  geminiCliBin: string;
-  /** live-agent's private Gemini CLI home. Default: under the OS app-data folder. */
-  geminiCliHome?: string;
-  /** The Gemini key the helper runs on. Default: GEMINI_API_KEY / GOOGLE_API_KEY from the environment. */
-  geminiApiKey?: string;
-  /** Wait this long after SIGINT before SIGKILL when cancelling. */
-  cancelGraceMs?: number;
 }
 
 export interface Tool<Args extends Record<string, any> = Record<string, any>> {

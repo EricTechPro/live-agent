@@ -10,6 +10,7 @@
 //
 // Every probe is injectable (`DoctorDeps`), so tests run with no network,
 // no LiveKit and no real CLIs.
+import { geminiApiKey } from "../gemini-key.ts";
 import { livekitBinary } from "../home.ts";
 import { createSocket } from "node:dgram";
 import { createServer } from "node:net";
@@ -67,7 +68,7 @@ export async function runDoctor(deps: Partial<DoctorDeps> = {}): Promise<{ check
 
 async function checkGeminiKey(d: DoctorDeps): Promise<CheckResult> {
   const name = "Gemini key";
-  const key = d.env.GEMINI_API_KEY || d.env.GOOGLE_API_KEY;
+  const key = geminiApiKey(d.env);
   if (!key) return fail(name, "No Gemini key found.", `Put GEMINI_API_KEY in your .env file. How to get one: ${KEY_GUIDE}`);
   // A model lookup costs no tokens. The key goes in a header so it never lands in a URL or log.
   const res = await d
@@ -187,7 +188,7 @@ function defaultDeps(): DoctorDeps {
     freePort: findFreePort,
     startLiveKit: (o) => startLiveKit({ port: o.port, binary: o.binary, readyTimeoutMs: 5000 }),
     // The helper runs on the same key the voice uses (installed + key = ready).
-    geminiCliStatus: () => geminiCliStatus({ apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY }),
+    geminiCliStatus: () => geminiCliStatus(),
     which: (bin) => Bun.which(bin) ?? undefined,
     // Inside the installed app: the livekit-server bundled next to the core.
     livekitBinary: livekitBinary() === "livekit-server" ? undefined : livekitBinary(),

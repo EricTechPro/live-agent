@@ -26,19 +26,11 @@ export default defineTool<{ task: string; folder?: string }>({
   },
   run({ task, folder }, { workDir, jobs, helpers }) {
     if (!jobs || !helpers) throw new Error("helper jobs are not available in this session");
-    if (!helpers.geminiCli) {
+    const { geminiCli, ...paths } = helpers;
+    if (!geminiCli) {
       throw new Error("the Gemini CLI helper is turned off (helpers.geminiCli is false in the config)");
     }
-    const jobId = jobs.submit(
-      geminiCliJob({
-        task,
-        cwd: resolve(workDir, folder ?? "."),
-        bin: helpers.geminiCliBin,
-        home: helpers.geminiCliHome,
-        apiKey: helpers.geminiApiKey,
-        cancelGraceMs: helpers.cancelGraceMs,
-      }),
-    );
+    const jobId = jobs.submit(geminiCliJob({ task, cwd: resolve(workDir, folder ?? "."), ...paths }));
     const job = jobs.list().find((j) => j.id === jobId)!;
     return { jobId, state: job.state };
   },

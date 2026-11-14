@@ -22,6 +22,8 @@ import { bundledTools } from "./core/bundled-tools.ts";
 import { doctorMain } from "./doctor/index.ts";
 import { setupMain } from "./setup/chat.ts";
 import { useHome } from "./home.ts";
+import { geminiApiKey } from "./gemini-key.ts";
+import { errorMessage } from "./errors.ts";
 import pkg from "../package.json" with { type: "json" };
 
 // The installed app sets LIVE_AGENT_HOME (~/Desktop/live-agent): work from there and
@@ -39,7 +41,7 @@ if (process.argv[2] === "--version") {
 // `live-agent setup` (or `bun run setup`): the setup chat, typed in the terminal (ticket 12).
 if (process.argv[2] === "setup") process.exit(await setupMain());
 
-const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+const apiKey = geminiApiKey();
 if (!apiKey) {
   console.error(
     home
@@ -65,7 +67,7 @@ const app = await startApp({
   chatIdleMs: 10 * 60_000,
 }).catch(async (err: unknown) => {
   // startApp already stopped LiveKit; say what broke in one line.
-  console.error(`live-agent: could not start: ${err instanceof Error ? err.message : String(err)}`);
+  console.error(`live-agent: could not start: ${errorMessage(err)}`);
   await disposeNative();
   process.exit(1);
 });

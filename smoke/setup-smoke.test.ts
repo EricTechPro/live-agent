@@ -4,6 +4,7 @@
 //   bun run smoke
 //
 // Skips cleanly without GEMINI_API_KEY (or GOOGLE_API_KEY).
+import { geminiApiKey } from "../src/gemini-key.ts";
 import { afterAll, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,7 +13,7 @@ import { loadConfig } from "../src/config/index.ts";
 import { geminiLiveModel } from "../src/models/gemini-live.ts";
 import { runSetupChat } from "../src/setup/chat.ts";
 
-const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+const apiKey = geminiApiKey();
 const dir = mkdtempSync(join(tmpdir(), "live-agent-setup-smoke-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 

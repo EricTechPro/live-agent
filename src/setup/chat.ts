@@ -9,6 +9,7 @@ import { startSession } from "../core/agent.ts";
 import type { AgentEvent } from "../core/events.ts";
 import type { Model } from "../core/model.ts";
 import { geminiLiveModel } from "../models/gemini-live.ts";
+import { geminiApiKey } from "../gemini-key.ts";
 import saveSetup from "../../tools/save-setup.ts";
 
 export interface SetupChatOptions {
@@ -53,7 +54,7 @@ export async function runSetupChat(options: SetupChatOptions): Promise<AgentEven
 
 /** The `live-agent setup` command. Exit code 0 once the config is saved. */
 export async function setupMain(): Promise<number> {
-  const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+  const apiKey = geminiApiKey();
   if (!apiKey) {
     console.error("live-agent setup: no Gemini key. Copy .env.example to .env and set GEMINI_API_KEY.");
     return 1;

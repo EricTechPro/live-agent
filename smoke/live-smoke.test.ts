@@ -5,6 +5,7 @@
 //
 // Needs GEMINI_API_KEY (or GOOGLE_API_KEY, the name AI Studio suggests) in your environment or .env.
 // With no key it skips cleanly, so it is safe to run anywhere.
+import { geminiApiKey } from "../src/gemini-key.ts";
 import { expect, test } from "bun:test";
 import { chmodSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -17,7 +18,7 @@ import { geminiLiveModel } from "../src/models/gemini-live.ts";
 import { geminiTidyModel } from "../src/models/gemini-tidy.ts";
 import { scriptedModel } from "../src/models/scripted.ts";
 
-const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+const apiKey = geminiApiKey();
 if (!apiKey) console.log("live smoke: skipped (no GEMINI_API_KEY; copy .env.example to .env)");
 
 test.skipIf(!apiKey)(

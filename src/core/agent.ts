@@ -26,6 +26,7 @@ import type { Model, ModelEvent, ToolResponse } from "./model.ts";
 import { loadTools } from "./registry.ts";
 import { decide, explain, nextMode, type SafetyMode, type SafetyOverrides } from "./safety.ts";
 import type { Tool, ToolContext } from "./tool.ts";
+import type { HelperPaths } from "../helpers/gemini-cli.ts";
 import chatSummaryPrompt from "../../prompts/chat-summary.md" with { type: "text" };
 
 export interface SessionOptions {
@@ -50,7 +51,7 @@ export interface SessionOptions {
   /** Save a chat-end note into the brain on `close()`. Default true; `live-agent setup` turns it off. */
   chatEndNote?: boolean;
   /** Where helper CLIs live (tests point these at fake scripts). */
-  helpers?: { geminiCliBin?: string; geminiCliHome?: string; geminiApiKey?: string; cancelGraceMs?: number };
+  helpers?: HelperPaths;
   /**
    * Tidies new raw notes into wiki pages after each chat (`geminiTidyModel(...)`).
    * Unset: no tidy job. See src/brain/tidy.ts.
@@ -387,13 +388,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         cancel: jobs.cancel,
         list: jobs.list,
       },
-      helpers: {
-        geminiCli: config.helpers.geminiCli,
-        geminiCliBin: options.helpers?.geminiCliBin ?? "gemini",
-        geminiCliHome: options.helpers?.geminiCliHome,
-        geminiApiKey: options.helpers?.geminiApiKey,
-        cancelGraceMs: options.helpers?.cancelGraceMs,
-      },
+      helpers: { ...options.helpers, geminiCli: config.helpers.geminiCli },
       setup: {
         configPath,
         saved(saved) {

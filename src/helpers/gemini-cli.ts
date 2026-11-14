@@ -22,30 +22,37 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { JobSpec } from "../core/jobs.ts";
 import { watchGroup } from "./group-watchdog.ts";
+import { geminiApiKey } from "../gemini-key.ts";
 
 const KEY_GUIDE = "README.md#get-your-gemini-key";
 export const INSTALL_FIX = "Gemini CLI is not installed. Install it with: npm install -g @google/gemini-cli";
 export const KEY_FIX = `The helper needs a Gemini key. Put GEMINI_API_KEY in your .env file. How to get one: ${KEY_GUIDE}`;
 export const KEY_REJECTED_FIX = `Gemini CLI rejected the Gemini key. Check GEMINI_API_KEY in your .env file. How to get one: ${KEY_GUIDE}`;
 
-export interface GeminiCliOptions {
-  /** What the helper should do, in plain words. */
-  task: string;
-  /** The project folder the helper works in. */
-  cwd: string;
-  /** The Gemini CLI binary: a name on PATH or a path. Default "gemini". Tests point it at a fake script. */
-  bin?: string;
+/** The Gemini CLI binary looked up on PATH unless told otherwise. */
+export const DEFAULT_GEMINI_BIN = "gemini";
+
+/**
+ * Where the helper CLI lives and what it runs on. One shape all the way down:
+ * the session options, the tool context and this adapter all take it as is
+ * (tests point it at a fake CLI script).
+ */
+export interface HelperPaths {
+  /** The Gemini CLI binary: a name on PATH or a path. Default "gemini". */
+  geminiCliBin?: string;
   /** live-agent's private Gemini CLI home (its GEMINI_CLI_HOME). Default: `defaultHelperHome()`. */
-  home?: string;
-  /** The Gemini API key. Default: GEMINI_API_KEY, else GOOGLE_API_KEY, from the environment. */
-  apiKey?: string;
+  geminiCliHome?: string;
+  /** The Gemini API key. Default: `geminiApiKey()` (the same key as the voice). */
+  geminiApiKey?: string;
   /** How long to wait after SIGINT before SIGKILL on cancel. Default 3000 ms. */
   cancelGraceMs?: number;
 }
 
-/** The core's Gemini key, read the same way as for the voice. */
-export function envApiKey(): string | undefined {
-  return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || undefined;
+export interface GeminiCliOptions extends HelperPaths {
+  /** What the helper should do, in plain words. */
+  task: string;
+  /** The project folder the helper works in. */
+  cwd: string;
 }
 
 /** live-agent's own folder for the helper's Gemini CLI home (in the OS app-data folder). */
@@ -75,7 +82,7 @@ function prepareHome(home: string) {
 }
 
 /** Find the binary, or undefined if it is not there. */
-export function findGeminiCli(bin = "gemini"): string | undefined {
+export function findGeminiCli(bin = DEFAULT_GEMINI_BIN): string | undefined {
   if (bin.includes("/")) return existsSync(bin) ? bin : undefined;
   return Bun.which(bin) ?? undefined;
 }
@@ -89,7 +96,7 @@ export type GeminiCliStatus =
  * Installed and a key present? Cheap: no network, no model call (the doctor uses it too).
  * Whether Google accepts the key shows at run time as exit code 41.
  */
-export function geminiCliStatus({ bin = "gemini", apiKey = envApiKey() }: { bin?: string; apiKey?: string } = {}): GeminiCliStatus {
+export function geminiCliStatus({ bin = DEFAULT_GEMINI_BIN, apiKey = geminiApiKey() }: { bin?: string; apiKey?: string } = {}): GeminiCliStatus {
   const path = findGeminiCli(bin);
   if (!path) return { ok: false, installed: false, fix: INSTALL_FIX };
   return apiKey ? { ok: true, installed: true, bin: path } : { ok: false, installed: true, bin: path, fix: KEY_FIX };
@@ -100,9 +107,9 @@ const MAX_SUMMARY = 2000;
 export function geminiCliJob({
   task,
   cwd,
-  bin = "gemini",
-  home = defaultHelperHome(),
-  apiKey = envApiKey(),
+  geminiCliBin: bin = DEFAULT_GEMINI_BIN,
+  geminiCliHome: home = defaultHelperHome(),
+  geminiApiKey: apiKey = geminiApiKey(),
   cancelGraceMs = 3000,
 }: GeminiCliOptions): JobSpec {
   return {

@@ -230,7 +230,7 @@ describe("cancelling", () => {
     const core = Bun.spawn([
       "bun", "-e", `
         const { geminiCliJob } = await import(${JSON.stringify(join(import.meta.dir, "..", "src", "helpers", "gemini-cli.ts"))});
-        const job = geminiCliJob({ task: "x", cwd: ${JSON.stringify(crashDir)}, bin: ${JSON.stringify(hangs)}, home: ${JSON.stringify(helperHome)}, apiKey: "k" });
+        const job = geminiCliJob({ task: "x", cwd: ${JSON.stringify(crashDir)}, geminiCliBin: ${JSON.stringify(hangs)}, geminiCliHome: ${JSON.stringify(helperHome)}, geminiApiKey: "k" });
         job.run({ signal: new AbortController().signal }).catch(() => {});
         setInterval(() => {}, 1000);
       `,
