@@ -6,10 +6,12 @@
 // Needs GEMINI_API_KEY (or GOOGLE_API_KEY, the name AI Studio suggests) in your environment or .env.
 // With no key it skips cleanly, so it is safe to run anywhere.
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { defaultConfig } from "../src/config/index.ts";
 import { startSession } from "../src/core/agent.ts";
+import type { AgentEvent } from "../src/core/events.ts";
 import { geminiLiveModel } from "../src/models/gemini-live.ts";
 
 const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
@@ -83,4 +85,35 @@ test.skipIf(!apiKey)(
     }
   },
   45_000,
+);
+
+test.skipIf(!apiKey)(
+  "remember this writes a raw note, and close writes the chat-end note",
+  async () => {
+    const brain = mkdtempSync(join(tmpdir(), "live-agent-smoke-brain-"));
+    const config = { ...defaultConfig(), brainPath: brain };
+    const session = await startSession({ model: geminiLiveModel({ apiKey: apiKey! }), config });
+    const seen: AgentEvent[] = [];
+    session.onEvent((e) => seen.push(e));
+    try {
+      const events = await session.sendText("Remember this: the garden gate code is 4512.");
+      const done = events.find((e) => e.type === "turn.done");
+      console.log("  tool calls:", events.filter((e) => e.type === "tool.call"));
+      console.log("  model said:", done?.reply || "(no transcript)");
+
+      const remembered = events.find((e) => e.type === "brain.write");
+      expect(remembered).toEqual(expect.objectContaining({ type: "brain.write", cause: "tool", tool: "remember" }));
+      const path = (remembered as { path: string }).path;
+      expect(readFileSync(join(brain, path), "utf8")).toContain("4512");
+    } finally {
+      await session.close();
+      const chatEnd = seen.filter((e) => e.type === "brain.write" && e.cause === "chat-end");
+      const notePath = (chatEnd[0] as { path: string } | undefined)?.path;
+      console.log("  raw files: ", readdirSync(join(brain, "raw")));
+      if (notePath) console.log("  chat note:\n" + readFileSync(join(brain, notePath), "utf8"));
+      rmSync(brain, { recursive: true, force: true });
+      expect(chatEnd).toHaveLength(1);
+    }
+  },
+  60_000,
 );

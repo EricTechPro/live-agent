@@ -15,7 +15,7 @@
 // turn, and that turn puts the very same events on the stream as a text turn.
 // The model's voice itself comes out of `onAudio`, not the event stream: it is
 // binary and high-rate, and the stream stays plain JSON.
-import { brainRoot } from "../brain/index.ts";
+import { brainRoot, saveRawNote } from "../brain/index.ts";
 import { defaultConfig, type Config } from "../config/index.ts";
 import type { AgentEvent, EventOf } from "./events.ts";
 import type { Model, ModelEvent, ToolResponse } from "./model.ts";
@@ -38,6 +38,8 @@ export interface SessionOptions {
   toolsDir?: string;
   /** Use exactly these tools instead of loading a folder (handy in tests). */
   tools?: Tool[];
+  /** How long `close()` waits for the model's chat summary before using the plain transcript. Default 8000. */
+  summaryTimeoutMs?: number;
 }
 
 /** What `onAudio` hears: a chunk of the model's voice, or "drop what you queued" (interrupted). */
@@ -60,6 +62,11 @@ type ToolCall = Extract<ModelEvent, { type: "tool.call" }>;
 // What counts as "yes" when a tool call waits for approval. Anything else declines.
 const YES = /^\s*(yes|yeah|yep|yup|sure|ok|okay|go ahead|do it|please do|approved?)\b/i;
 
+// What close() asks the model for the chat-end note.
+const SUMMARY_REQUEST =
+  "The chat is ending now. Do not call any tools. Summarise this chat for my notes in two to five short " +
+  "bullet points: what was said and what was decided. Reply with the bullet points only.";
+
 export async function startSession(options: SessionOptions): Promise<AgentSession> {
   const config = options.config ?? defaultConfig();
   const mode = options.mode ?? config.safety.mode;
@@ -81,11 +88,21 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     awaiting: number;
     running: number;
     notes: Set<string>;
+    /** What the user said in a voice turn (its transcription arrives in pieces). */
+    heard: string;
     done: (events: AgentEvent[]) => void;
   } | null = null;
 
   // Calls the gate said "ask" about, waiting for the user's next turn.
   let waiting: ToolCall[] = [];
+
+  // What was said, for the chat-end note: user texts and the model's joined replies.
+  const chat: { role: "user" | "model"; text: string }[] = [];
+  // Set while close() waits for the model's chat summary.
+  let summary: { take(event: ModelEvent): void } | null = null;
+  // After close(), late model events are dropped.
+  let ended = false;
+  const summaryTimeoutMs = options.summaryTimeoutMs ?? 8000;
 
   // Every event goes through here, so listeners and the current turn always
   // see exactly the same stream.
@@ -101,6 +118,8 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     if (finished.notes.size) emit({ type: "notes.used", notes: [...finished.notes] });
     emit({ type: "turn.done", reply: finished.reply });
     turn = null;
+    if (finished.heard.trim()) chat.push({ role: "user", text: finished.heard.trim() });
+    if (finished.reply.trim()) chat.push({ role: "model", text: finished.reply.trim() });
     finished.done(finished.events);
   }
 
@@ -125,12 +144,59 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     for (const path of paths) turn?.notes.add(path);
   }
 
+  // Why right away (not at turn end): "remember this" should show as saved the moment it is.
+  function brainWrote(path: string, tool: string) {
+    emit({ type: "brain.write", path, cause: "tool", tool });
+  }
+
+  // Ask the live model for a short summary of the chat, off the record (no
+  // transcript events). Resolves "" if the model errors, calls a tool, or
+  // takes longer than `summaryTimeoutMs`: the caller then falls back to the
+  // plain transcript, so close() never hangs on an unreachable model.
+  function askForSummary(): Promise<string> {
+    return new Promise((resolve) => {
+      let text = "";
+      const finish = (result: string) => {
+        clearTimeout(timer);
+        summary = null;
+        resolve(result);
+      };
+      const timer = setTimeout(() => finish(""), summaryTimeoutMs);
+      summary = {
+        take(event) {
+          if (event.type === "text") text += event.text;
+          else if (event.type === "turn.complete") finish(text);
+          else finish(""); // an error, or a tool call we will not run while closing
+        },
+      };
+      try {
+        modelSession.sendText(SUMMARY_REQUEST);
+      } catch {
+        finish("");
+      }
+    });
+  }
+
+  // The one raw note a chat leaves behind. Returns its path, or null when
+  // nothing was said. Not a tool call, so the safety gate is not asked: the
+  // spec saves this note after every chat, in every mode, and it only ever
+  // adds a new file to raw/. Ticket 07 queues the tidy job on its brain.write.
+  async function saveChatEndNote(): Promise<string | null> {
+    if (!chat.length) return null;
+    // A turn still in flight means the model is busy: skip straight to the transcript.
+    const summarised = turn ? "" : (await askForSummary()).trim();
+    const text = summarised || chat.map((line) => `- ${line.role === "user" ? "You" : "Agent"}: ${line.text}`).join("\n");
+    const path = await saveRawNote(brainPath, { title: "Chat", text });
+    emit({ type: "brain.write", path, cause: "chat-end" });
+    return path;
+  }
+
   function run(call: ToolCall, tool: Tool) {
     if (turn) turn.running++;
     // Why a promise chain (not await): the tool runs on its own while the
     // conversation goes on. Its answer goes back whenever it is ready.
     Promise.resolve()
-      .then(() => tool.run(call.args, { workDir, brainPath, useNotes }))
+      .then(() => tool.run(call.args, { workDir, brainPath, useNotes, brainWrote: (path) => brainWrote(path, call.name) }))
       .then(
         (output) => respond(call, "ok", { output: output ?? null }),
         (err: unknown) => respond(call, "error", { error: err instanceof Error ? err.message : String(err) }),
@@ -192,7 +258,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   // it does. It waits for one `turn.complete`, like a text turn. Nobody awaits
   // its promise; listeners see its events on the stream.
   function openVoiceTurn() {
-    if (!turn) turn = { events: [], reply: "", awaiting: 1, running: 0, notes: new Set(), done: () => {} };
+    if (!turn) turn = { events: [], reply: "", awaiting: 1, running: 0, notes: new Set(), heard: "", done: () => {} };
   }
 
   function playAudio(out: AudioOut) {
@@ -201,9 +267,13 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
 
   // Translate what the model says into what the app sees.
   function onModelEvent(event: ModelEvent) {
+    // While close() asks for the chat summary, the model's answer is the core's, not the chat's.
+    if (!turn && summary) return summary.take(event);
+    if (ended) return;
     switch (event.type) {
       case "user.text":
         openVoiceTurn();
+        turn!.heard += event.text;
         emit({ type: "transcript", role: "user", text: event.text });
         break;
       case "audio":
@@ -242,8 +312,9 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     sendText(text) {
       if (turn) return Promise.reject(new Error("a turn is already in progress"));
       return new Promise((done) => {
-        turn = { events: [], reply: "", awaiting: 0, running: 0, notes: new Set(), done };
+        turn = { events: [], reply: "", awaiting: 0, running: 0, notes: new Set(), heard: "", done };
         emit({ type: "transcript", role: "user", text });
+        chat.push({ role: "user", text });
 
         const pending = waiting;
         waiting = [];
@@ -278,6 +349,15 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       audioListeners.add(listener);
       return () => audioListeners.delete(listener);
     },
-    close: () => modelSession.close(),
+    async close() {
+      try {
+        await saveChatEndNote();
+      } catch (err) {
+        emit({ type: "error", message: `could not save the chat note: ${err instanceof Error ? err.message : String(err)}` });
+      } finally {
+        ended = true;
+        await modelSession.close();
+      }
+    },
   };
 }

@@ -94,7 +94,9 @@ describe("brain", () => {
   });
 
   test("a real brain folder is ignored by git, the sample brain is not", () => {
-    const ignored = (path: string) => Bun.spawnSync(["git", "check-ignore", "-q", path]).exitCode === 0;
+    // cwd: the repo (test/preload.ts moves the working folder to a temp copy).
+    const cwd = join(import.meta.dir, "..");
+    const ignored = (path: string) => Bun.spawnSync(["git", "check-ignore", "-q", path], { cwd }).exitCode === 0;
     expect(ignored("brain/wiki/secret.md")).toBe(true);
     expect(ignored("sample-brain/wiki/sourdough-starter.md")).toBe(false);
   });
