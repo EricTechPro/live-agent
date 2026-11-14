@@ -72,13 +72,17 @@ console.log(JSON.stringify({ type: "ready", url: app.url, launchToken: app.launc
 // For people (stderr, so the shell's stdout stays one JSON line):
 console.error(`live-agent: voice check page: ${app.url}/check#${app.launchToken}`);
 
+// The chat-end note takes up to 8 s (summaryTimeoutMs); this leaves LiveKit room inside the shell's 30 s.
+const TIDY_ON_QUIT_MS = 15_000;
 let stopping = false;
 async function shutdown() {
   if (stopping) return;
   stopping = true;
   await app.stop();
-  // Closing the chat queued a tidy job; give it a moment to finish (an unfinished tidy retries next launch).
-  await Promise.race([tidiesSettled(), Bun.sleep(30_000)]);
+  // Closing the chat queued a tidy job; give it a bounded moment to finish (an
+  // unfinished tidy retries next launch). The shell waits 30 s in all
+  // (app/src-tauri/src/lib.rs), so chat note + tidy + LiveKit fit inside it.
+  await Promise.race([tidiesSettled(), Bun.sleep(TIDY_ON_QUIT_MS)]);
   await disposeNative();
   process.exit(0);
 }

@@ -109,14 +109,22 @@ fn start_core(app: &tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Ask the core to stop (SIGTERM: it stops LiveKit too), then force it after 2 s.
+/// How long the core gets to stop on its own before we force it.
+///
+/// Why this long: on SIGTERM the core ends the chat (the model writes the
+/// chat-end note, up to 8 s), queues the tidy job and waits up to 15 s for it,
+/// then stops LiveKit. Killing it sooner loses the note. A tidy that cannot
+/// finish in time just runs again on the next launch (src/brain/tidy.ts).
+const CORE_STOP_GRACE: Duration = Duration::from_secs(30);
+
+/// Ask the core to stop (SIGTERM: it saves the chat, stops LiveKit), then force it after the grace.
 fn stop_core(core: &Core) {
     let Some(child) = core.child.lock().unwrap().take() else { return };
     #[cfg(unix)]
     {
         let pid = child.pid() as i32;
         unsafe { libc_kill(pid, 15) };
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + CORE_STOP_GRACE;
         while Instant::now() < deadline && unsafe { libc_kill(pid, 0) } == 0 {
             std::thread::sleep(Duration::from_millis(50));
         }
@@ -144,9 +152,27 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building live-agent")
-        .run(|app, event| {
-            if let RunEvent::Exit = event {
-                stop_core(&app.state::<Core>());
+        .run(|app, event| match event {
+            // Quit (Cmd+Q, closing the window): hide the window at once, let the
+            // core finish the chat in the background, then really exit. Why not
+            // just block in Exit: the app would hang there, frozen, for as long
+            // as the core needs.
+            RunEvent::ExitRequested { api, .. } => {
+                if app.state::<Core>().child.lock().unwrap().is_none() {
+                    return; // the core is already stopped: exit now
+                }
+                api.prevent_exit();
+                for window in app.webview_windows().values() {
+                    let _ = window.hide();
+                }
+                let app = app.clone();
+                std::thread::spawn(move || {
+                    stop_core(&app.state::<Core>());
+                    app.exit(0);
+                });
             }
+            // Safety net (e.g. a forced exit that skipped ExitRequested).
+            RunEvent::Exit => stop_core(&app.state::<Core>()),
+            _ => {}
         });
 }
