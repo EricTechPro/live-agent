@@ -6,7 +6,7 @@
 // Needs GEMINI_API_KEY (or GOOGLE_API_KEY, the name AI Studio suggests) in your environment or .env.
 // With no key it skips cleanly, so it is safe to run anywhere.
 import { expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startSession } from "../src/core/agent.ts";
@@ -73,10 +73,13 @@ test.skipIf(!apiKey)(
       `#!/bin/sh\nsleep 8\necho '{"type":"message","role":"assistant","content":"Fixed the off-by-one bug in counter.ts."}'\necho '{"type":"result","status":"success"}'\n`,
     );
     chmodSync(bin, 0o755);
+    // A fake signed-in Gemini CLI home, so the sign-in check passes on any machine.
+    mkdirSync(join(dir, "home", ".gemini"), { recursive: true });
+    writeFileSync(join(dir, "home", ".gemini", "oauth_creds.json"), "{}");
     // Bypass: helper risk asks in auto-edits; this smoke is about the job, not the gate.
     const session = await startSession({
       model: geminiLiveModel({ apiKey: apiKey! }), workDir: dir, mode: "bypass",
-      helpers: { geminiCliBin: bin },
+      helpers: { geminiCliBin: bin, geminiCliHome: join(dir, "home") },
     });
     const all: AgentEvent[] = [];
     session.onEvent((e) => all.push(e));
