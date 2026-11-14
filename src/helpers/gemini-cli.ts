@@ -21,6 +21,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { JobSpec } from "../core/jobs.ts";
+import { watchGroup } from "./group-watchdog.ts";
 
 const KEY_GUIDE = "README.md#get-your-gemini-key";
 export const INSTALL_FIX = "Gemini CLI is not installed. Install it with: npm install -g @google/gemini-cli";
@@ -139,6 +140,8 @@ export function geminiCliJob({
         killTimer = setTimeout(() => group("SIGKILL"), cancelGraceMs);
       };
       signal.addEventListener("abort", onAbort, { once: true });
+      // If the core is killed hard, the watchdog stops the group (src/helpers/group-watchdog.ts).
+      const stopWatch = watchGroup(proc.pid);
 
       try {
         const stderr = new Response(proc.stderr).text();
@@ -158,6 +161,7 @@ export function geminiCliJob({
       } finally {
         signal.removeEventListener("abort", onAbort);
         clearTimeout(killTimer);
+        stopWatch();
       }
     },
   };

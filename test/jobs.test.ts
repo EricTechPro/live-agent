@@ -222,6 +222,30 @@ describe("cancelling", () => {
     await s.close();
   });
 
+  test("if the core dies hard (kill -9), the helper and everything it started stop too", async () => {
+    const crashDir = join(dir, "crash-run");
+    mkdirSync(crashDir);
+    const pidFile = join(crashDir, "hang.pid");
+    // A stand-in core: starts a helper job, then waits to be killed.
+    const core = Bun.spawn([
+      "bun", "-e", `
+        const { geminiCliJob } = await import(${JSON.stringify(join(import.meta.dir, "..", "src", "helpers", "gemini-cli.ts"))});
+        const job = geminiCliJob({ task: "x", cwd: ${JSON.stringify(crashDir)}, bin: ${JSON.stringify(hangs)}, home: ${JSON.stringify(helperHome)}, apiKey: "k" });
+        job.run({ signal: new AbortController().signal }).catch(() => {});
+        setInterval(() => {}, 1000);
+      `,
+    ], { stdout: "ignore", stderr: "ignore" });
+    while (!existsSync(pidFile) || readFileSync(pidFile, "utf8").trim().split(" ").length < 2) await Bun.sleep(10);
+    const pids = readFileSync(pidFile, "utf8").trim().split(" ").map(Number);
+    expect(pids.every(alive)).toBe(true);
+
+    core.kill("SIGKILL");
+    await core.exited;
+
+    for (let i = 0; i < 100 && pids.some(alive); i++) await Bun.sleep(50);
+    for (const pid of pids) expect(alive(pid)).toBe(false);
+  }, 10_000);
+
   test("cancelling a queued job removes it before it runs", async () => {
     const config = defaultConfig();
     config.helpers.maxAtOnce = 1;
