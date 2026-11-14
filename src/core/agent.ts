@@ -8,18 +8,21 @@
 // Why this shape: voice comes later (ticket 08), but a text turn is the same
 // conversation without a microphone, so every test can drive the real core
 // through text alone (the same trick as live-dj's smoke_live).
+import { defaultConfig, type Config } from "../config/index.ts";
 import type { AgentEvent, EventOf } from "./events.ts";
 import type { Model, ModelEvent, ToolResponse } from "./model.ts";
 import { loadTools } from "./registry.ts";
-import { DEFAULT_MODE, decide, explain, type SafetyMode, type SafetyOverrides } from "./safety.ts";
+import { decide, explain, type SafetyMode, type SafetyOverrides } from "./safety.ts";
 import type { Tool } from "./tool.ts";
 
 export interface SessionOptions {
   /** Which model to talk to: `geminiLiveModel(...)` for real, `scriptedModel(...)` in tests. */
   model: Model;
-  /** Safety mode for the gate. Default: "auto-edits". */
+  /** The loaded config (`loadConfig()`). Default: `defaultConfig()`. The gate reads `config.safety`. */
+  config?: Config;
+  /** Shortcut that wins over `config.safety.mode` (handy in tests). */
   mode?: SafetyMode;
-  /** Per-tool verdicts that win over the mode table, e.g. `{ read_file: "ask" }`. */
+  /** Shortcut that wins over `config.safety.overrides`, e.g. `{ read_file: "ask" }`. */
   overrides?: SafetyOverrides;
   /** Where relative file paths start. Default: the current folder. */
   workDir?: string;
@@ -43,8 +46,9 @@ type ToolCall = Extract<ModelEvent, { type: "tool.call" }>;
 const YES = /^\s*(yes|yeah|yep|yup|sure|ok|okay|go ahead|do it|please do|approved?)\b/i;
 
 export async function startSession(options: SessionOptions): Promise<AgentSession> {
-  const mode = options.mode ?? DEFAULT_MODE;
-  const overrides = options.overrides ?? {};
+  const config = options.config ?? defaultConfig();
+  const mode = options.mode ?? config.safety.mode;
+  const overrides = options.overrides ?? config.safety.overrides;
   const workDir = options.workDir ?? process.cwd();
   const tools = options.tools ?? (await loadTools(options.toolsDir));
   const byName = new Map(tools.map((t) => [t.name, t]));

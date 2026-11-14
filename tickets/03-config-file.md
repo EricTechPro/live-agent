@@ -4,12 +4,12 @@
 
 **Blocked by:** 01 Text turn through the agent core
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Priority:** must-have
 
 - [x] A missing config file falls back to the documented defaults
 - [x] An invalid config fails with a clear message naming the bad field
-- [ ] Changing the safety mode in the config changes gate verdicts (checked through the event stream)
-- [ ] A per-tool override beats the mode table
+- [x] Changing the safety mode in the config changes gate verdicts (checked through the event stream)
+- [x] A per-tool override beats the mode table
 - [x] The schema file is committed and describes every field

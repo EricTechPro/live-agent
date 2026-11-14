@@ -10,13 +10,12 @@
 //   | helper     | ask    | ask        | allow  |
 //
 // Per-tool overrides (from the config) win over the table.
+import type { SafetyMode, Verdict } from "../config/index.ts";
 import type { RiskClass } from "./tool.ts";
 
-export type SafetyMode = "ask-me" | "auto-edits" | "bypass";
-export type Verdict = "allow" | "ask" | "block";
+// The config owns the words (its schema lists them); the gate uses the same ones.
+export type { SafetyMode, Verdict };
 export type SafetyOverrides = Record<string, Verdict>;
-
-export const DEFAULT_MODE: SafetyMode = "auto-edits";
 
 const TABLE: Record<RiskClass, Record<SafetyMode, Verdict>> = {
   read: { "ask-me": "allow", "auto-edits": "allow", bypass: "allow" },

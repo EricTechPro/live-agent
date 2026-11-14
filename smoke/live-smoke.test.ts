@@ -6,6 +6,9 @@
 // Needs GEMINI_API_KEY (or GOOGLE_API_KEY, the name AI Studio suggests) in your environment or .env.
 // With no key it skips cleanly, so it is safe to run anywhere.
 import { expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { startSession } from "../src/core/agent.ts";
 import { geminiLiveModel } from "../src/models/gemini-live.ts";
 
@@ -32,4 +35,27 @@ test.skipIf(!apiKey)(
     }
   },
   30_000,
+);
+
+test.skipIf(!apiKey)(
+  "a real model reads a named file through read_file",
+  async () => {
+    const dir = mkdtempSync(join(tmpdir(), "live-agent-smoke-"));
+    writeFileSync(join(dir, "shopping.md"), "The secret word is pineapple.");
+    const session = await startSession({ model: geminiLiveModel({ apiKey: apiKey! }), workDir: dir });
+    try {
+      const events = await session.sendText("Read the file shopping.md and tell me the secret word.");
+      const done = events.find((e) => e.type === "turn.done");
+      console.log("  tool calls:", events.filter((e) => e.type === "tool.call"));
+      console.log("  model said:", done?.reply || "(no transcript)");
+
+      expect(events).toContainEqual(expect.objectContaining({ type: "tool.call", name: "read_file" }));
+      expect(events).toContainEqual(expect.objectContaining({ type: "tool.result", status: "ok" }));
+      expect(done?.reply.toLowerCase()).toContain("pineapple");
+    } finally {
+      await session.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+  45_000,
 );

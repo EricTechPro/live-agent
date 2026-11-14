@@ -5,6 +5,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { defaultConfig, type Config } from "../src/config/index.ts";
 import { startSession } from "../src/core/agent.ts";
 import type { AgentEvent } from "../src/core/events.ts";
 import type { ModelInput } from "../src/core/model.ts";
@@ -106,6 +107,38 @@ describe("safety gate mode table", () => {
 
     expect(events.find((e) => e.type === "safety.verdict")).toMatchObject({ verdict: "block" });
     expect(tool.runs).toBe(0);
+    await session.close();
+  });
+});
+
+describe("config drives the gate", () => {
+  const withSafety = (safety: Partial<Config["safety"]>): Config => {
+    const config = defaultConfig();
+    return { ...config, safety: { ...config.safety, ...safety } };
+  };
+
+  test("changing safety mode in config changes gate verdicts", async () => {
+    const verdictIn = async (config: Config) => {
+      const tool = spyTool("edit");
+      const session = await startSession({ model: scriptedModel(callOnce(tool.name)), tools: [tool], config });
+      const events = await session.sendText("edit it");
+      await session.close();
+      return events.find((e) => e.type === "safety.verdict");
+    };
+
+    expect(await verdictIn(defaultConfig())).toMatchObject({ mode: "auto-edits", verdict: "allow" });
+    expect(await verdictIn(withSafety({ mode: "ask-me" }))).toMatchObject({ mode: "ask-me", verdict: "ask" });
+  });
+
+  test("per-tool override beats the mode table", async () => {
+    writeFileSync(join(workDir, "secret.md"), "shh");
+    const config = withSafety({ mode: "bypass", overrides: { read_file: "block" } });
+    const session = await startSession({ model: scriptedModel(callOnce("read_file")), workDir, config });
+
+    const events = await session.sendText("read secret.md");
+
+    expect(events.find((e) => e.type === "safety.verdict")).toMatchObject({ mode: "bypass", verdict: "block" });
+    expect(events).toContainEqual(expect.objectContaining({ type: "tool.result", status: "blocked" }));
     await session.close();
   });
 });
