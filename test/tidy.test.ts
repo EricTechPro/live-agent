@@ -6,7 +6,7 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { TidyInput, TidyModel } from "../src/brain/tidy.ts";
+import { tidiesSettled, type TidyInput, type TidyModel } from "../src/brain/tidy.ts";
 import { defaultConfig } from "../src/config/index.ts";
 import { startSession } from "../src/core/agent.ts";
 import type { AgentEvent, EventOf } from "../src/core/events.ts";
@@ -150,7 +150,14 @@ test("close does not wait for the tidy, and older untidied notes are tidied too"
   await Bun.sleep(10);
   // close() has resolved while the tidy is still running.
   expect(tidyStates(seen)).toEqual(["queued", "running"]);
+  // The app waits on this before it exits.
+  let settled = false;
+  const waiting = tidiesSettled().then(() => (settled = true));
+  await Bun.sleep(10);
+  expect(settled).toBe(false);
   release();
+  await waiting;
+  expect(existsSync(join(brain, "wiki", "bike-trip.md"))).toBe(true);
   expect((await tidyEnded(seen)).state).toBe("done");
   expect(inputs[0]!.raw).toHaveLength(2);
   expect(inputs[0]!.raw[0]!.path).toBe("raw/2026-11-01-bike-trip.md");

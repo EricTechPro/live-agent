@@ -112,6 +112,14 @@ export async function tidyBrain(root: string, model: TidyModel, signal: AbortSig
 // last chat finishes before the next one reads the state file.
 const running = new Map<string, Promise<unknown>>();
 
+/**
+ * Resolves once no tidy is running in this process (never rejects). The app
+ * waits on this before exiting, since the tidy outlives the chat's session.
+ */
+export async function tidiesSettled(): Promise<void> {
+  while (running.size) await Promise.allSettled([...running.values()]);
+}
+
 /** The tidy as an orchestrator job (kind "tidy"): same states as any helper job. */
 export function tidyJob(root: string, model: TidyModel): JobSpec {
   return {

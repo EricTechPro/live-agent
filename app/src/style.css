@@ -1,0 +1,66 @@
+:root {
+  --bg: #0d0b1f;
+  --panel: #15122e;
+  --line: #2a2550;
+  --text: #ecebff;
+  --muted: #9a96c8;
+  --user: #7aa7ff;
+  --model: #e8e6ff;
+  --note: #ff8fbf;
+  color-scheme: dark;
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+
+/* Orb + transcript left, job board right, bottom bar under both. */
+.shell {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(240px, 320px);
+  grid-template-rows: 1fr auto;
+  grid-template-areas: "voice jobs" "bar bar";
+  height: 100vh;
+}
+.voice { grid-area: voice; display: flex; flex-direction: column; min-height: 0; padding: 20px; gap: 12px; }
+.jobs { grid-area: jobs; border-left: 1px solid var(--line); background: var(--panel); overflow: auto; }
+.bar { grid-area: bar; border-top: 1px solid var(--line); background: var(--panel); min-height: 32px; }
+
+.orb-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.orb-label { margin: 0; color: var(--muted); }
+.talk {
+  font: inherit; color: var(--text); background: transparent;
+  border: 1px solid var(--line); border-radius: 999px; padding: 6px 16px; cursor: pointer;
+}
+.talk:disabled { opacity: .4; cursor: default; }
+.talk[aria-pressed="true"] { border-color: var(--user); }
+
+/* The orb: same gradient as assets/logo.svg. One element, CSS-only animation. */
+.orb {
+  width: 160px; height: 160px; border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #e8f0ff 0, #7aa7ff 35%, #6a4cff 75%, #2a1a7a 100%);
+  box-shadow: 0 0 40px #6a4cff66;
+  transition: filter .3s, opacity .3s;
+}
+.orb[data-state="connecting"], .orb[data-state="offline"] { filter: grayscale(1); opacity: .5; }
+.orb[data-state="listening"] { animation: breathe 3.2s ease-in-out infinite; }
+.orb[data-state="thinking"] { animation: think 1.1s linear infinite; }
+.orb[data-state="speaking"] { animation: speak .5s ease-in-out infinite alternate; box-shadow: 0 0 60px #ff6ba888; }
+
+@keyframes breathe { 50% { transform: scale(1.04); } }
+@keyframes think { to { transform: rotate(360deg); filter: hue-rotate(60deg); } }
+@keyframes speak { to { transform: scale(1.1); } }
+@media (prefers-reduced-motion: reduce) { .orb { animation: none !important; } }
+
+.transcript { flex: 1; overflow: auto; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.transcript li { white-space: pre-wrap; }
+.transcript .user { color: var(--user); }
+.transcript .user::before { content: "you  "; color: var(--muted); }
+.transcript .model { color: var(--model); }
+.transcript .model::before { content: "agent  "; color: var(--muted); }
+.transcript .note { color: var(--note); font-size: 12px; }
+
+.type input {
+  width: 100%; font: inherit; color: var(--text); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+}
