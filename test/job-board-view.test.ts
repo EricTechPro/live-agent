@@ -1,6 +1,6 @@
 // The window's job board and bottom bar, built from the core's events (ticket 10).
 import { expect, test } from "bun:test";
-import { addBarEvent, emptyBar, MODE_LABELS } from "../app/src/bottom-bar.ts";
+import { addBarEvent, emptyBar } from "../app/src/bottom-bar.ts";
 import { addJobEvent, emptyBoard } from "../app/src/job-board.ts";
 import type { AgentEvent } from "../src/core/events.ts";
 
@@ -54,7 +54,6 @@ test("the bar's mode comes only from the core's mode.changed events", () => {
   expect(emptyBar.mode).toBeUndefined();
   const b = bar([{ type: "mode.changed", mode: "bypass" }, { type: "mode.changed", mode: "ask-me" }]);
   expect(b.mode).toBe("ask-me");
-  expect(MODE_LABELS).toEqual({ "ask-me": "Ask me", "auto-edits": "Auto edits", bypass: "Bypass" });
 });
 
 test("only Shift+Tab cycles the mode; plain Tab still moves focus", async () => {

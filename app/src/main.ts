@@ -52,6 +52,17 @@ function renderTranscript() {
   transcriptEl.scrollTop = transcriptEl.scrollHeight;
 }
 
+// Why a helper: anything can be thrown; the window shows it as one line.
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+// A problem the window itself hit (not a core event): one note line in the transcript.
+function showError(message: string) {
+  transcript = addToTranscript(transcript, { type: "error", message });
+  renderTranscript();
+}
+
 // Time passing matters only for "you paused, so it's thinking".
 setInterval(() => {
   if (orb.heardAt !== undefined) feedOrb({ type: "tick" });
@@ -83,8 +94,7 @@ async function startTalking(core: CoreClient) {
   } catch (err) {
     await room?.disconnect();
     room = undefined;
-    transcript = addToTranscript(transcript, { type: "error", message: `mic: ${(err as Error).message}` });
-    renderTranscript();
+    showError(`mic: ${errorText(err)}`);
     setTalking(false);
   }
 }
@@ -109,7 +119,7 @@ async function boot() {
     core = connectCore(await waitForCore());
   } catch (err) {
     feedOrb({ type: "core.down" });
-    orbLabel.textContent = `Core did not start: ${(err as Error).message}`;
+    orbLabel.textContent = `Core did not start: ${errorText(err)}`;
     return;
   }
   onCoreDown((reason) => {
@@ -142,8 +152,7 @@ async function boot() {
     try {
       await core.sendText(text);
     } catch (err) {
-      transcript = addToTranscript(transcript, { type: "error", message: (err as Error).message });
-      renderTranscript();
+      showError(errorText(err));
       feedOrb({ type: "turn.done", reply: "" });
     }
   };
@@ -163,8 +172,7 @@ async function boot() {
     try {
       await core.newChat();
     } catch (err) {
-      transcript = addToTranscript(transcript, { type: "error", message: `new chat: ${(err as Error).message}` });
-      renderTranscript();
+      showError(`new chat: ${errorText(err)}`);
     } finally {
       newChatBtn.disabled = false;
     }
@@ -175,8 +183,7 @@ async function runSetup(core: CoreClient, ifNeeded: boolean) {
   try {
     await core.startSetup(ifNeeded);
   } catch (err) {
-    transcript = addToTranscript(transcript, { type: "error", message: `setup: ${(err as Error).message}` });
-    renderTranscript();
+    showError(`setup: ${errorText(err)}`);
   }
 }
 

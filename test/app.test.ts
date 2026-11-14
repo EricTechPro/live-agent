@@ -53,6 +53,15 @@ describe("voice app, as the window sees it", () => {
     expect(html).not.toContain(GEMINI_KEY);
   });
 
+  test("only the app's own window (and localhost pages) may read the API from a browser", async () => {
+    const from = (origin: string) =>
+      fetch(`${app.url}/session`, { headers: { ...auth(), Origin: origin } }).then((res) => res.headers.get("access-control-allow-origin"));
+
+    expect(await from("tauri://localhost")).toBe("tauri://localhost");
+    expect(await from("http://localhost:1420")).toBe("http://localhost:1420");
+    expect(await from("https://evil.example")).toBeNull();
+  });
+
   test("without the per-launch token, the window gets nothing", async () => {
     expect((await fetch(`${app.url}/session`)).status).toBe(401);
     expect((await fetch(`${app.url}/session`, { headers: { Authorization: "Bearer guess" } })).status).toBe(401);
@@ -156,7 +165,15 @@ describe("window commands: cancel a job, switch the mode", () => {
     const stream = events();
     const reader = await stream.ready;
     const now = await fetch(`${cmd.url}/mode`, { headers: { Authorization: `Bearer ${cmd.launchToken}` } });
-    expect(await now.json()).toEqual({ mode: "auto-edits" });
+    expect(await now.json()).toEqual({
+      mode: "auto-edits",
+      // The window draws its dropdown from this list, so the labels live with the core's modes.
+      modes: [
+        { id: "ask-me", label: "Ask me" },
+        { id: "auto-edits", label: "Auto edits" },
+        { id: "bypass", label: "Bypass" },
+      ],
+    });
 
     expect(await (await post("/mode", { mode: "bypass" })).json()).toEqual({ mode: "bypass" });
     expect(await (await post("/mode", { cycle: true })).json()).toEqual({ mode: "ask-me" });

@@ -36,8 +36,8 @@ export interface CoreClient {
   session(): Promise<RoomSession>;
   /** Send a typed turn. Rejects if a turn is already running (409). */
   sendText(text: string): Promise<void>;
-  /** The safety mode now (first draw only; after that, `mode.changed` events). */
-  getMode(): Promise<SafetyMode>;
+  /** The safety mode now and the modes to offer, with their labels (first draw only; after that, `mode.changed` events). */
+  getMode(): Promise<{ mode: SafetyMode; modes: { id: SafetyMode; label: string }[] }>;
   /** Switch the safety mode (`"cycle"` = Shift+Tab). The core announces it with `mode.changed`. */
   setMode(mode: SafetyMode | "cycle"): Promise<void>;
   /** The job board's cancel button. The board updates from the job's `job.state` events. */
@@ -95,7 +95,7 @@ export function connectCore(info: CoreInfo): CoreClient {
     async getMode() {
       const res = await fetch(`${info.url}/mode`, { headers: auth });
       if (!res.ok) throw new Error(`core /mode: ${res.status}`);
-      return ((await res.json()) as { mode: SafetyMode }).mode;
+      return (await res.json()) as { mode: SafetyMode; modes: { id: SafetyMode; label: string }[] };
     },
     async setMode(mode) {
       const res = await fetch(`${info.url}/mode`, {

@@ -13,11 +13,12 @@
 //   GET  /events   -> Server-Sent Events, one AgentEvent (JSON) per `data:` line
 //                     (EventSource cannot set headers, so `?token=` works here)
 //   POST /text     -> { text } in, { events } out: a typed turn
-//   GET  /mode     -> { mode }: the safety mode now
+//   GET  /mode     -> { mode, modes: [{ id, label }] }: the safety mode now, and the choices
 //   POST /mode     -> { mode } or { cycle: true } in, { mode } out; emits `mode.changed`
 //   POST /jobs/:id/cancel -> { cancelled } (404 for an unknown id)
 //   GET  /setup    -> { needed, configPath }: is this a first launch (no config file)?
 //   POST /setup    -> { ifNeeded? } in, { events } out: start the setup chat (ticket 12)
+//   POST /chat/new -> { ok }: end this chat (note + tidy job) and start the next
 //
 // Why HTTP + SSE (not a WebSocket): the window only reads the stream, and
 // fetch/EventSource exist in every webview with no library.
@@ -25,7 +26,8 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { dispose } from "@livekit/rtc-node";
 import { startSession, type SessionOptions } from "./core/agent.ts";
 import type { Model } from "./core/model.ts";
-import { MODES, type SafetyMode } from "./core/safety.ts";
+import { MODE_LABELS, MODES, type SafetyMode } from "./core/safety.ts";
+import { errorMessage } from "./errors.ts";
 import { defaultConfigPath } from "./config/index.ts";
 import { joinVoiceRoom } from "./voice/livekit-bridge.ts";
 // `type: "text"` embeds the file in the compiled binary; bun-types calls *.html an HTMLBundle.
@@ -55,11 +57,31 @@ export interface App {
   stop(): Promise<void>;
 }
 
-const CORS = {
-  "Access-Control-Allow-Origin": "*", // auth is the bearer token, not cookies
-  "Access-Control-Allow-Headers": "Authorization, Content-Type",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-};
+// Which web pages may read the API from a browser: the app's own window
+// (tauri://localhost on macOS, http(s)://tauri.localhost elsewhere) and pages
+// on this machine (the Vite dev server, the /check page). Why bother, when
+// every call needs the launch token anyway: a page from the internet should
+// not even get to try.
+const ALLOWED_ORIGIN = /^(tauri:\/\/localhost|https?:\/\/tauri\.localhost|http:\/\/(localhost|127\.0\.0\.1)(:\d+)?)$/;
+
+function corsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("origin");
+  if (!origin || !ALLOWED_ORIGIN.test(origin)) return {};
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    Vary: "Origin",
+  };
+}
+
+const json = (body: unknown, status = 200) => Response.json(body, { status });
+// A command the core refused right now (e.g. a turn is already in progress).
+const refused = (err: unknown) => json({ error: errorMessage(err) }, 409);
+const readBody = async (req: Request): Promise<Record<string, unknown>> =>
+  ((await req.json().catch(() => ({}))) ?? {}) as Record<string, unknown>;
+
+type Route = (req: Request, url: URL) => Response | Promise<Response>;
 
 export async function startApp(options: AppOptions): Promise<App> {
   const { model, geminiApiKey, geminiModel, livekitPort, port, room: roomName, ...sessionOptions } = options;
@@ -89,106 +111,104 @@ export async function startApp(options: AppOptions): Promise<App> {
     const allowed = (given: string | null) =>
       !!given && given.length === launchToken.length && timingSafeEqual(Buffer.from(given), Buffer.from(launchToken));
 
+    // The window's API, one entry per "METHOD /path" (see the list at the top).
+    const routes: Record<string, Route> = {
+      async "GET /session"() {
+        const { token, expiresAt } = await tokens.livekitToken("user");
+        return json({ livekitUrl: livekit.url, room, identity: "user", token, expiresAt });
+      },
+
+      async "POST /text"(req) {
+        const { text } = await readBody(req);
+        if (typeof text !== "string" || !text.trim()) return json({ error: "send { text }" }, 400);
+        return session.sendText(text).then((events) => json({ events }), refused);
+      },
+
+      // The window's New chat button: end this chat (note + tidy job), start the next.
+      "POST /chat/new"() {
+        return session.newChat().then(() => json({ ok: true }), refused);
+      },
+
+      // The safety mode (ticket 10). The window draws it from `mode.changed` events;
+      // GET is for the first draw, and carries the modes and their labels for the dropdown.
+      "GET /mode"() {
+        return json({ mode: session.mode(), modes: MODES.map((id) => ({ id, label: MODE_LABELS[id] })) });
+      },
+
+      async "POST /mode"(req) {
+        const body = await readBody(req);
+        if (body.cycle === true) session.cycleMode();
+        else if (typeof body.mode === "string" && (MODES as readonly string[]).includes(body.mode)) {
+          session.setMode(body.mode as SafetyMode);
+        } else {
+          return json({ error: `send { mode: ${MODES.map((m) => `"${m}"`).join(" | ")} } or { cycle: true }` }, 400);
+        }
+        return json({ mode: session.mode() });
+      },
+
+      // The setup chat (ticket 12). The window POSTs { ifNeeded: true } on boot, so
+      // the core decides: setup starts only on a first launch (no config file).
+      // Its Setup button POSTs {} to run setup again.
+      "GET /setup"() {
+        return json({ needed: session.setup.needed(), configPath: sessionOptions.configPath ?? defaultConfigPath() });
+      },
+
+      async "POST /setup"(req) {
+        const { ifNeeded } = await readBody(req);
+        return session.setup.start({ ifNeeded: ifNeeded === true }).then((events) => json({ events }), refused);
+      },
+
+      "GET /events"() {
+        let off = () => {};
+        let ping: ReturnType<typeof setInterval> | undefined;
+        const body = new ReadableStream<string>({
+          start(controller) {
+            controller.enqueue(": connected\n\n");
+            off = session.onEvent((event) => controller.enqueue(`data: ${JSON.stringify(event)}\n\n`));
+            ping = setInterval(() => controller.enqueue(": ping\n\n"), 30_000);
+          },
+          cancel() {
+            off();
+            clearInterval(ping);
+          },
+        });
+        return new Response(body, { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } });
+      },
+    };
+
+    // The job board's cancel button (ticket 10): the one route with a value in its path.
+    function cancelJob(id: string) {
+      if (!session.jobs.list().some((job) => job.id === id)) return json({ error: `no job ${id}` }, 404);
+      // false = it had already ended; the board already shows how.
+      return json({ cancelled: session.jobs.cancel(id) });
+    }
+
+    async function handle(req: Request, url: URL): Promise<Response> {
+      if (req.method === "OPTIONS") return new Response(null, { status: 204 });
+      // The manual voice check page holds no secrets; it reads the launch token from its URL hash.
+      // Imported as text, so it is baked into the compiled sidecar (there is no src/ folder there).
+      if (req.method === "GET" && url.pathname === "/check") {
+        return new Response(checkPage as unknown as string, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+      }
+      const bearer = req.headers.get("authorization")?.replace(/^Bearer /, "") ?? null;
+      const given = bearer ?? (url.pathname === "/events" ? url.searchParams.get("token") : null);
+      if (!allowed(given)) return json({ error: "unauthorized" }, 401);
+
+      const route = routes[`${req.method} ${url.pathname}`];
+      if (route) return route(req, url);
+      const cancel = req.method === "POST" ? url.pathname.match(/^\/jobs\/([^/]+)\/cancel$/) : null;
+      if (cancel) return cancelJob(decodeURIComponent(cancel[1]!));
+      return json({ error: "not found" }, 404);
+    }
+
     const server = Bun.serve({
       hostname: "127.0.0.1",
       port: port ?? 0,
       idleTimeout: 255, // seconds; the event stream also pings well inside this
       async fetch(req) {
-        const url = new URL(req.url);
-        if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
-        // The manual voice check page holds no secrets; it reads the launch token from its URL hash.
-        // Imported as text, so it is baked into the compiled sidecar (there is no src/ folder there).
-        if (req.method === "GET" && url.pathname === "/check") {
-          return new Response(checkPage as unknown as string, {
-            headers: { "Content-Type": "text/html; charset=utf-8" },
-          });
-        }
-        const bearer = req.headers.get("authorization")?.replace(/^Bearer /, "") ?? null;
-        const given = bearer ?? (url.pathname === "/events" ? url.searchParams.get("token") : null);
-        if (!allowed(given)) return Response.json({ error: "unauthorized" }, { status: 401, headers: CORS });
-
-        if (req.method === "GET" && url.pathname === "/session") {
-          const { token, expiresAt } = await tokens.livekitToken("user");
-          return Response.json({ livekitUrl: livekit.url, room, identity: "user", token, expiresAt }, { headers: CORS });
-        }
-        if (req.method === "POST" && url.pathname === "/text") {
-          const { text } = (await req.json()) as { text?: unknown };
-          if (typeof text !== "string" || !text.trim()) {
-            return Response.json({ error: "send { text }" }, { status: 400, headers: CORS });
-          }
-          try {
-            return Response.json({ events: await session.sendText(text) }, { headers: CORS });
-          } catch (err) {
-            return Response.json({ error: String((err as Error).message ?? err) }, { status: 409, headers: CORS });
-          }
-        }
-        // The window's New chat button: end this chat (note + tidy job), start the next.
-        if (req.method === "POST" && url.pathname === "/chat/new") {
-          try {
-            await session.newChat();
-            return Response.json({ ok: true }, { headers: CORS });
-          } catch (err) {
-            return Response.json({ error: String((err as Error).message ?? err) }, { status: 409, headers: CORS });
-          }
-        }
-        // The safety mode (ticket 10). The window draws it from `mode.changed` events;
-        // GET is only for the first draw, before any change.
-        if (url.pathname === "/mode" && req.method === "GET") {
-          return Response.json({ mode: session.mode() }, { headers: CORS });
-        }
-        if (url.pathname === "/mode" && req.method === "POST") {
-          const body = (await req.json().catch(() => ({}))) as { mode?: unknown; cycle?: unknown };
-          if (body.cycle === true) session.cycleMode();
-          else if (typeof body.mode === "string" && (MODES as readonly string[]).includes(body.mode)) {
-            session.setMode(body.mode as SafetyMode);
-          } else {
-            return Response.json({ error: `send { mode: ${MODES.map((m) => `"${m}"`).join(" | ")} } or { cycle: true }` }, { status: 400, headers: CORS });
-          }
-          return Response.json({ mode: session.mode() }, { headers: CORS });
-        }
-        // The job board's cancel button (ticket 10).
-        const cancel = req.method === "POST" ? url.pathname.match(/^\/jobs\/([^/]+)\/cancel$/) : null;
-        if (cancel) {
-          const id = decodeURIComponent(cancel[1]!);
-          if (!session.jobs.list().some((job) => job.id === id)) {
-            return Response.json({ error: `no job ${id}` }, { status: 404, headers: CORS });
-          }
-          // false = it had already ended; the board already shows how.
-          return Response.json({ cancelled: session.jobs.cancel(id) }, { headers: CORS });
-        }
-        // The setup chat (ticket 12). The window POSTs { ifNeeded: true } on boot, so
-        // the core decides: setup starts only on a first launch (no config file).
-        // Its Setup button POSTs {} to run setup again.
-        if (req.method === "GET" && url.pathname === "/setup") {
-          return Response.json({ needed: session.setup.needed(), configPath: sessionOptions.configPath ?? defaultConfigPath() }, { headers: CORS });
-        }
-        if (req.method === "POST" && url.pathname === "/setup") {
-          const { ifNeeded } = ((await req.json().catch(() => ({}))) ?? {}) as { ifNeeded?: unknown };
-          try {
-            return Response.json({ events: await session.setup.start({ ifNeeded: ifNeeded === true }) }, { headers: CORS });
-          } catch (err) {
-            return Response.json({ error: String((err as Error).message ?? err) }, { status: 409, headers: CORS });
-          }
-        }
-        if (req.method === "GET" && url.pathname === "/events") {
-          let off = () => {};
-          let ping: ReturnType<typeof setInterval> | undefined;
-          const body = new ReadableStream<string>({
-            start(controller) {
-              controller.enqueue(": connected\n\n");
-              off = session.onEvent((event) => controller.enqueue(`data: ${JSON.stringify(event)}\n\n`));
-              ping = setInterval(() => controller.enqueue(": ping\n\n"), 30_000);
-            },
-            cancel() {
-              off();
-              clearInterval(ping);
-            },
-          });
-          return new Response(body, {
-            headers: { ...CORS, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
-          });
-        }
-        return Response.json({ error: "not found" }, { status: 404, headers: CORS });
+        const res = await handle(req, new URL(req.url));
+        for (const [name, value] of Object.entries(corsHeaders(req))) res.headers.set(name, value);
+        return res;
       },
     });
     cleanups.push(() => server.stop(true));

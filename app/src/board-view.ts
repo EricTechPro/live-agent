@@ -3,7 +3,7 @@
 // (cancel, set mode). The mode on screen comes only from the core's
 // `mode.changed`, so the dropdown and Shift+Tab can never disagree.
 import type { CoreClient } from "./core-client.ts";
-import { addBarEvent, emptyBar, isModeCycleKey, MODE_LABELS, type Bar } from "./bottom-bar.ts";
+import { addBarEvent, emptyBar, isModeCycleKey, type Bar } from "./bottom-bar.ts";
 import { addJobEvent, emptyBoard, type JobBoard } from "./job-board.ts";
 import type { SafetyMode } from "../../src/core/safety.ts";
 
@@ -57,7 +57,6 @@ export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: H
   const notesEl = el("span", { className: "bar-notes" });
   const select = el("select", { className: "bar-mode", id: "mode", disabled: true });
   select.setAttribute("aria-label", "Safety mode (Shift+Tab cycles)");
-  for (const [value, label] of Object.entries(MODE_LABELS)) select.append(el("option", { value, textContent: label }));
   select.onchange = () => {
     const wanted = select.value as SafetyMode;
     // Snap back to what the core says until its mode.changed arrives.
@@ -89,9 +88,12 @@ export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: H
     if (nextBar !== bar) (bar = nextBar), renderBar();
   });
 
-  // First draw of the mode. A mode.changed that beat this reply wins.
-  core.getMode().then((mode) => {
-    if (!bar.mode) (bar = addBarEvent(bar, { type: "mode.changed", mode })), renderBar();
+  // First draw: the core says which modes exist (with their labels) and which
+  // one is on. A mode.changed that beat this reply wins.
+  core.getMode().then(({ mode, modes }) => {
+    select.replaceChildren(...modes.map(({ id, label }) => el("option", { value: id, textContent: label })));
+    if (bar.mode) select.value = bar.mode;
+    else (bar = addBarEvent(bar, { type: "mode.changed", mode })), renderBar();
   }, () => {});
 
   // In-window shortcut, not a global one: only while this window has focus.
