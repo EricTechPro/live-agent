@@ -11,6 +11,7 @@ import type { AgentEvent, EventOf } from "../src/core/events.ts";
 import type { ModelEvent, ModelInput } from "../src/core/model.ts";
 import { loadTools } from "../src/core/registry.ts";
 import { scriptedModel, type ScriptEntry } from "../src/models/scripted.ts";
+import { geminiCliStatus, INSTALL_FIX, SIGN_IN_FIX } from "../src/helpers/gemini-cli.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "live-agent-jobs-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -50,10 +51,23 @@ const startHelper = (id: string, task = "fix the bug", folder?: string): ModelEv
 });
 const say = (text: string): ModelEvent[] => [{ type: "text", text }];
 
+/** A fake Gemini CLI home (what `~/.gemini` holds), signed in or not. */
+function cliHome(name: string, files: Record<string, string>) {
+  const home = join(dir, name);
+  mkdirSync(join(home, ".gemini"), { recursive: true });
+  for (const [file, text] of Object.entries(files)) writeFileSync(join(home, ".gemini", file), text);
+  return home;
+}
+const signedInHome = cliHome("home-signed-in", {
+  "settings.json": JSON.stringify({ security: { auth: { selectedType: "oauth-personal" } } }),
+  "oauth_creds.json": "{}",
+});
+const signedOutHome = cliHome("home-signed-out", { "settings.json": "{}" });
+
 function session(script: ScriptEntry[], bin: string, extra: Partial<SessionOptions> = {}) {
   return startSession({
     model: scriptedModel(script), tools, mode: "bypass", workDir: dir,
-    helpers: { geminiCliBin: bin, cancelGraceMs: 200 }, ...extra,
+    helpers: { geminiCliBin: bin, geminiCliHome: signedInHome, cancelGraceMs: 200 }, ...extra,
   });
 }
 
@@ -250,6 +264,30 @@ describe("Gemini CLI missing or not signed in", () => {
     expect(end.state).toBe("failed");
     expect(end.message).toContain("npm install -g @google/gemini-cli");
     await s.close();
+  });
+
+  test("installed but not signed in fails the job with how to sign in, without running the CLI", async () => {
+    const s = await session([[startHelper("c1")], say("Started."), say("It failed.")], ok, {
+      helpers: { geminiCliBin: ok, geminiCliHome: signedOutHome },
+    });
+    rmSync(join(dir, "ok-args"), { force: true });
+    const rec = recorder(s);
+    await s.sendText("Fix the bug.");
+    const end = (await rec.until(jobEnded("job-1"))) as EventOf<"job.state">;
+    expect(end.state).toBe("failed");
+    expect(end.message).toContain("isn't signed in");
+    expect(existsSync(join(dir, "ok-args"))).toBe(false);
+    await s.close();
+  });
+
+  test("the status check tells missing, signed out and ready apart", () => {
+    expect(geminiCliStatus({ bin: join(dir, "nope"), home: signedInHome })).toEqual({ ok: false, installed: false, fix: INSTALL_FIX });
+    expect(geminiCliStatus({ bin: ok, home: signedOutHome })).toEqual({ ok: false, installed: true, bin: ok, fix: SIGN_IN_FIX });
+    expect(geminiCliStatus({ bin: ok, home: signedInHome })).toEqual({ ok: true, installed: true, bin: ok });
+    const apiKeyHome = cliHome("home-api-key", {
+      "settings.json": JSON.stringify({ security: { auth: { selectedType: "gemini-api-key" } } }),
+    });
+    expect(geminiCliStatus({ bin: ok, home: apiKeyHome }).ok).toBe(true);
   });
 
   test("exit code 41 fails the job with how to sign in", async () => {

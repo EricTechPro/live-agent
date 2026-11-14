@@ -39,6 +39,8 @@ export interface HelperSettings {
   geminiCli: boolean;
   /** The Gemini CLI binary. Default "gemini" on PATH. */
   geminiCliBin: string;
+  /** Where Gemini CLI keeps `.gemini/`. Default: the user's home. */
+  geminiCliHome?: string;
   /** Wait this long after SIGINT before SIGKILL when cancelling. */
   cancelGraceMs?: number;
 }

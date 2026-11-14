@@ -33,7 +33,7 @@ export interface SessionOptions {
   /** Use exactly these tools instead of loading a folder (handy in tests). */
   tools?: Tool[];
   /** Where helper CLIs live (tests point these at fake scripts). */
-  helpers?: { geminiCliBin?: string; cancelGraceMs?: number };
+  helpers?: { geminiCliBin?: string; geminiCliHome?: string; cancelGraceMs?: number };
 }
 
 export interface AgentSession {
@@ -172,6 +172,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       helpers: {
         geminiCli: config.helpers.geminiCli,
         geminiCliBin: options.helpers?.geminiCliBin ?? "gemini",
+        geminiCliHome: options.helpers?.geminiCliHome,
         cancelGraceMs: options.helpers?.cancelGraceMs,
       },
     };

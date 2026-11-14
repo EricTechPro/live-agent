@@ -34,6 +34,7 @@ export default defineTool<{ task: string; folder?: string }>({
         task,
         cwd: resolve(workDir, folder ?? "."),
         bin: helpers.geminiCliBin,
+        home: helpers.geminiCliHome,
         cancelGraceMs: helpers.cancelGraceMs,
       }),
     );

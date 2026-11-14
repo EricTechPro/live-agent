@@ -12,7 +12,9 @@
 //   would bill the user's key instead of their free Google sign-in.
 // - Spawned in its own process group, so cancel stops the CLI and everything it
 //   started (shell commands, MCP servers).
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { JobSpec } from "../core/jobs.ts";
 
 export const INSTALL_FIX = "Gemini CLI is not installed. Install it with: npm install -g @google/gemini-cli";
@@ -26,6 +28,8 @@ export interface GeminiCliOptions {
   cwd: string;
   /** The Gemini CLI binary: a name on PATH or a path. Default "gemini". Tests point it at a fake script. */
   bin?: string;
+  /** Where Gemini CLI keeps `.gemini/` (its GEMINI_CLI_HOME). Default: the user's home. */
+  home?: string;
   /** How long to wait after SIGINT before SIGKILL on cancel. Default 3000 ms. */
   cancelGraceMs?: number;
 }
@@ -36,17 +40,45 @@ export function findGeminiCli(bin = "gemini"): string | undefined {
   return Bun.which(bin) ?? undefined;
 }
 
+export type GeminiCliStatus =
+  | { ok: true; installed: true; bin: string }
+  | { ok: false; installed: true; bin: string; fix: string }
+  | { ok: false; installed: false; fix: string };
+
+/**
+ * Installed and signed in? Cheap: no network, no model call (the doctor uses it too).
+ * A heuristic from `~/.gemini`: the real answer is exit code 41 at run time,
+ * which maps to the same fix.
+ */
+export function geminiCliStatus({ bin = "gemini", home }: { bin?: string; home?: string } = {}): GeminiCliStatus {
+  const path = findGeminiCli(bin);
+  if (!path) return { ok: false, installed: false, fix: INSTALL_FIX };
+  const dir = join(home ?? process.env.GEMINI_CLI_HOME ?? homedir(), ".gemini");
+  let selected: string | undefined;
+  try {
+    selected = JSON.parse(readFileSync(join(dir, "settings.json"), "utf8"))?.security?.auth?.selectedType;
+  } catch {}
+  const oauth = existsSync(join(dir, "oauth_creds.json"));
+  // Our API key is never passed to the helper, so it does not count as signed in.
+  const signedIn = selected
+    ? selected !== "oauth-personal" || oauth
+    : oauth || process.env.GOOGLE_GENAI_USE_GCA === "true";
+  return signedIn ? { ok: true, installed: true, bin: path } : { ok: false, installed: true, bin: path, fix: SIGN_IN_FIX };
+}
+
 const MAX_SUMMARY = 2000;
 
-export function geminiCliJob({ task, cwd, bin = "gemini", cancelGraceMs = 3000 }: GeminiCliOptions): JobSpec {
+export function geminiCliJob({ task, cwd, bin = "gemini", home, cancelGraceMs = 3000 }: GeminiCliOptions): JobSpec {
   return {
     kind: "gemini-cli",
     title: task.length > 80 ? `${task.slice(0, 77)}...` : task,
     async run({ signal }) {
-      const path = findGeminiCli(bin);
-      if (!path) throw new Error(INSTALL_FIX);
+      const status = geminiCliStatus({ bin, home });
+      if (!status.ok) throw new Error(status.fix);
+      const path = status.bin;
 
       const { GEMINI_API_KEY: _k1, GOOGLE_API_KEY: _k2, ...env } = process.env;
+      if (home) env.GEMINI_CLI_HOME = home;
       const proc = Bun.spawn(
         [path, "-p", task, "--output-format", "stream-json", "--approval-mode", "yolo", "--skip-trust"],
         {
