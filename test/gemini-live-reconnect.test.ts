@@ -3,6 +3,7 @@
 // event stream, with a fake Live server in place of the websocket.
 import { describe, expect, test } from "bun:test";
 import type { LiveConnectParameters, LiveServerMessage } from "@google/genai";
+import { defaultConfig } from "../src/config/index.ts";
 import { startSession } from "../src/core/agent.ts";
 import type { AgentEvent } from "../src/core/events.ts";
 import { geminiLiveModel } from "../src/models/gemini-live.ts";
@@ -58,6 +59,18 @@ describe("Gemini Live connection", () => {
     expect(live.sockets[0]!.params.config).toEqual(
       expect.objectContaining({ sessionResumption: {}, contextWindowCompression: { slidingWindow: {} } }),
     );
+    await session.close();
+  });
+
+  test("speaks with the voice named in the config", async () => {
+    const live = fakeLive();
+    const session = await startSession({
+      model: geminiLiveModel({ apiKey: "test", connect: live.connect }),
+      config: { ...defaultConfig(), voice: "Kore" },
+      tools: [], chatEndNote: false,
+    });
+
+    expect(live.sockets[0]!.params.config?.speechConfig).toEqual({ voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } });
     await session.close();
   });
 

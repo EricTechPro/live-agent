@@ -28,3 +28,4 @@ Notes:
 - The window gets only a 10-minute LiveKit JWT. The core's own Gemini Live session connects with a single-use ephemeral token (v1alpha). The real key stays in the token service.
 - LiveKit runs with a random API secret on every launch, not dev mode's well-known `devkey/secret`, and binds to 127.0.0.1 only.
 - Known gap: in Ask me mode, a spoken "yes" does not yet approve a waiting tool call. Only a typed yes does (ticket 02's approval path is text-only).
+- 2026-11-14 review fix: a spoken yes/no now answers a waiting tool call like a typed one. The Live adapter reconnects on its own (session resumption, goAway hand-over, context compression), and a dropped connection ends the turn in flight instead of hanging it. Config `voice` is sent as speechConfig.

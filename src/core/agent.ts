@@ -520,6 +520,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
 
   const modelSession = await options.model.connect(onModelEvent, {
     tools: tools.map(({ name, description, parameters }) => ({ name, description, parameters })),
+    voice: config.voice,
   });
 
   return {
