@@ -21,7 +21,7 @@ import type { AgentEvent, EventOf } from "./events.ts";
 import { createJobs, type JobInfo, type Jobs } from "./jobs.ts";
 import type { Model, ModelEvent, ToolResponse } from "./model.ts";
 import { loadTools } from "./registry.ts";
-import { decide, explain, type SafetyMode, type SafetyOverrides } from "./safety.ts";
+import { decide, explain, nextMode, type SafetyMode, type SafetyOverrides } from "./safety.ts";
 import type { Tool, ToolContext } from "./tool.ts";
 
 export interface SessionOptions {
@@ -62,6 +62,15 @@ export interface AgentSession {
    * job board's cancel button), list them. State changes arrive as `job.state` events.
    */
   jobs: Pick<Jobs, "submit" | "cancel" | "list">;
+  /** The safety mode the gate uses right now. */
+  mode(): SafetyMode;
+  /**
+   * Switch the safety mode (the window's dropdown). The very next tool call is
+   * gated with it, and a `mode.changed` event goes on the stream.
+   */
+  setMode(mode: SafetyMode): void;
+  /** Shift+Tab: Ask me -> Auto edits -> Bypass -> Ask me. Returns the new mode. */
+  cycleMode(): SafetyMode;
   /** Stops running jobs, then closes the model connection. */
   close(): Promise<void>;
 }
@@ -78,7 +87,8 @@ const SUMMARY_REQUEST =
 
 export async function startSession(options: SessionOptions): Promise<AgentSession> {
   const config = options.config ?? defaultConfig();
-  const mode = options.mode ?? config.safety.mode;
+  // `let`: the window can switch it while the app runs (setMode); the gate reads it per call.
+  let mode = options.mode ?? config.safety.mode;
   const overrides = options.overrides ?? config.safety.overrides;
   const workDir = options.workDir ?? process.cwd();
   const brainPath = brainRoot(config.brainPath);
@@ -178,6 +188,11 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     // A non-silent answer makes the model speak again, so the turn waits for it.
     if (extra.scheduling !== "silent" && turn) turn.awaiting++;
     modelSession.sendToolResponse({ id: call.id, name: call.name, response, ...extra });
+  }
+
+  function setMode(next: SafetyMode) {
+    mode = next;
+    emit({ type: "mode.changed", mode });
   }
 
   function useNotes(paths: string[]) {
@@ -422,6 +437,12 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       return () => audioListeners.delete(listener);
     },
     jobs: { submit: jobs.submit, cancel: jobs.cancel, list: jobs.list },
+    mode: () => mode,
+    setMode,
+    cycleMode() {
+      setMode(nextMode(mode));
+      return mode;
+    },
     // Stops running jobs and writes the chat-end note side by side, so close
     // stays prompt. `closed` first: a job ending now is not announced to the
     // model, which is busy writing the chat summary.

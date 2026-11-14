@@ -13,6 +13,9 @@
 //   GET  /events   -> Server-Sent Events, one AgentEvent (JSON) per `data:` line
 //                     (EventSource cannot set headers, so `?token=` works here)
 //   POST /text     -> { text } in, { events } out: a typed turn
+//   GET  /mode     -> { mode }: the safety mode now
+//   POST /mode     -> { mode } or { cycle: true } in, { mode } out; emits `mode.changed`
+//   POST /jobs/:id/cancel -> { cancelled } (404 for an unknown id)
 //
 // Why HTTP + SSE (not a WebSocket): the window only reads the stream, and
 // fetch/EventSource exist in every webview with no library.
@@ -20,6 +23,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { dispose } from "@livekit/rtc-node";
 import { startSession, type SessionOptions } from "./core/agent.ts";
 import type { Model } from "./core/model.ts";
+import { MODES, type SafetyMode } from "./core/safety.ts";
 import { joinVoiceRoom } from "./voice/livekit-bridge.ts";
 import { startLiveKit, type LiveKitServer } from "./voice/livekit-runner.ts";
 import { createTokenService, type TokenService } from "./voice/token-service.ts";
@@ -112,6 +116,31 @@ export async function startApp(options: AppOptions): Promise<App> {
           } catch (err) {
             return Response.json({ error: String((err as Error).message ?? err) }, { status: 409, headers: CORS });
           }
+        }
+        // The safety mode (ticket 10). The window draws it from `mode.changed` events;
+        // GET is only for the first draw, before any change.
+        if (url.pathname === "/mode" && req.method === "GET") {
+          return Response.json({ mode: session.mode() }, { headers: CORS });
+        }
+        if (url.pathname === "/mode" && req.method === "POST") {
+          const body = (await req.json().catch(() => ({}))) as { mode?: unknown; cycle?: unknown };
+          if (body.cycle === true) session.cycleMode();
+          else if (typeof body.mode === "string" && (MODES as readonly string[]).includes(body.mode)) {
+            session.setMode(body.mode as SafetyMode);
+          } else {
+            return Response.json({ error: `send { mode: ${MODES.map((m) => `"${m}"`).join(" | ")} } or { cycle: true }` }, { status: 400, headers: CORS });
+          }
+          return Response.json({ mode: session.mode() }, { headers: CORS });
+        }
+        // The job board's cancel button (ticket 10).
+        const cancel = req.method === "POST" ? url.pathname.match(/^\/jobs\/([^/]+)\/cancel$/) : null;
+        if (cancel) {
+          const id = decodeURIComponent(cancel[1]!);
+          if (!session.jobs.list().some((job) => job.id === id)) {
+            return Response.json({ error: `no job ${id}` }, { status: 404, headers: CORS });
+          }
+          // false = it had already ended; the board already shows how.
+          return Response.json({ cancelled: session.jobs.cancel(id) }, { headers: CORS });
         }
         if (req.method === "GET" && url.pathname === "/events") {
           let off = () => {};

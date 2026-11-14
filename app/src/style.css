@@ -64,3 +64,33 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   width: 100%; font: inherit; color: var(--text); background: var(--panel);
   border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
 }
+
+/* ---- Job board (ticket 10) ---- */
+.jobs { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.jobs-title { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.job-empty { margin: 0; color: var(--muted); font-size: 13px; }
+.job-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.job { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.job-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.job-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job-status { font-size: 12px; color: var(--muted); flex: none; }
+.job[data-status="working"] .job-status { color: var(--user); }
+.job[data-status="done"] .job-status { color: #7be0a8; }
+.job[data-status="failed"] .job-status { color: var(--note); }
+.job[data-status="cancelled"], .job[data-status="waiting"] { opacity: .8; }
+.job-message { margin: 0; font-size: 12px; color: var(--muted); white-space: pre-wrap; max-height: 6em; overflow: auto; }
+.job-cancel {
+  align-self: flex-start; font: inherit; font-size: 12px; color: var(--text); background: transparent;
+  border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; cursor: pointer;
+}
+.job-cancel:hover { border-color: var(--note); }
+.job-cancel:disabled { opacity: .4; cursor: default; }
+
+/* ---- Bottom bar (ticket 10) ---- */
+.bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 16px; font-size: 12px; }
+.bar-notes { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.bar-label { color: var(--muted); }
+.bar-note { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; }
+.bar-mode-wrap { display: flex; gap: 6px; align-items: center; color: var(--muted); flex: none; }
+.bar-mode { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; }
+.bar[data-mode="bypass"] .bar-mode { border-color: var(--note); }

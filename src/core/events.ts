@@ -54,6 +54,11 @@ export type AgentEvent =
    * `close()` writes about the chat). Ticket 07 queues the tidy job on the "chat-end" one.
    */
   | { type: "brain.write"; path: string; cause: "tool" | "chat-end"; tool?: string }
+  /**
+   * The safety mode changed (the window's dropdown or Shift+Tab). The window draws
+   * the mode only from this event, so the dropdown and Shift+Tab never disagree.
+   */
+  | { type: "mode.changed"; mode: SafetyMode }
   /** The model finished its reply. `reply` is the whole reply, joined for you. */
   | { type: "turn.done"; reply: string }
   /** Something went wrong in the session. The session may still be usable. */

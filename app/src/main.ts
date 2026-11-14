@@ -1,6 +1,7 @@
 // The main window. It only renders: core events in, orb + transcript out.
 // No agent logic here; the core decides everything (see docs/spec.md, App shell).
 import { Room, RoomEvent, Track, type Participant } from "livekit-client";
+import { mountBoardAndBar } from "./board-view.ts";
 import { connectCore, onCoreDown, waitForCore, type CoreClient } from "./core-client.ts";
 import { nextOrb, orbStart, type Orb, type OrbInput, type OrbState } from "./orb-state.ts";
 import { addToTranscript, emptyTranscript, type Transcript } from "./transcript.ts";
@@ -121,6 +122,7 @@ async function boot() {
     transcript = addToTranscript(transcript, event);
     renderTranscript();
   });
+  mountBoardAndBar(core, $("jobs"), $("bar"));
   feedOrb({ type: "core.ready" });
 
   talkBtn.disabled = false;

@@ -3,6 +3,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { startApp, type App } from "../src/app.ts";
 import { scriptedModel } from "../src/models/scripted.ts";
+import { defineTool } from "../src/core/tool.ts";
 
 const LIVEKIT_PORT = 7920;
 const GEMINI_KEY = "AIza-real-key-must-never-reach-the-window";
@@ -86,4 +87,102 @@ describe("stopping the app", () => {
     const up = await fetch(`http://127.0.0.1:${LIVEKIT_PORT + 10}`).then(() => true, () => false);
     expect(up).toBe(false);
   }, 15_000);
+});
+
+// Ticket 10: the window's job board and mode switch talk to these endpoints.
+describe("window commands: cancel a job, switch the mode", () => {
+  // A tool that starts a job which runs until it is cancelled.
+  const startWait = defineTool({
+    name: "start_wait",
+    description: "start a job that waits",
+    risk: "read",
+    parameters: { type: "object", properties: {} },
+    run: (_args, { jobs }) => ({
+      jobId: jobs!.submit({
+        kind: "test",
+        title: "wait for cancel",
+        run: ({ signal }) => new Promise((_ok, fail) => signal.addEventListener("abort", () => fail(new Error("stopped")))),
+      }),
+    }),
+  });
+  let cmd: App;
+  beforeAll(async () => {
+    cmd = await startApp({
+      model: scriptedModel([
+        [{ type: "tool.call", id: "c1", name: "start_wait", args: {} }],
+        [{ type: "text", text: "Started." }],
+        [{ type: "text", text: "It was cancelled." }],
+      ]),
+      livekitPort: LIVEKIT_PORT + 20,
+      tools: [startWait],
+      mode: "auto-edits",
+    });
+  });
+  afterAll(() => cmd.stop());
+  const post = (path: string, body?: unknown, token = cmd.launchToken) =>
+    fetch(`${cmd.url}${path}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  const events = () => {
+    const seen: { type: string; [k: string]: unknown }[] = [];
+    const ready = fetch(`${cmd.url}/events?token=${cmd.launchToken}`).then(async (res) => {
+      const reader = res.body!.getReader();
+      (async () => {
+        let buf = "";
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) return;
+          buf += new TextDecoder().decode(value);
+          const parts = buf.split("\n\n");
+          buf = parts.pop()!;
+          for (const p of parts) if (p.startsWith("data: ")) seen.push(JSON.parse(p.slice(6)));
+        }
+      })();
+      return reader;
+    });
+    return { seen, ready };
+  };
+  const until = async (check: () => boolean) => {
+    for (let i = 0; i < 100 && !check(); i++) await Bun.sleep(20);
+    expect(check()).toBe(true);
+  };
+
+  test("GET /mode says the current mode; POST /mode switches it and announces it", async () => {
+    const stream = events();
+    const reader = await stream.ready;
+    const now = await fetch(`${cmd.url}/mode`, { headers: { Authorization: `Bearer ${cmd.launchToken}` } });
+    expect(await now.json()).toEqual({ mode: "auto-edits" });
+
+    expect(await (await post("/mode", { mode: "bypass" })).json()).toEqual({ mode: "bypass" });
+    expect(await (await post("/mode", { cycle: true })).json()).toEqual({ mode: "ask-me" });
+    await until(() => stream.seen.filter((e) => e.type === "mode.changed").length === 2);
+    expect(stream.seen.filter((e) => e.type === "mode.changed")).toEqual([
+      { type: "mode.changed", mode: "bypass" },
+      { type: "mode.changed", mode: "ask-me" },
+    ]);
+    expect((await post("/mode", { mode: "yolo" })).status).toBe(400);
+    await post("/mode", { mode: "auto-edits" });
+    await reader.cancel();
+  });
+
+  test("POST /jobs/:id/cancel cancels that job; an unknown id is a 404", async () => {
+    const stream = events();
+    const reader = await stream.ready;
+    await post("/text", { text: "start the wait job" });
+    await until(() => stream.seen.some((e) => e.type === "job.state" && e.state === "running"));
+
+    expect((await post("/jobs/job-99/cancel")).status).toBe(404);
+    const res = await post("/jobs/job-1/cancel");
+    expect(await res.json()).toEqual({ cancelled: true });
+    await until(() => stream.seen.some((e) => e.type === "job.state" && e.state === "cancelled"));
+    await reader.cancel();
+  });
+
+  test("both commands need the per-launch token", async () => {
+    expect((await post("/mode", { mode: "bypass" }, "guess")).status).toBe(401);
+    expect((await post("/jobs/job-1/cancel", undefined, "guess")).status).toBe(401);
+    expect((await fetch(`${cmd.url}/mode`)).status).toBe(401);
+  });
 });
