@@ -1,35 +1,47 @@
 // A scripted fake model for fast tests: no network, no key, same seam as Gemini Live.
 //
 //   scriptedModel([
-//     [{ type: "text", text: "Hi!" }],        // reply to the 1st user turn
-//     [{ type: "text", text: "Sure." }],      // reply to the 2nd user turn
+//     [{ type: "text", text: "Hi!" }],                                   // reply to the 1st input
+//     [{ type: "tool.call", id: "c1", name: "read_file", args: { path: "a.md" } }],
+//     (input) => [{ type: "text", text: `Got ${JSON.stringify(input)}` }], // reply built from the input
 //   ])
 //
-// Why a script of ModelEvents (not just reply strings): later tickets need the
-// fake to "decide" to call tools, so they add a `tool.call` ModelEvent and put
-// it in the script. The fake itself does not need to change.
-import type { Model, ModelEvent } from "../core/model.ts";
+// One script entry per input the model would answer: every user text turn, and
+// every tool response except "silent" ones (those only add to the context, the
+// same as Gemini Live's SILENT scheduling). An entry can be a function of the
+// input, so a test can prove a tool's output really reached the model.
+import type { Model, ModelEvent, ModelInput } from "../core/model.ts";
 
-export function scriptedModel(script: ModelEvent[][]): Model {
+export type ScriptEntry = ModelEvent[] | ((input: ModelInput) => ModelEvent[]);
+
+export function scriptedModel(script: ScriptEntry[]): Model {
   let next = 0;
   return {
     async connect(onEvent) {
+      function reply(input: ModelInput) {
+        const entry = script[next++];
+        if (!entry) {
+          onEvent({ type: "error", message: `script has no reply for input ${next}` });
+          onEvent({ type: "turn.complete" });
+          return;
+        }
+        // Reply on a later tick, like a real model over a socket, so tests
+        // never depend on events arriving before the send returns.
+        queueMicrotask(() => {
+          const events = typeof entry === "function" ? entry(input) : entry;
+          for (const event of events) onEvent(event);
+          // Every reply ends; the script only lists `turn.complete` when it
+          // wants it somewhere unusual.
+          if (!events.some((e) => e.type === "turn.complete")) onEvent({ type: "turn.complete" });
+        });
+      }
       return {
-        sendText() {
-          const reply = script[next++];
-          if (!reply) {
-            onEvent({ type: "error", message: `script has no reply for turn ${next}` });
-            onEvent({ type: "turn.complete" });
-            return;
-          }
-          // Reply on a later tick, like a real model over a socket, so tests
-          // never depend on events arriving before `sendText` returns.
-          queueMicrotask(() => {
-            for (const event of reply) onEvent(event);
-            // Every turn ends; the script only lists `turn.complete` when it
-            // wants it somewhere unusual.
-            if (!reply.some((e) => e.type === "turn.complete")) onEvent({ type: "turn.complete" });
-          });
+        sendText(text) {
+          reply({ type: "text", text });
+        },
+        sendToolResponse(response) {
+          if (response.scheduling === "silent") return;
+          reply({ type: "tool.response", ...response });
         },
         async close() {},
       };

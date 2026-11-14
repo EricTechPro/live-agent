@@ -4,13 +4,13 @@
 
 **Blocked by:** 01 Text turn through the agent core
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Priority:** must-have
 
-- [ ] Asking about a named file produces a tool-call event and an answer that uses its content
-- [ ] Fast tests cover every risk class in every mode and match the spec's mode table
-- [ ] A blocked call produces a block verdict event and a spoken-style explanation, and the tool does not run
-- [ ] In Ask me mode, an ask verdict waits for a yes turn, and a yes lets the tool run
-- [ ] Every tool call, allowed or not, appears in the event stream
-- [ ] Adding a new tool means dropping one file in the tools folder
+- [x] Asking about a named file produces a tool-call event and an answer that uses its content
+- [x] Fast tests cover every risk class in every mode and match the spec's mode table
+- [x] A blocked call produces a block verdict event and a spoken-style explanation, and the tool does not run
+- [x] In Ask me mode, an ask verdict waits for a yes turn, and a yes lets the tool run
+- [x] Every tool call, allowed or not, appears in the event stream
+- [x] Adding a new tool means dropping one file in the tools folder

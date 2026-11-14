@@ -3,7 +3,13 @@
 // Gemini Live speaks (AUDIO out). We also ask it for an output transcription,
 // which is the text of what it said; that text becomes our transcript events.
 // The audio itself is ignored for now; voice arrives with ticket 08.
-import { GoogleGenAI, Modality, type LiveServerMessage } from "@google/genai";
+import {
+  Behavior,
+  FunctionResponseScheduling,
+  GoogleGenAI,
+  Modality,
+  type LiveServerMessage,
+} from "@google/genai";
 import type { Model, ModelEvent } from "../core/model.ts";
 
 export const DEFAULT_LIVE_MODEL = "gemini-3.8-live";
@@ -18,7 +24,7 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
   const ai = new GoogleGenAI({ apiKey: options.apiKey });
 
   return {
-    async connect(onEvent) {
+    async connect(onEvent, connectOptions) {
       // Set while *we* are closing, so our own goodbye is not reported as an error.
       let closing = false;
 
@@ -27,6 +33,20 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
         config: {
           responseModalities: [Modality.AUDIO],
           outputAudioTranscription: {},
+          // Every tool is NON_BLOCKING: the model keeps talking while a tool
+          // runs, and we send the answer whenever it is ready.
+          tools: connectOptions?.tools.length
+            ? [
+                {
+                  functionDeclarations: connectOptions.tools.map((t) => ({
+                    name: t.name,
+                    description: t.description,
+                    parametersJsonSchema: t.parameters,
+                    behavior: Behavior.NON_BLOCKING,
+                  })),
+                },
+              ]
+            : undefined,
         },
         callbacks: {
           onmessage: (message) => toModelEvents(message).forEach(onEvent),
@@ -47,6 +67,22 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
           // sendClientContent as "prefill history". One path for both.
           session.sendRealtimeInput({ text });
         },
+        sendToolResponse({ id, name, response, scheduling, willContinue }) {
+          session.sendToolResponse({
+            functionResponses: [
+              {
+                id,
+                name,
+                response,
+                scheduling:
+                  scheduling === "silent"
+                    ? FunctionResponseScheduling.SILENT
+                    : FunctionResponseScheduling.WHEN_IDLE,
+                ...(willContinue === undefined ? {} : { willContinue }),
+              },
+            ],
+          });
+        },
         async close() {
           closing = true;
           session.close();
@@ -56,12 +92,15 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
   };
 }
 
-// One server message can carry several things at once: a transcription chunk
-// and the end of the turn, for example. Order matters: text first, then done.
+// One server message can carry several things at once: tool calls, a
+// transcription chunk and the end of the turn. Order matters: done comes last.
 function toModelEvents(message: LiveServerMessage): ModelEvent[] {
-  const content = message.serverContent;
-  if (!content) return [];
   const events: ModelEvent[] = [];
+  for (const call of message.toolCall?.functionCalls ?? []) {
+    events.push({ type: "tool.call", id: call.id ?? "", name: call.name ?? "", args: call.args ?? {} });
+  }
+  const content = message.serverContent;
+  if (!content) return events;
   const text = content.outputTranscription?.text;
   if (text) events.push({ type: "text", text });
   if (content.turnComplete) events.push({ type: "turn.complete" });
