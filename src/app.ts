@@ -13,6 +13,8 @@
 //   GET  /events   -> Server-Sent Events, one AgentEvent (JSON) per `data:` line
 //                     (EventSource cannot set headers, so `?token=` works here)
 //   POST /text     -> { text } in, { events } out: a typed turn
+//   GET  /setup    -> { needed, configPath }: is this a first launch (no config file)?
+//   POST /setup    -> { ifNeeded? } in, { events } out: start the setup chat (ticket 12)
 //
 // Why HTTP + SSE (not a WebSocket): the window only reads the stream, and
 // fetch/EventSource exist in every webview with no library.
@@ -20,6 +22,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { dispose } from "@livekit/rtc-node";
 import { startSession, type SessionOptions } from "./core/agent.ts";
 import type { Model } from "./core/model.ts";
+import { defaultConfigPath } from "./config/index.ts";
 import { joinVoiceRoom } from "./voice/livekit-bridge.ts";
 import { startLiveKit, type LiveKitServer } from "./voice/livekit-runner.ts";
 import { createTokenService, type TokenService } from "./voice/token-service.ts";
@@ -109,6 +112,20 @@ export async function startApp(options: AppOptions): Promise<App> {
           }
           try {
             return Response.json({ events: await session.sendText(text) }, { headers: CORS });
+          } catch (err) {
+            return Response.json({ error: String((err as Error).message ?? err) }, { status: 409, headers: CORS });
+          }
+        }
+        // The setup chat (ticket 12). The window POSTs { ifNeeded: true } on boot, so
+        // the core decides: setup starts only on a first launch (no config file).
+        // Its Setup button POSTs {} to run setup again.
+        if (req.method === "GET" && url.pathname === "/setup") {
+          return Response.json({ needed: session.setup.needed(), configPath: sessionOptions.configPath ?? defaultConfigPath() }, { headers: CORS });
+        }
+        if (req.method === "POST" && url.pathname === "/setup") {
+          const { ifNeeded } = ((await req.json().catch(() => ({}))) ?? {}) as { ifNeeded?: unknown };
+          try {
+            return Response.json({ events: await session.setup.start({ ifNeeded: ifNeeded === true }) }, { headers: CORS });
           } catch (err) {
             return Response.json({ error: String((err as Error).message ?? err) }, { status: 409, headers: CORS });
           }

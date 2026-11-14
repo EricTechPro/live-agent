@@ -13,6 +13,7 @@
 // Why a risk class on every tool: the safety gate decides by risk class and
 // mode (see src/core/safety.ts), so a new tool is safe by declaring one word.
 
+import type { Config } from "../config/index.ts";
 import type { Jobs } from "./jobs.ts";
 
 export type RiskClass = "read" | "edit" | "command" | "helper";
@@ -34,6 +35,8 @@ export interface ToolContext {
   jobs?: Pick<Jobs, "submit" | "cancel" | "list">;
   /** Helper settings: which helpers are on (config `helpers`) and where their CLIs are. */
   helpers?: HelperSettings;
+  /** The setup chat (ticket 12): where the config file lives, and "it was saved" (the core emits `setup.saved`). */
+  setup?: { configPath: string; saved(config: Config): void };
 }
 
 export interface HelperSettings {

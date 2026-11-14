@@ -12,6 +12,7 @@ const talkBtn = $<HTMLButtonElement>("talk");
 const transcriptEl = $<HTMLOListElement>("transcript");
 const typeForm = $<HTMLFormElement>("type");
 const typeInput = $<HTMLInputElement>("type-input");
+const setupBtn = $<HTMLButtonElement>("setup");
 
 const LABELS: Record<OrbState, string> = {
   connecting: "Starting…",
@@ -114,6 +115,7 @@ async function boot() {
     orbLabel.textContent = `Core stopped: ${reason}`;
     talkBtn.disabled = true;
     typeInput.disabled = true;
+    setupBtn.disabled = true;
   });
 
   core.onEvent((event) => {
@@ -141,6 +143,22 @@ async function boot() {
       feedOrb({ type: "turn.done", reply: "" });
     }
   };
+
+  // The setup chat (ticket 12). Its questions and answers are ordinary turns
+  // (typed or spoken); these two calls only start it.
+  setupBtn.disabled = false;
+  setupBtn.onclick = () => runSetup(core, false);
+  // First launch: the core starts setup only if there is no config file yet.
+  runSetup(core, true);
+}
+
+async function runSetup(core: CoreClient, ifNeeded: boolean) {
+  try {
+    await core.startSetup(ifNeeded);
+  } catch (err) {
+    transcript = addToTranscript(transcript, { type: "error", message: `setup: ${(err as Error).message}` });
+    renderTranscript();
+  }
 }
 
 boot();

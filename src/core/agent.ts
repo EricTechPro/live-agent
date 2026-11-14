@@ -15,8 +15,10 @@
 // turn, and that turn puts the very same events on the stream as a text turn.
 // The model's voice itself comes out of `onAudio`, not the event stream: it is
 // binary and high-rate, and the stream stays plain JSON.
+import { existsSync } from "node:fs";
 import { brainRoot, saveRawNote } from "../brain/index.ts";
-import { defaultConfig, type Config } from "../config/index.ts";
+import { defaultConfig, defaultConfigPath, type Config } from "../config/index.ts";
+import { currentConfig, SETUP_TOOL, setupKickoff } from "../setup/index.ts";
 import type { AgentEvent, EventOf } from "./events.ts";
 import { createJobs, type JobInfo, type Jobs } from "./jobs.ts";
 import type { Model, ModelEvent, ToolResponse } from "./model.ts";
@@ -41,6 +43,10 @@ export interface SessionOptions {
   tools?: Tool[];
   /** How long `close()` waits for the model's chat summary before using the plain transcript. Default 8000. */
   summaryTimeoutMs?: number;
+  /** The config file the setup chat reads and writes. Default: `defaultConfigPath()`. */
+  configPath?: string;
+  /** Save a chat-end note into the brain on `close()`. Default true; `live-agent setup` turns it off. */
+  chatEndNote?: boolean;
   /** Where helper CLIs live (tests point these at fake scripts). */
   helpers?: { geminiCliBin?: string; geminiCliHome?: string; cancelGraceMs?: number };
 }
@@ -62,6 +68,18 @@ export interface AgentSession {
    * job board's cancel button), list them. State changes arrive as `job.state` events.
    */
   jobs: Pick<Jobs, "submit" | "cancel" | "list">;
+  /** The setup chat (ticket 12). */
+  setup: {
+    /** True when there is no config file yet: this is the first launch. */
+    needed(): boolean;
+    /**
+     * Start a setup chat: the model greets and asks the setup questions, then
+     * saves the answers with `save_setup`. Resolves with that first turn's
+     * events, starting with `setup.started`. With `ifNeeded`, does nothing
+     * (resolves []) when a config file already exists.
+     */
+    start(options?: { ifNeeded?: boolean }): Promise<AgentEvent[]>;
+  };
   /** Stops running jobs, then closes the model connection. */
   close(): Promise<void>;
 }
@@ -81,6 +99,9 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   const mode = options.mode ?? config.safety.mode;
   const overrides = options.overrides ?? config.safety.overrides;
   const workDir = options.workDir ?? process.cwd();
+  const configPath = options.configPath ?? defaultConfigPath();
+  // True from setup.start() until save_setup has written the file: the only time save_setup may run.
+  let setupActive = false;
   const brainPath = brainRoot(config.brainPath);
   const tools = options.tools ?? (await loadTools(options.toolsDir));
   const byName = new Map(tools.map((t) => [t.name, t]));
@@ -224,7 +245,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   // spec saves this note after every chat, in every mode, and it only ever
   // adds a new file to raw/. Ticket 07 queues the tidy job on its brain.write.
   async function saveChatEndNote(): Promise<string | null> {
-    if (!chat.length) return null;
+    if (!chat.length || options.chatEndNote === false) return null;
     // A turn still in flight means the model is busy: skip straight to the transcript.
     const summarised = turn ? "" : (await askForSummary()).trim();
     const text = summarised || chat.map((line) => `- ${line.role === "user" ? "You" : "Agent"}: ${line.text}`).join("\n");
@@ -257,6 +278,13 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         geminiCliBin: options.helpers?.geminiCliBin ?? "gemini",
         geminiCliHome: options.helpers?.geminiCliHome,
         cancelGraceMs: options.helpers?.cancelGraceMs,
+      },
+      setup: {
+        configPath,
+        saved(saved) {
+          setupActive = false;
+          emit({ type: "setup.saved", configPath, config: saved });
+        },
       },
     };
     // Why a promise chain (not await): the tool runs on its own while the
@@ -291,8 +319,17 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     }
 
     const input = { tool: call.name, args: call.args, risk: tool.risk, mode, overrides };
-    const verdict = decide(input);
-    const reason = explain(input, verdict);
+    let verdict = decide(input);
+    let reason = explain(input, verdict);
+    // save_setup skips the mode table (see tools/save-setup.ts): allowed only
+    // inside a setup chat the user started, blocked anywhere else. A per-tool
+    // override in the config still wins.
+    if (call.name === SETUP_TOOL && !overrides[call.name]) {
+      verdict = setupActive ? "allow" : "block";
+      reason = setupActive
+        ? "the user is answering the setup chat"
+        : "the config can only be changed in the setup chat the user starts";
+    }
     emit({ type: "safety.verdict", id: call.id, name: call.name, risk: tool.risk, mode, verdict, reason });
 
     switch (verdict) {
@@ -422,6 +459,33 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       return () => audioListeners.delete(listener);
     },
     jobs: { submit: jobs.submit, cancel: jobs.cancel, list: jobs.list },
+    setup: {
+      needed: () => !existsSync(configPath),
+      start({ ifNeeded = false } = {}) {
+        const firstRun = !existsSync(configPath);
+        if (ifNeeded && !firstRun) return Promise.resolve([]);
+        if (turn) return Promise.reject(new Error("a turn is already in progress"));
+        let kickoff: string;
+        try {
+          kickoff = setupKickoff(currentConfig(configPath), firstRun);
+        } catch (err) {
+          return Promise.reject(err);
+        }
+        setupActive = true;
+        return new Promise((done) => {
+          turn = { events: [], reply: "", awaiting: 0, running: 0, notes: new Set(), heard: "", done };
+          emit({ type: "setup.started", configPath, firstRun });
+          // Like any new turn, it declines calls still waiting for a yes.
+          for (const call of waiting.splice(0)) {
+            respond(call, "declined", { status: "declined", reason: "the user started setup" }, { scheduling: "silent" });
+          }
+          // The kickoff is the core speaking to the model, not the user: no
+          // transcript line, and it stays out of the chat-end note.
+          turn.awaiting++;
+          modelSession.sendText(kickoff);
+        });
+      },
+    },
     // Stops running jobs and writes the chat-end note side by side, so close
     // stays prompt. `closed` first: a job ending now is not announced to the
     // model, which is busy writing the chat summary.

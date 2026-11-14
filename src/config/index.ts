@@ -64,11 +64,20 @@ export function loadConfig(path: string = defaultConfigPath()): Config {
     throw new ConfigError(`${path} is not valid JSON: ${(error as Error).message}`);
   }
   try {
-    return fill(schema as SchemaNode, raw, "") as Config;
+    return checkConfig(raw);
   } catch (error) {
     if (error instanceof ConfigError) error.message = `${path}: ${error.message}`;
     throw error;
   }
+}
+
+/**
+ * Check a config value (the parsed JSON of a file) against the schema and fill
+ * in the defaults. Throws ConfigError naming the bad field. The setup chat
+ * uses this to check answers before it writes the file.
+ */
+export function checkConfig(raw: unknown): Config {
+  return fill(schema as SchemaNode, raw, "") as Config;
 }
 
 /** A config file that cannot be used. The message names the bad field. */

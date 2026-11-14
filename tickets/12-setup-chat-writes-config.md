@@ -4,11 +4,11 @@
 
 **Blocked by:** 03 Config file, 09 Desktop window: orb, transcript, talk out loud
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Priority:** must-have
 
-- [ ] First launch with no config starts the setup chat
-- [ ] Answers are saved to a config that passes the schema
-- [ ] Skipping a question keeps the default
-- [ ] Running setup again updates the existing config instead of wiping it
+- [x] First launch with no config starts the setup chat
+- [x] Answers are saved to a config that passes the schema
+- [x] Skipping a question keeps the default
+- [x] Running setup again updates the existing config instead of wiping it
