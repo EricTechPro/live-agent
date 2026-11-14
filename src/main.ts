@@ -14,6 +14,8 @@
 import { startApp, disposeNative } from "./app.ts";
 import { loadConfig } from "./config/index.ts";
 import { geminiLiveModel } from "./models/gemini-live.ts";
+import { geminiTidyModel } from "./models/gemini-tidy.ts";
+import { tidiesSettled } from "./brain/tidy.ts";
 import { existsSync } from "node:fs";
 import { TOOLS_DIR } from "./core/registry.ts";
 import { bundledTools } from "./core/bundled-tools.ts";
@@ -37,6 +39,8 @@ const app = await startApp({
   geminiApiKey: apiKey,
   // The Live session connects with a fresh single-use token, never the key itself.
   model: (tokens) => geminiLiveModel({ token: () => tokens.geminiToken() }),
+  // After each chat, a background job tidies new raw notes into wiki pages (ticket 07).
+  tidy: geminiTidyModel({ apiKey }),
   livekitPort: Number(process.env.LIVE_AGENT_LIVEKIT_PORT ?? 7880),
   port: Number(process.env.LIVE_AGENT_PORT ?? 0),
   // From the repo: read tools/ as usual. As the compiled sidecar there is no tools/ folder, so use the baked-in list.
@@ -57,6 +61,8 @@ async function shutdown() {
   if (stopping) return;
   stopping = true;
   await app.stop();
+  // Closing the chat queued a tidy job; give it a moment to finish (an unfinished tidy retries next launch).
+  await Promise.race([tidiesSettled(), Bun.sleep(30_000)]);
   await disposeNative();
   process.exit(0);
 }
