@@ -160,7 +160,7 @@ Two ways to run tests through that one seam:
 Also tested:
 
 - **Doctor**: run with a missing key, no LiveKit, no helper CLI; each gives the right fix.
-- **Installer**: fresh-machine run in CI creates the folder, sample brain and config.
+- **Installer**: fresh-machine run in CI creates the folder, sample brain and `.env`. The config is written by the first-run setup chat, by design, not by the installer.
 
 Not tested automatically: the Tauri window layout and the mini orb. Checked by hand before the talk.
 
