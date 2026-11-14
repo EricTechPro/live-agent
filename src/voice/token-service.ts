@@ -64,6 +64,11 @@ export function createTokenService(options: TokenServiceOptions): TokenService {
         // Lock the token to our model. The session config (tools, voice) is left
         // open because tools come from the tools folder at connect time.
         liveConnectConstraints: { model: gemini.model ?? DEFAULT_LIVE_MODEL },
+        // Why the empty list: leaving lockAdditionalFields out means "lock ALL
+        // fields" in @google/genai, so the server uses only the token's setup and
+        // silently drops the tools we send at connect time (the model then says
+        // "I cannot use external tools"). [] locks only what is set above.
+        lockAdditionalFields: [],
       });
       if (!created.name) throw new Error("Gemini did not return an ephemeral token");
       return created.name;

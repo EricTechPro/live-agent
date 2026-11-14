@@ -43,6 +43,9 @@ describe("token service", () => {
     expect(apiKey).toBe("AIza-real-key");
     expect(config.uses).toBe(1);
     expect(config.liveConnectConstraints.model).toBe("gemini-3.8-live");
+    // Only the model is locked; leaving this out locks everything and the
+    // server drops the tools sent at connect time (verified live).
+    expect(config.lockAdditionalFields).toEqual([]);
     expect(Date.parse(config.newSessionExpireTime) - Date.now()).toBeLessThanOrEqual(2 * 60_000);
     expect(Date.parse(config.expireTime) - Date.now()).toBeLessThanOrEqual(60 * 60_000);
   });
