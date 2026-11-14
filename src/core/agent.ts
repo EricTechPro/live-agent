@@ -172,8 +172,33 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     notes: Set<string>;
     /** What the user said in a voice turn (its transcription arrives in pieces). */
     heard: string;
+    /** Calls that waited for a yes when this turn began: the user's words answer them. */
+    answering: ToolCall[];
     done: (events: AgentEvent[]) => void;
   } | null = null;
+
+  // Every turn starts the same way; `done` is how its sender hears it ended.
+  function newTurn(done: (events: AgentEvent[]) => void = () => {}): NonNullable<typeof turn> {
+    return { events: [], reply: "", awaiting: 0, running: 0, notes: new Set(), heard: "", answering: [], done };
+  }
+
+  // A yes runs what was waiting. The tool's answer tells the model it was approved.
+  function approve(calls: ToolCall[]) {
+    for (const call of calls) {
+      const tool = byName.get(call.name)!;
+      emit({
+        type: "safety.verdict", id: call.id, name: call.name, risk: tool.risk, mode,
+        verdict: "allow", reason: "the user said yes",
+      });
+      run(call, tool);
+    }
+  }
+
+  // Anything else declines. Silent: the model hears it with the user's words,
+  // and answers both at once.
+  function decline(calls: ToolCall[], reason: string) {
+    for (const call of calls) respond(call, "declined", { status: "declined", reason }, { scheduling: "silent" });
+  }
 
   // Calls the gate said "ask" about, waiting for the user's next turn.
   let waiting: ToolCall[] = [];
@@ -198,6 +223,11 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   function finishTurnIfIdle() {
     if (!turn || turn.awaiting > 0 || turn.running > 0) return;
     const finished = turn;
+    // A spoken turn that was not a yes declines what waited. A turn with no
+    // words from the user (the model announcing a job) leaves it waiting.
+    const unanswered = finished.answering.splice(0);
+    if (finished.heard.trim()) decline(unanswered, "the user did not say yes");
+    else waiting.push(...unanswered);
     // Why once, at the end: the app shows "notes used" next to the finished answer.
     if (finished.notes.size) emit({ type: "notes.used", notes: [...finished.notes] });
     emit({ type: "turn.done", reply: finished.reply });
@@ -403,7 +433,10 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   // it does. It waits for one `turn.complete`, like a text turn. Nobody awaits
   // its promise; listeners see its events on the stream.
   function openVoiceTurn() {
-    if (!turn) turn = { events: [], reply: "", awaiting: 1, running: 0, notes: new Set(), heard: "", done: () => {} };
+    if (turn) return;
+    turn = newTurn();
+    turn.awaiting = 1;
+    turn.answering = waiting.splice(0);
   }
 
   function playAudio(out: AudioOut) {
@@ -421,6 +454,9 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         openVoiceTurn();
         turn!.heard += event.text;
         emit({ type: "transcript", role: "user", text: event.text });
+        // A spoken yes approves like a typed one. Why at the first match (not at
+        // turn end): "yes" leads the sentence, and the model is already replying.
+        if (turn!.answering.length && YES.test(turn!.heard)) approve(turn!.answering.splice(0));
         break;
       case "audio":
         openVoiceTurn();
@@ -462,7 +498,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   function onDisconnected(message: string) {
     emit({ type: "error", message });
     liveCalls.clear();
-    for (const call of waiting.splice(0)) {
+    for (const call of [...waiting.splice(0), ...(turn?.answering.splice(0) ?? [])]) {
       respond(call, "cancelled", { status: "cancelled", reason: "the connection to the model dropped" });
     }
     if (turn) turn.awaiting = turn.running = 0;
@@ -477,28 +513,17 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     sendText(text) {
       if (turn) return Promise.reject(new Error("a turn is already in progress"));
       return new Promise((done) => {
-        turn = { events: [], reply: "", awaiting: 0, running: 0, notes: new Set(), heard: "", done };
+        turn = newTurn(done);
         emit({ type: "transcript", role: "user", text });
         chat.push({ role: "user", text });
 
-        const pending = waiting;
-        waiting = [];
+        const pending = waiting.splice(0);
         if (pending.length && YES.test(text)) {
-          // A yes runs what was waiting. The tool's answer tells the model it
-          // was approved, so we do not also send the "yes" text.
-          for (const call of pending) {
-            const tool = byName.get(call.name)!;
-            emit({
-              type: "safety.verdict", id: call.id, name: call.name, risk: tool.risk, mode,
-              verdict: "allow", reason: "the user said yes",
-            });
-            run(call, tool);
-          }
+          // The tools' answers tell the model it was approved, so the "yes" text is not sent.
+          approve(pending);
           return;
         }
-        // Anything else declines. Silent: the model hears it with the user's words,
-        // and answers both at once.
-        for (const call of pending) respond(call, "declined", { status: "declined", reason: "the user did not say yes" }, { scheduling: "silent" });
+        decline(pending, "the user did not say yes");
         turn.awaiting++;
         modelSession.sendText(text);
       });
@@ -535,12 +560,10 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         }
         setupActive = true;
         return new Promise((done) => {
-          turn = { events: [], reply: "", awaiting: 0, running: 0, notes: new Set(), heard: "", done };
+          turn = newTurn(done);
           emit({ type: "setup.started", configPath, firstRun });
           // Like any new turn, it declines calls still waiting for a yes.
-          for (const call of waiting.splice(0)) {
-            respond(call, "declined", { status: "declined", reason: "the user started setup" }, { scheduling: "silent" });
-          }
+          decline(waiting.splice(0), "the user started setup");
           // The kickoff is the core speaking to the model, not the user: no
           // transcript line, and it stays out of the chat-end note.
           turn.awaiting++;
