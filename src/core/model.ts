@@ -11,6 +11,11 @@ export type ModelEvent =
   | { type: "text"; text: string }
   /** The model wants a tool run. `id` ties the answer (a ToolResponse) back to this call. */
   | { type: "tool.call"; id: string; name: string; args: Record<string, unknown> }
+  /**
+   * The model takes back tool calls it made (e.g. the user talked over it).
+   * Their answers must not be sent.
+   */
+  | { type: "tool.cancel"; ids: string[] }
   /** A chunk of what the user said out loud (Gemini Live's input transcription). */
   | { type: "user.text"; text: string }
   /** A chunk of the model's voice: 16-bit mono PCM (Gemini Live speaks at 24 kHz). */

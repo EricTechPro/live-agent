@@ -223,6 +223,9 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   // model is on a fresh connection that never heard of older calls, so their
   // late answers go on our stream but not to the model.
   const liveCalls = new Set<string>();
+  // Calls the model took back (tool.cancel): their late answers are not shown or sent.
+  const cancelledCalls = new Set<string>();
+  const callNames = new Map<string, string>();
 
   // What was said, for the chat-end note: user texts and the model's joined replies.
   const chat: { role: "user" | "model"; text: string }[] = [];
@@ -279,6 +282,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     response: ToolResponse["response"],
     extra: Pick<ToolResponse, "scheduling" | "willContinue"> = {},
   ) {
+    if (cancelledCalls.has(call.id)) return;
     emit({
       type: "tool.result", id: call.id, name: call.name, status,
       ...("output" in response ? { output: response.output } : {}),
@@ -422,6 +426,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   // The door every tool call goes through. Nothing runs without a verdict.
   function onToolCall(call: ToolCall) {
     liveCalls.add(call.id);
+    callNames.set(call.id, call.name);
     const tool = byName.get(call.name);
     emit({ type: "tool.call", id: call.id, name: call.name, args: call.args, risk: tool?.risk });
 
@@ -522,6 +527,9 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       case "tool.call":
         onToolCall(event);
         break;
+      case "tool.cancel":
+        onToolCancel(event.ids);
+        break;
       case "generation.complete":
         // Chat turns wait for turn.complete: the user is still hearing the reply.
         break;
@@ -536,6 +544,21 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       case "disconnected":
         onDisconnected(event.message);
         break;
+    }
+  }
+
+  // The model took these calls back. A call waiting for a yes stops waiting; a
+  // running tool cannot be stopped mid-way, but its answer is dropped. Either
+  // way the stream shows "cancelled" once, and the model hears nothing more.
+  function onToolCancel(ids: string[]) {
+    for (const id of ids) {
+      if (!liveCalls.has(id)) continue;
+      const call = [...waiting, ...(turn?.answering ?? [])].find((c) => c.id === id);
+      waiting = waiting.filter((c) => c.id !== id);
+      if (turn) turn.answering = turn.answering.filter((c) => c.id !== id);
+      liveCalls.delete(id);
+      cancelledCalls.add(id);
+      emit({ type: "tool.result", id, name: call?.name ?? callNames.get(id) ?? "", status: "cancelled" });
     }
   }
 

@@ -239,6 +239,8 @@ export function toModelEvents(message: LiveServerMessage): ModelEvent[] {
   for (const call of message.toolCall?.functionCalls ?? []) {
     events.push({ type: "tool.call", id: call.id ?? "", name: call.name ?? "", args: call.args ?? {} });
   }
+  const cancelled = message.toolCallCancellation?.ids;
+  if (cancelled?.length) events.push({ type: "tool.cancel", ids: cancelled });
   const content = message.serverContent;
   if (!content) return events;
   const heard = content.inputTranscription?.text;

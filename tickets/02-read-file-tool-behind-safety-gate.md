@@ -14,3 +14,7 @@
 - [x] In Ask me mode, an ask verdict waits for a yes turn, and a yes lets the tool run
 - [x] Every tool call, allowed or not, appears in the event stream
 - [x] Adding a new tool means dropping one file in the tools folder
+
+## Comments
+
+- 2026-11-14 review fix: the server's toolCallCancellation is handled. A cancelled call shows as `tool.result` status `cancelled`; a waiting call stops waiting, and a running tool's late answer is not sent to the model.
