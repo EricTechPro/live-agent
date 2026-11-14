@@ -4,14 +4,14 @@
 
 **Blocked by:** 08 Voice over local LiveKit with ephemeral tokens
 
-**Status:** ready-for-human
+**Status:** done
 
 **Priority:** must-have
 
 - [x] Opening the app shows the orb and transcript
 - [x] The orb state follows listening, thinking and speaking events
-- [ ] First launch asks for mic access with a plain reason
-- [ ] Talking in the window works end to end over local LiveKit
+- [x] First launch asks for mic access with a plain reason
+- [x] Talking in the window works end to end over local LiveKit
 - [x] Idle RAM use is measured and written in the ticket's PR
 
 ## Comments
@@ -62,3 +62,5 @@ orb went thinking -> speaking -> listening, transcript showed both lines.
 Known gaps for later tickets: opened from Finder the app has no API key and no `livekit-server` on PATH
 (ticket 13 bundles LiveKit and settles key storage). Running from the repo writes chat-end notes into
 `sample-brain/raw/` (the default brain path); don't commit those.
+
+Manual check by Eric, 2026-11-14 (debug build at 10d1b10+, launched with `open --env`): the macOS mic prompt showed with the plain reason, a spoken question ("What's my sourdough starter called?") got a spoken answer ("Gus") in real time, and talking over the agent interrupted it.
