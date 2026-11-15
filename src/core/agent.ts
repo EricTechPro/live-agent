@@ -333,7 +333,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     return options.model.connect((event) => mine === connection && onModelEvent(event), {
       tools: tools.map(({ name, description, parameters }) => ({ name, description, parameters })),
       voice: config.voice,
-      systemInstruction: systemInstruction(config.tone),
+      systemInstruction: systemInstruction(config.tone, { brainPath }),
     });
   }
   let modelSession = await connectModel();

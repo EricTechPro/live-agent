@@ -122,3 +122,26 @@ test("a tidy page outside the wiki is refused, mapped folder or not", async () =
   expect(ended?.state).toBe("failed");
   expect(existsSync(join(brain, "03 Notes", "sneaky.md"))).toBe(false);
 });
+
+test("brain walks skip node_modules, .git, dot folders, _tmp, build output and the brain's .gitignore names", async () => {
+  const brain = mappedBrain();
+  const junk = [
+    "Work/app/node_modules/eslint/README.md",
+    "Work/app/.git/sourdough.md",
+    "Work/.obsidian/sourdough.md",
+    "03 Notes/_tmp/sourdough.md",
+    "Work/app/dist/sourdough.md",
+    "Work/app/build/sourdough.md",
+    "Work/app/.next/sourdough.md",
+    "Work/app/vendor/sourdough.md",
+    "Work/app/coverage/sourdough.md",
+  ];
+  for (const path of junk) {
+    mkdirSync(join(brain, path, ".."), { recursive: true });
+    writeFileSync(join(brain, path), "# Sourdough sourdough starter\n\nsourdough starter sourdough starter\n");
+  }
+  writeFileSync(join(brain, ".gitignore"), "# junk\ncoverage/\n*.log\n");
+  const { listNotes } = await import("../src/brain/index.ts");
+  const paths = (await listNotes(brain, FOLDERS)).map((n) => n.path);
+  expect(paths).toEqual(["03 Notes/sourdough.md", "Work/garden.md"]);
+});

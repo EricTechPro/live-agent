@@ -39,21 +39,46 @@ export function brainRoot(brainPath: string, workDir = process.cwd()): string {
   return resolve(workDir, brainPath);
 }
 
+// Folders that are never notes: packages, git, build output, scratch. A real brain
+// (a repo like EricOS) has code projects inside it, and their READMEs must not answer.
+const NEVER = new Set(["node_modules", "dist", "build", "out", "vendor", "coverage", "target", "_tmp", "tmp", "__pycache__"]);
+
+/** Plain folder names in the brain's own .gitignore (`coverage/`, `cache`): cheap to honour; globs are skipped. */
+async function ignoredNames(root: string): Promise<Set<string>> {
+  try {
+    const lines = (await readFile(join(root, ".gitignore"), "utf8")).split(/\r?\n/);
+    return new Set(lines.map((l) => l.trim().replace(/^\/|\/$/g, "")).filter((l) => l && !l.startsWith("#") && /^[^*?[\]!/]+$/.test(l)));
+  } catch {
+    return new Set();
+  }
+}
+
+/** Every `.md` file under `dir`, skipping dot folders (.git, .obsidian), NEVER and ignored names. */
+async function walkMarkdown(dir: string, ignored: Set<string>): Promise<string[]> {
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return []; // a missing folder is just empty
+  }
+  const out: string[] = [];
+  for (const entry of entries) {
+    if (entry.name.startsWith(".") || ignored.has(entry.name)) continue;
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (!NEVER.has(entry.name)) out.push(...(await walkMarkdown(full, ignored)));
+    } else if (entry.isFile() && entry.name.endsWith(".md")) out.push(full);
+  }
+  return out;
+}
+
 /** Every `.md` note under the wiki and projects folders. A missing folder is just empty. */
 export async function listNotes(root: string, folders: BrainFolders = DEFAULT_FOLDERS): Promise<Note[]> {
   const notes: Note[] = [];
+  const ignored = await ignoredNames(root);
   for (const folder of answerFolders(folders)) {
-    let files: string[];
-    try {
-      files = await readdir(join(root, folder), { recursive: true });
-    } catch {
-      continue;
-    }
-    for (const file of files.sort()) {
-      if (!file.endsWith(".md")) continue;
-      const full = join(root, folder, file);
-      notes.push({ path: relative(root, full).split(sep).join("/"), content: await readFile(full, "utf8") });
-    }
+    const files = (await walkMarkdown(join(root, folder), ignored)).map((full) => relative(root, full).split(sep).join("/")).sort();
+    for (const path of files) notes.push({ path, content: await readFile(join(root, path), "utf8") });
   }
   return notes;
 }

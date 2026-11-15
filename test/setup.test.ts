@@ -8,7 +8,7 @@ import { defaultConfig, loadConfig } from "../src/config/index.ts";
 import { startSession } from "../src/core/agent.ts";
 import type { AgentEvent } from "../src/core/events.ts";
 import type { ConnectOptions, Model } from "../src/core/model.ts";
-import { systemInstruction } from "../src/core/tone.ts";
+import { systemInstruction, TONE_RULES } from "../src/core/tone.ts";
 import { scriptedModel } from "../src/models/scripted.ts";
 import { detectParts, normName, scanFolder } from "../src/setup/folders.ts";
 import { saveSetup } from "../src/setup/index.ts";
@@ -207,8 +207,18 @@ describe("tone", () => {
     expect(short).toContain('"Good. You?"');
   });
 
+  test("work that needs the computer goes to a helper, never a refusal", () => {
+    const text = systemInstruction("short", { brainPath: "/Users/e/brain" });
+    expect(text).toContain("start_helper");
+    expect(text).toContain("Sending that to Claude Code.");
+    expect(text).toMatch(/git/i);
+    expect(text).toMatch(/never say you (cannot|can't)/i);
+    expect(text).toContain('folder "/Users/e/brain"');
+    expect(text).toMatch(/safety/i);
+  });
+
   test("each tone gives its own instruction", () => {
-    const all = (["short", "casual", "friendly", "pro"] as const).map(systemInstruction);
+    const all = (["short", "casual", "friendly", "pro"] as const).map((tone) => systemInstruction(tone));
     expect(new Set(all).size).toBe(4);
     expect(systemInstruction("pro")).toContain("Tone: professional");
   });
@@ -233,7 +243,7 @@ describe("the session uses a save at once", () => {
   test("each connection carries the voice and the tone's system instruction", async () => {
     const { model, connects } = recording();
     const session = await startSession({ model, config: { ...defaultConfig(), voice: "Charon", tone: "friendly" } });
-    expect(connects[0]).toMatchObject({ voice: "Charon", systemInstruction: systemInstruction("friendly") });
+    expect(connects[0]).toMatchObject({ voice: "Charon", systemInstruction: expect.stringContaining(TONE_RULES.friendly) });
     await session.close();
   });
 
@@ -249,7 +259,7 @@ describe("the session uses a save at once", () => {
 
     expect(session.mode()).toBe("bypass");
     expect(events.map((e) => e.type)).toEqual(["mode.changed", "setup.saved", "chat.started"]);
-    expect(connects.at(-1)).toMatchObject({ voice: "Zephyr", systemInstruction: systemInstruction("pro") });
+    expect(connects.at(-1)).toMatchObject({ voice: "Zephyr", systemInstruction: expect.stringContaining(TONE_RULES.pro) });
     expect(session.setup.needed()).toBe(false);
     await session.close();
   });

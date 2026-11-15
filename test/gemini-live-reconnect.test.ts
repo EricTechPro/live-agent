@@ -2,11 +2,11 @@
 // connection (session limit, goAway, network). Driven through the agent core's
 // event stream, with a fake Live server in place of the websocket.
 import { describe, expect, test } from "bun:test";
-import type { LiveConnectParameters, LiveServerMessage } from "@google/genai";
+import { EndSensitivity, type LiveConnectParameters, type LiveServerMessage } from "@google/genai";
 import { defaultConfig } from "../src/config/index.ts";
 import { startSession } from "../src/core/agent.ts";
 import type { AgentEvent } from "../src/core/events.ts";
-import { systemInstruction } from "../src/core/tone.ts";
+import { TONE_RULES } from "../src/core/tone.ts";
 import { geminiLiveModel } from "../src/models/gemini-live.ts";
 
 type FakeSocket = {
@@ -83,7 +83,21 @@ describe("Gemini Live connection", () => {
       tools: [], chatEndNote: false,
     });
 
-    expect(live.sockets[0]!.params.config?.systemInstruction).toBe(systemInstruction("short"));
+    expect(live.sockets[0]!.params.config?.systemInstruction).toContain(TONE_RULES.short);
+    await session.close();
+  });
+
+  test("waits through pauses before ending your turn, so a long question is not cut off", async () => {
+    const live = fakeLive();
+    const session = await startSession({
+      model: geminiLiveModel({ apiKey: "test", connect: live.connect }),
+      config: defaultConfig(),
+      tools: [], chatEndNote: false,
+    });
+
+    expect(live.sockets[0]!.params.config?.realtimeInputConfig).toEqual({
+      automaticActivityDetection: { endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW, silenceDurationMs: 1200 },
+    });
     await session.close();
   });
 

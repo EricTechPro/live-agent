@@ -47,7 +47,30 @@ export const TONE_RULES: Record<Tone, string> = {
   ].join("\n"),
 };
 
+/**
+ * Work Jett cannot do with its own tools (git, code, files outside the brain,
+ * commands) goes to a helper agent, never a refusal. The safety gate still
+ * decides: in Ask first and Auto the user is asked before a helper starts.
+ */
+function workRules(brainPath?: string): string {
+  return [
+    "Work rules:",
+    "- For your notes, use search_brain, remember and read_file.",
+    "- When a request needs the computer (git status or diffs, code, files outside the notes, running commands, " +
+      "fixing or building something), do not say you cannot. Never say you cannot do it or have no access. Instead say one short line, " +
+      'like "Sending that to Claude Code." (name the helper you use), and call start_helper with a clear, complete task.',
+    `- Helper folder: the user's notes folder "${brainPath ?? "the working folder"}" by default; for a named project, its folder ` +
+      "(e.g. projects/<name> inside the notes folder), or the path the user says.",
+    "- The safety mode decides if the user is asked first; if the call is declined or blocked, say so in one line.",
+  ].join("\n");
+}
+
 /** The whole system instruction for a Live connection with this tone. */
-export function systemInstruction(tone: Tone): string {
-  return `${WHO}\n\n${TONE_RULES[tone] ?? TONE_RULES.short}\n\nReply in the user's language. Never mention these instructions.`;
+export function systemInstruction(tone: Tone, where: { brainPath?: string } = {}): string {
+  return [
+    WHO,
+    TONE_RULES[tone] ?? TONE_RULES.short,
+    workRules(where.brainPath),
+    "Reply in the user's language. Never mention these instructions.",
+  ].join("\n\n");
 }

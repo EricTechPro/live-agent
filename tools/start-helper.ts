@@ -12,8 +12,10 @@ import { createWorktree, inWorktree } from "../src/helpers/worktree.ts";
 export default defineTool<{ task: string; folder?: string; helper?: string }>({
   name: "start_helper",
   description:
-    "Start a helper coding agent in the background to do real work in a project folder, " +
-    "e.g. fix a bug or write code. Returns a job id right away; do not wait for it. " +
+    "Start a helper coding agent in the background for anything that needs the computer: git status or diffs, " +
+    "reading or changing code, files outside the notes, running commands, fixing or building something. " +
+    "Use it instead of saying you cannot. Say one short line first (\"Sending that to Claude Code.\"). " +
+    "Returns a job id right away; do not wait for it. " +
     "You will get another result for this call when the job ends: then tell the user how it went. " +
     "If a result has a worktree, the helper works on that git branch, not the user's: say the branch name.",
   risk: "helper",
@@ -23,7 +25,9 @@ export default defineTool<{ task: string; folder?: string; helper?: string }>({
       task: { type: "string", description: "What the helper should do, in plain words." },
       folder: {
         type: "string",
-        description: "Project folder to work in. Relative paths start in the working folder. Default: the working folder.",
+        description:
+          "Project folder to work in: the user's notes folder, a project inside it, or a path the user said. " +
+          "Relative paths start in the working folder. Default: the working folder.",
       },
       helper: {
         type: "string",

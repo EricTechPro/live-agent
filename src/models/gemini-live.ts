@@ -17,6 +17,7 @@
 import { errorMessage } from "../errors.ts";
 import {
   Behavior,
+  EndSensitivity,
   FunctionResponseScheduling,
   GoogleGenAI,
   Modality,
@@ -85,6 +86,13 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
           ? { speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: connectOptions.voice } } } }
           : {}),
         ...(connectOptions?.systemInstruction ? { systemInstruction: connectOptions.systemInstruction } : {}),
+        // Why: the default (HIGH end-of-speech sensitivity) ends the user's turn at
+        // the first short pause. Jett then starts answering, the rest of the
+        // sentence talks over it, and the answer is dropped as "interrupted".
+        // LOW plus 1.2 s of silence lets people think mid-question.
+        realtimeInputConfig: {
+          automaticActivityDetection: { endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW, silenceDurationMs: 1200 },
+        },
         // Why: without it an audio session ends after 15 minutes.
         contextWindowCompression: { slidingWindow: {} },
         // Every tool is NON_BLOCKING: the model keeps talking while a tool
@@ -127,12 +135,18 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
               if (update?.resumable && update.newHandle) handle = update.newHandle;
               for (const call of message.toolCall?.functionCalls ?? []) if (call.id) callLink.set(call.id, link);
               toModelEvents(message).forEach(onEvent);
-              if (message.goAway) handOver(link);
+              if (message.goAway) {
+                // Logged (core.log) so planned handovers can be told apart from drops.
+                console.error(`live-agent: Gemini Live goAway (time left ${message.goAway.timeLeft ?? "?"}): handing over to a new connection`);
+                handOver(link);
+              }
             },
             onerror: (e) => onEvent({ type: "error", message: String(e.message ?? e) }),
             onclose: (e) => {
               link.open = false;
               links.delete(link);
+              const planned = closing ? "we closed it" : link.retired ? "after a goAway handover" : "a drop";
+              console.error(`live-agent: Gemini Live closed: ${e.code} ${e.reason || "(no reason)"} (${planned})`);
               if (closing || link.retired || link !== live) return;
               live = undefined;
               onEvent({ type: "disconnected", message: `Gemini Live closed: ${e.code} ${e.reason}`.trim() });
