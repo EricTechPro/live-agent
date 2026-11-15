@@ -46,6 +46,8 @@ export interface HelperPaths {
   geminiApiKey?: string;
   /** How long to wait after SIGINT before SIGKILL on cancel. Default 3000 ms. */
   cancelGraceMs?: number;
+  /** Where helper worktrees go (config `worktrees`). Default: `defaultWorktreesRoot()` in src/helpers/worktree.ts. */
+  worktreesRoot?: string;
 }
 
 export interface GeminiCliOptions extends HelperPaths {
@@ -55,8 +57,8 @@ export interface GeminiCliOptions extends HelperPaths {
   cwd: string;
 }
 
-/** live-agent's own folder for the helper's Gemini CLI home (in the OS app-data folder). */
-export function defaultHelperHome(): string {
+/** live-agent's own folder in the OS app-data folder (the helper's CLI home, helper worktrees). */
+export function liveAgentDataDir(): string {
   const home = homedir();
   const base =
     process.platform === "darwin"
@@ -64,7 +66,12 @@ export function defaultHelperHome(): string {
       : process.platform === "win32"
         ? (process.env.APPDATA ?? join(home, "AppData", "Roaming"))
         : (process.env.XDG_DATA_HOME ?? join(home, ".local", "share"));
-  return join(base, "live-agent", "gemini-cli");
+  return join(base, "live-agent");
+}
+
+/** live-agent's own folder for the helper's Gemini CLI home (in the OS app-data folder). */
+export function defaultHelperHome(): string {
+  return join(liveAgentDataDir(), "gemini-cli");
 }
 
 /** Make sure the private home's settings select API-key auth (any other settings in it are kept). */

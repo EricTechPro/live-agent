@@ -113,7 +113,13 @@ export function createToolCalls(deps: ToolCallsDeps): ToolCalls {
       respond(
         watch.call,
         "ok",
-        { output: { jobId: job.id, state: job.state, message: job.message ?? null } },
+        {
+          output: {
+            jobId: job.id, state: job.state, message: job.message ?? null,
+            // Worktrees on: where the work is, so the voice can say the branch.
+            ...(job.worktree ? { worktree: job.worktree } : {}),
+          },
+        },
         { willContinue: watch.open > 0 },
       );
     }
