@@ -170,6 +170,21 @@ export function onOpenPanel(cb: () => void) {
   return listen("open-panel", () => cb());
 }
 
+/** Ctrl+Option+S or the menu-bar item (ticket 38): minimise Jett to its dot, or bring it back. */
+export function onToggleMini(cb: () => void) {
+  return listen("toggle-mini", () => cb());
+}
+
+/** The menu-bar "Shortcuts" item (ticket 38). */
+export function onShowShortcuts(cb: () => void) {
+  return listen("show-shortcuts", () => cb());
+}
+
+/** Tell the menu bar whether Jett is shown or minimised, so its item says Hide or Show. */
+export function setTrayShown(shown: boolean): Promise<void> {
+  return invoke<void>("set_tray_shown", { shown });
+}
+
 /** Click-through on (clicks reach the apps below) or off (the window takes the mouse). */
 export function setClickThrough(on: boolean): Promise<void> {
   return invoke<void>("set_click_through", { on });

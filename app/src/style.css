@@ -64,11 +64,18 @@ body {
 .dock.dragging .grip { cursor: grabbing; }
 .grip:focus-visible { outline: 2px solid var(--ink); }
 .menu-btn { position: absolute; right: 6px; top: 0; width: 26px; height: 26px; border-radius: 8px; opacity: .0; }
-.dock:hover .menu-btn, .menu-btn:focus-visible, .menu-btn[aria-expanded="true"], .overlay[data-layer="center"] .menu-btn { opacity: 1; }
+/* Hover reveal (ticket 38): .hover comes from the overlay poll's cursor (main.ts), so it
+   works while another app is in front; :hover stays for the browser preview. */
+.hide-btn { position: absolute; left: 6px; top: 0; width: 26px; height: 26px; border-radius: 8px; opacity: 0; transition: opacity .15s var(--ease), background-color .15s var(--ease); }
+.menu-btn { transition: opacity .15s var(--ease), background-color .15s var(--ease); }
+.dock:hover .menu-btn, .dock.hover .menu-btn, .menu-btn:focus-visible, .menu-btn[aria-expanded="true"], .overlay[data-layer="center"] .menu-btn,
+.dock:hover .hide-btn, .dock.hover .hide-btn, .hide-btn:focus-visible { opacity: 1; }
+.dock.hover .grip span { background: rgba(200, 255, 244, .6); }
+.dock.dragging .orb { cursor: grabbing; transform: scale(1.04); }
 
 .orb-wrap { position: relative; }
 .orb {
-  appearance: none; border: 0; padding: 6px; width: 112px; height: 112px; border-radius: 50%; cursor: pointer; display: block;
+  appearance: none; border: 0; padding: 6px; width: 112px; height: 112px; border-radius: 50%; cursor: pointer; display: block; touch-action: none;
   /* A soft dark disc so the LEDs read over a white page as well as a dark one. */
   background: radial-gradient(circle, rgba(4, 16, 18, .62) 0 58%, rgba(4, 16, 18, .25) 66%, transparent 71%);
   transition: transform .2s var(--ease), opacity .3s var(--ease), filter .3s var(--ease);
@@ -108,7 +115,46 @@ body {
   color: rgb(var(--look)); font: 600 12px/1.25 var(--mono); font-stretch: 87.5%; white-space: nowrap;
   text-shadow: 0 0 8px rgba(var(--look), .35);
 }
+/* The faint second line under "Tap to talk" (ticket 38), until push to talk is learned. */
+.orb-hint {
+  margin: -2px 0 0; padding: 1px 8px 2px; border-radius: 9px; background: rgba(4, 16, 18, .42);
+  color: rgba(200, 255, 244, .62); font: 500 10.5px/1.25 var(--mono); font-stretch: 87.5%; white-space: nowrap;
+}
 .controls { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+
+/* Minimised (ticket 38): the orb and its cues go; a small faint dot stays, brighter under the pointer. */
+.overlay[data-mini="true"] .dock, .overlay[data-mini="true"] .cues { display: none; }
+.mini-dot {
+  position: absolute; left: 0; top: 0; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; cursor: pointer;
+  background: transparent; display: grid; place-items: center; touch-action: none; opacity: .55; transition: opacity .2s var(--ease), transform .2s var(--ease);
+}
+.mini-dot span {
+  width: 12px; height: 12px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #e8fffa 0 18%, var(--led) 45%, rgba(120, 255, 226, .35) 100%);
+  box-shadow: 0 0 0 1px rgba(4, 16, 18, .55), 0 0 10px rgba(120, 255, 226, .45);
+}
+.mini-dot:hover, .mini-dot.hover, .mini-dot.dragging { opacity: 1; transform: scale(1.25); }
+.mini-dot:focus-visible { outline: 2px solid var(--ink); opacity: 1; }
+.mini-dot[data-look="listening"] span, .mini-dot[data-look="speaking"] span { animation: dot-live 1.2s ease-in-out infinite; }
+@keyframes dot-live { 50% { box-shadow: 0 0 0 1px rgba(4, 16, 18, .55), 0 0 16px rgba(120, 255, 226, .8); } }
+@media (prefers-reduced-motion: reduce) { .mini-dot span { animation: none !important; } }
+
+/* The Shortcuts card (ticket 38): a small glass card. */
+.shortcuts {
+  position: absolute; left: 0; top: 0; width: 300px; padding: 10px 12px 12px; border-radius: 14px; z-index: 20;
+  background: var(--glass); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow);
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+}
+.shortcuts:focus { outline: none; }
+.shortcuts-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.shortcuts-head h2 { margin: 0; font: 700 12px/1.2 var(--mono); color: var(--led); letter-spacing: .04em; text-transform: uppercase; }
+.shortcuts-head .ib { width: 24px; height: 24px; }
+.shortcuts-list { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; }
+.shortcuts-list dt { margin: 0; justify-self: start; }
+.shortcuts-list dt kbd {
+  display: inline-block; font: 700 10.5px/1 var(--mono); color: var(--ink); padding: 4px 6px; border-radius: 5px;
+  border: 1px solid var(--glass-edge); background: rgba(120, 255, 226, .06); white-space: nowrap;
+}
+.shortcuts-list dd { margin: 0; color: var(--ink-2); font: 500 11.5px/1.3 var(--mono); }
 .call { width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--glass-edge); background: var(--glass); color: var(--ink);
   backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); box-shadow: 0 4px 14px rgba(0,0,0,.3); }
 .call:hover { background: var(--glass-hi); }

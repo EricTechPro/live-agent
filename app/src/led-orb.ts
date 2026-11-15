@@ -13,6 +13,8 @@
 // a cell (u, v = offset from the centre, in units) to a brightness: 0 off, 0..1 teal,
 // 2 white-hot. Written fresh for live-agent (the Pixel mockup's Orb); no Roamies code.
 
+import type { Wave } from "./orb-wave.ts";
+
 export type Mood = "idle" | "listen" | "speak" | "think" | "hype" | "off";
 
 export interface WizardOrb {
@@ -33,6 +35,12 @@ export interface LedOrbOptions {
   tint?: () => string;
   /** Read every frame: the user's mic level, 0..1. While listening the orb swells and its ring brightens with it. */
   level?: () => number;
+  /**
+   * Read every frame: the wave to draw (orb-wave.ts, ticket 38). Given, the wave moves only
+   * when it says so: flat at rest, a sweeping dot while thinking, and nothing else on the
+   * orb twinkles or breathes while it is flat. Without it (the wizard) the old moods run.
+   */
+  wave?: () => Wave;
 }
 
 export function mountLedOrb(canvas: HTMLCanvasElement, options: LedOrbOptions = {}): WizardOrb {
@@ -48,9 +56,11 @@ export function mountLedOrb(canvas: HTMLCanvasElement, options: LedOrbOptions = 
   let frame = 0;
   let last = 0;
   let wph = 0; // the wave's phase: it runs faster while speaking
+  let ta = 0; // the clock for twinkles and breathing; stands still while the wave is flat
+  let wv: Wave | undefined = options.wave?.();
   const seed = Array.from({ length: N * N }, () => Math.random());
 
-  const tw = (s: number) => 0.3 + 0.45 * Math.abs(Math.sin(t * 1.6 + s * 9)); // twinkle for dim dots
+  const tw = (s: number) => 0.3 + 0.45 * Math.abs(Math.sin(ta * 1.6 + s * 9)); // twinkle for dim dots
   const box = (u: number, v: number, x0: number, y0: number, x1: number, y1: number) => u >= x0 && u <= x1 && v >= y0 && v <= y1;
   const seg = (px: number, py: number, ax: number, ay: number, bx: number, by: number) => {
     const dx = bx - ax;
@@ -64,8 +74,16 @@ export function mountLedOrb(canvas: HTMLCanvasElement, options: LedOrbOptions = 
       // The Jett logo: LED orb, unlit dots inside, a white-hot sine wave across.
       const d = Math.hypot(u, v) / 10.5;
       if (d > 1) return 0;
-      const amp = mood === "speak" ? 3.6 : mood === "off" ? 1.4 : 2.9;
-      if (Math.abs(v - amp * Math.sin(u * 0.5 + wph) * (1 - 0.6 * d * d)) < 1) return 2;
+      if (wv) {
+        // Ticket 38: flat, a real wave, or a dot sweeping along a dim line.
+        if (wv.kind === "sweep") {
+          if (Math.hypot(u - (wv.sweep ?? 0) * 7.5, v) < 1.7) return 2;
+          if (Math.abs(v) < 0.6) return 0.5;
+        } else if (Math.abs(v - wv.amp * 4.2 * Math.sin(u * 0.5 + wph) * (1 - 0.6 * d * d)) < 1) return 2;
+      } else {
+        const amp = mood === "speak" ? 3.6 : mood === "off" ? 1.4 : 2.9;
+        if (Math.abs(v - amp * Math.sin(u * 0.5 + wph) * (1 - 0.6 * d * d)) < 1) return 2;
+      }
       if (d > 0.8) return s > 0.2 ? tw(s) + 0.2 : OFF;
       if (mood === "think") return s > 0.6 ? tw(s) : OFF;
       return s > 0.94 ? 0.5 : OFF;
@@ -130,7 +148,7 @@ export function mountLedOrb(canvas: HTMLCanvasElement, options: LedOrbOptions = 
     let a = SHAPES[s < p ? icon : prev]!(u, v, s);
     if (p < 1 && Math.abs(s - p) < 0.07 && (a || SHAPES[prev]!(u, v, s))) return 2;
     const d = Math.hypot(u, v) / 10.5;
-    if (mood === "listen" && d <= 1 && Math.abs(d - ((t * 0.8) % 1)) < 0.08) a = Math.max(a, 0.9);
+    if (!wv && mood === "listen" && d <= 1 && Math.abs(d - ((t * 0.8) % 1)) < 0.08) a = Math.max(a, 0.9);
     return a;
   }
 
@@ -141,12 +159,13 @@ export function mountLedOrb(canvas: HTMLCanvasElement, options: LedOrbOptions = 
     const size = W / N;
     const gap = Math.max(1, size * 0.12);
     g.clearRect(0, 0, W, W);
-    g.globalAlpha = mood === "off" ? 0.45 : 1;
+    g.globalAlpha = wv?.dim ? 0.4 : mood === "off" ? 0.45 : 1;
     const rgb = options.tint?.() ?? "120,255,226";
     const lvl = mood === "listen" ? Math.min(1, Math.max(0, options.level?.() ?? 0)) : 0;
-    const k =
-      1 +
-      (mood === "speak" ? 0.09 * Math.abs(Math.sin(t * 9)) : mood === "listen" ? 0.03 * Math.sin(t * 6) + 0.16 * lvl : 0.025 * Math.sin(t * 2));
+    const k = wv
+      ? 1 + (mood === "listen" ? 0.16 * lvl : mood === "speak" ? 0.05 * wv.amp : 0)
+      : 1 +
+        (mood === "speak" ? 0.09 * Math.abs(Math.sin(t * 9)) : mood === "listen" ? 0.03 * Math.sin(t * 6) + 0.16 * lvl : 0.025 * Math.sin(t * 2));
     const hop = mood === "hype" ? Math.max(0, Math.sin(Math.min(1, (t - (moodUntil - 0.6)) / 0.6) * Math.PI)) * 3 : 0;
     p = still ? 1 : Math.min(1, (t - switchAt) / 0.45);
     for (let y = 0; y < N; y++) {
@@ -155,7 +174,7 @@ export function mountLedOrb(canvas: HTMLCanvasElement, options: LedOrbOptions = 
         const a = cell(((x - r0) * us) / k, ((y - r0) * us + hop) / k, s);
         if (!a) continue;
         g.fillStyle =
-          a === OFF ? "#14302f" : a >= 2 ? "rgba(232,255,250,1)" : `rgba(${rgb},${a === 1 ? 0.82 + 0.18 * Math.sin(t * 2 + s * 9) : Math.min(1, a + lvl * 0.4)})`;
+          a === OFF ? "#14302f" : a >= 2 ? "rgba(232,255,250,1)" : `rgba(${rgb},${a === 1 ? 0.82 + 0.18 * Math.sin(ta * 2 + s * 9) : Math.min(1, a + lvl * 0.4)})`;
         g.fillRect(x * size + gap, y * size + gap, size - gap * 2, size - gap * 2);
       }
     }
@@ -170,11 +189,21 @@ export function mountLedOrb(canvas: HTMLCanvasElement, options: LedOrbOptions = 
       moodUntil = 0;
     }
     if (!moodUntil && options.follow) mood = options.follow();
-    wph += dt * (mood === "speak" ? 9 : mood === "off" ? 0 : mood === "think" ? 2 : 4);
+    wv = options.wave?.();
+    if (wv) {
+      // The wave runs only while there is one; everything else stands still while it is flat.
+      if (!still && wv.kind === "wave") wph += dt * (mood === "speak" ? 8 : 6);
+      if (!still && wv.kind !== "flat") ta += dt;
+    } else {
+      wph += dt * (mood === "speak" ? 9 : mood === "off" ? 0 : mood === "think" ? 2 : 4);
+      ta = t;
+    }
     draw();
     if (!still) frame = requestAnimationFrame(loop);
   }
   frame = requestAnimationFrame(loop);
+  // Reduced motion: no animation, but a followed orb still changes with the app's state.
+  const slow = still && (options.follow || options.wave) ? setInterval(() => loop(performance.now()), 250) : undefined;
 
   return {
     set(next, secs) {
@@ -191,6 +220,7 @@ export function mountLedOrb(canvas: HTMLCanvasElement, options: LedOrbOptions = 
     },
     stop() {
       cancelAnimationFrame(frame);
+      clearInterval(slow);
     },
   };
 }

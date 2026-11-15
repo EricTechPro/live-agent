@@ -10,7 +10,12 @@ import { mountModePill } from "./mode-pill.ts";
 import { mountApprovals } from "./approvals-view.ts";
 import { mountBrainView } from "./brain-view.ts";
 import { mountChatView } from "./chat-view.ts";
-import { connectCore, getSetup, inTauri, onCoreDown, onOpenPanel, overlayPoll, revealLog, setClickThrough, waitForCore, type CoreClient } from "./core-client.ts";
+import {
+  connectCore, getSetup, inTauri, onCoreDown, onOpenPanel, onShowShortcuts, onToggleMini, overlayPoll, revealLog, setClickThrough, setTrayShown,
+  waitForCore, type CoreClient,
+} from "./core-client.ts";
+import { waveFor, QUIET } from "./orb-wave.ts";
+import { SHORTCUTS, SHORTCUTS_TITLE } from "./shortcuts.ts";
 import { addWork, cuesFor, noWork, type Work } from "./cues.ts";
 import { mountSketch } from "./sketch-view.ts";
 import { mountTooltips, paintIcons, setIcon } from "./tooltip.ts";
@@ -19,12 +24,13 @@ import { nextLayer, startLayer, type Layer, type LayerAction } from "./layers.ts
 import { mountLedOrb, type Mood } from "./led-orb.ts";
 import { nextOrb, orbStart, type Orb, type OrbInput } from "./orb-state.ts";
 import { addToTranscript, emptyTranscript, type Transcript } from "./transcript.ts";
-import { callView, spaceAction, type CallLook, type CallPhase, type CallView } from "./call-state.ts";
+import { callView, spaceAction, talkHint, type CallLook, type CallPhase, type CallView } from "./call-state.ts";
 import { addCaption, noCaptions, shownCaptions, type Captions } from "./captions.ts";
 import { spokenLang, WORDS, type Lang } from "./lang.ts";
 import { followMic } from "./mic-follow.ts";
 import {
-  capture, dragTo, followStep, keepOn, parseSaved, placeCard, placeOrb, placePopover, pttIdle, pttStep, type Point, type Ptt, type Rect,
+  capture, DOUBLE_MS, dotFor, dragTo, dropDot, followStep, hoverOrb, isDoubleClick, isDrag, keepOn, parseSaved, placeCard, placeOrb, placePopover,
+  pttCallIdle, pttIdle, pttPress, pttRelease, pttStep, type PttCall, type Point, type Ptt, type Rect,
 } from "./overlay.ts";
 import { runWizard } from "./wizard.ts";
 
@@ -36,6 +42,7 @@ const overlay = $("overlay");
 const dock = $("dock");
 const orbEl = $<HTMLButtonElement>("orb");
 const orbLabel = $("orb-label");
+const orbHint = $("orb-hint");
 const talkBtn = $<HTMLButtonElement>("talk");
 const muteBtn = $<HTMLButtonElement>("mute");
 const hangupBtn = $<HTMLButtonElement>("hangup");
@@ -75,24 +82,102 @@ function moveOrb(at: Point, save = false) {
     }
   }
 }
+// ---- the minimised dot (ticket 38): a small faint dot that stays where you drop it ----
+const MINI_KEY = "jett.mini";
+const DOT_KEY = "jett.dot";
+const DOT = { width: 20, height: 20 };
+const dotEl = $<HTMLButtonElement>("dot");
+let dotAt: Point = { x: 0, y: 0 };
+let mini = false;
+const load = (key: string) => {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null; // storage off: defaults
+  }
+};
+const store = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Not remembered; works for this run.
+  }
+};
+function moveDot(at: Point, save = false) {
+  dotAt = at;
+  dotEl.style.left = `${at.x}px`;
+  dotEl.style.top = `${at.y}px`;
+  if (save) store(DOT_KEY, JSON.stringify(at));
+}
+/** Minimise to the dot (minus, double-click, Ctrl+Option+S, the menu bar) or bring Jett back. */
+function setMini(on: boolean, save = true) {
+  mini = on;
+  overlay.dataset.mini = String(on);
+  dotEl.hidden = !on;
+  if (on) {
+    setLayer("close");
+    showShortcuts(false);
+    tips.refresh(dotEl);
+    const saved = parseSaved(load(DOT_KEY));
+    moveDot(saved ? dropDot(saved, DOT, view()) : dotFor({ ...orbAt, ...dockSize() }, DOT, view()));
+  } else {
+    moveOrb(keepOn(orbAt, dockSize(), view()));
+  }
+  if (save) store(MINI_KEY, on ? "1" : "0");
+  void setTrayShown(!on).catch(() => {});
+}
+$<HTMLButtonElement>("hide").onclick = () => setMini(true);
+
+// ---- dragging (ticket 38): press and move drags the whole orb, the grip or the dot; a
+// press without movement is still a click (overlay.ts `isDrag`). ----
 const grip = $<HTMLButtonElement>("grip");
-let drag: { start: Point; from: Point } | undefined;
-grip.addEventListener("pointerdown", (e) => {
-  drag = { start: orbAt, from: { x: e.clientX, y: e.clientY } };
-  grip.setPointerCapture(e.pointerId);
-  dock.classList.add("dragging");
-});
-grip.addEventListener("pointermove", (e) => {
-  if (drag) moveOrb(dragTo(drag.start, drag.from, { x: e.clientX, y: e.clientY }, dockSize(), view()));
-});
-const endDrag = () => {
+let drag: { what: "orb" | "dot"; el: HTMLElement; start: Point; from: Point; moved: boolean } | undefined;
+/** A drag just ended on this press: the click that follows it is swallowed. */
+let swallowClick = false;
+function pressDrag(el: HTMLElement, what: "orb" | "dot", e: PointerEvent, now = false) {
+  if (e.button !== 0) return;
+  swallowClick = false;
+  drag = { what, el, start: what === "dot" ? dotAt : orbAt, from: { x: e.clientX, y: e.clientY }, moved: now };
+  el.setPointerCapture(e.pointerId);
+  if (now) (what === "dot" ? dotEl : dock).classList.add("dragging");
+}
+function moveDrag(e: PointerEvent) {
   if (!drag) return;
+  const now = { x: e.clientX, y: e.clientY };
+  if (!drag.moved) {
+    if (!isDrag(drag.from, now)) return;
+    drag.moved = true;
+    (drag.what === "dot" ? dotEl : dock).classList.add("dragging");
+  }
+  if (drag.what === "orb") moveOrb(dragTo(drag.start, drag.from, now, dockSize(), view()));
+  else {
+    const x = Math.max(0, Math.min(innerWidth - DOT.width, drag.start.x + now.x - drag.from.x));
+    const y = Math.max(0, Math.min(innerHeight - DOT.height, drag.start.y + now.y - drag.from.y));
+    moveDot({ x, y });
+  }
+}
+function endDrag() {
+  if (!drag) return;
+  const d = drag;
   drag = undefined;
   dock.classList.remove("dragging");
-  moveOrb(orbAt, true);
-};
-grip.addEventListener("pointerup", endDrag);
-grip.addEventListener("pointercancel", endDrag);
+  dotEl.classList.remove("dragging");
+  if (!d.moved) return;
+  swallowClick = true;
+  if (d.what === "orb") moveOrb(orbAt, true);
+  else moveDot(dropDot(dotAt, DOT, view()), true);
+}
+for (const [el, what, now] of [[grip, "orb", true], [orbEl, "orb", false], [dotEl, "dot", false]] as const) {
+  el.addEventListener("pointerdown", (e) => pressDrag(el, what, e, now));
+  el.addEventListener("pointermove", moveDrag);
+  el.addEventListener("pointerup", endDrag);
+  el.addEventListener("pointercancel", endDrag);
+}
+// The dot: a click (not a drag) brings Jett back.
+dotEl.addEventListener("click", () => {
+  if (swallowClick) return void (swallowClick = false);
+  setMini(false);
+});
 // The grip moves by keyboard too: arrow keys, Shift for bigger steps.
 grip.addEventListener("keydown", (e) => {
   const step = e.shiftKey ? 80 : 20;
@@ -131,7 +216,11 @@ function placeFloaters() {
     stage.style.top = `${at.y}px`;
   }
 }
-new MutationObserver(placeFloaters).observe(approvalsEl, { attributes: true, attributeFilter: ["hidden"], childList: true });
+new MutationObserver(() => {
+  // A question for you brings Jett back from the dot: approvals sit beside the orb.
+  if (mini && !approvalsEl.hidden) setMini(false);
+  placeFloaters();
+}).observe(approvalsEl, { attributes: true, attributeFilter: ["hidden"], childList: true });
 
 // ---- click-through (ticket 36): take the mouse only over the interactive bits ----
 function hitRects(): Rect[] {
@@ -189,7 +278,10 @@ function startOverlayPoll() {
       ptt = step.ptt;
       if (step.act === "talk") pushToTalk(true);
       if (step.act === "release") pushToTalk(false);
-      if (following && !drag && layer === "home") {
+      // Hover from the cursor, not DOM hover: WebKit sends none while another app is in front.
+      dock.classList.toggle("hover", !mini && hoverOrb(point, { ...orbAt, ...dockSize() }));
+      dotEl.classList.toggle("hover", mini && hoverOrb(point, { ...dotAt, ...DOT }, 6));
+      if (following && !drag && !mini && layer === "home") {
         const next = followStep(orbAt, dockSize(), point, view());
         if (next.x !== orbAt.x || next.y !== orbAt.y) moveOrb(next);
       }
@@ -213,6 +305,7 @@ let layer: Layer = startLayer;
 function setLayer(action: LayerAction) {
   const next = nextLayer(layer, action);
   if (next === layer) return;
+  if (next === "center" && mini) setMini(false);
   layer = next;
   overlay.dataset.layer = layer;
   popover.hidden = layer !== "center";
@@ -255,6 +348,33 @@ jobsBtn.onclick = () => {
 };
 renderPanel();
 
+// ---- the Shortcuts card (ticket 38): from the popover's "?", the ? key or the menu bar ----
+const shortcutsEl = $("shortcuts");
+function showShortcuts(on: boolean) {
+  if (on) {
+    if (mini) setMini(false);
+    setLayer("close");
+    $("shortcuts-title").textContent = SHORTCUTS_TITLE[lang];
+    $("shortcuts-list").replaceChildren(
+      ...SHORTCUTS[lang].flatMap((s) => {
+        const dt = document.createElement("dt");
+        dt.append(Object.assign(document.createElement("kbd"), { textContent: s.keys }));
+        return [dt, Object.assign(document.createElement("dd"), { textContent: s.what })];
+      }),
+    );
+  }
+  shortcutsEl.hidden = !on;
+  if (on) {
+    const at = placePopover({ ...orbAt, ...dockSize() }, { width: shortcutsEl.offsetWidth, height: shortcutsEl.offsetHeight }, view());
+    shortcutsEl.style.left = `${at.x}px`;
+    shortcutsEl.style.top = `${at.y}px`;
+    // Focus the card itself (not its X, whose tooltip would cover the title); Esc closes it.
+    shortcutsEl.focus();
+  }
+}
+$<HTMLButtonElement>("open-shortcuts").onclick = () => showShortcuts(true);
+$<HTMLButtonElement>("close-shortcuts").onclick = () => showShortcuts(false);
+
 // The drawing on the screen: its X hides it until something new is drawn.
 $("clear-canvas").onclick = () => {
   stage.dataset.dismissed = "true";
@@ -269,6 +389,16 @@ let lang: Lang = "en";
 let shown: CallView | undefined;
 let endedTimer: ReturnType<typeof setTimeout> | undefined;
 let mic: ReturnType<typeof followMic> | undefined;
+/** Jett's voice, followed the same way as the mic (ticket 38): the wave moves with it while speaking. */
+let voice: ReturnType<typeof followMic> | undefined;
+let voiceHeard = false;
+let micLevel = 0;
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+// Push to talk (ticket 38): how often it has been used (the hint goes after two), and
+// whether letting go must mute once the call connects.
+const PTT_USES_KEY = "jett.pttUses";
+let pttUses = Number(load(PTT_USES_KEY)) || 0;
+let pttCall: PttCall = pttCallIdle;
 
 // Each look has its own colour and motion, so you can tell without reading.
 const LOOKS: Record<CallLook, { mood: Mood; tint: string }> = {
@@ -293,6 +423,11 @@ function render() {
   dock.dataset.look = v.look;
   orbEl.dataset.state = orb.state;
   orbLabel.textContent = v.label;
+  dotEl.dataset.look = v.look;
+  // The faint "or hold ⌃⌥" under Tap to talk, until push to talk has been used twice.
+  const hint = talkHint(v.look, lang, pttUses);
+  orbHint.hidden = !hint;
+  orbHint.textContent = hint ?? "";
   $("muted-badge").hidden = !v.mutedBadge;
   const tipsFor = BUTTON_TIPS[lang];
   talkBtn.hidden = !v.buttons.includes("start");
@@ -316,7 +451,12 @@ function render() {
   const first = v.buttons[0];
   orbEl.setAttribute("aria-label", first ? tipsFor[first === "hangup" ? "hangup" : first] : v.label);
   orbEl.disabled = !first || talkBtn.disabled;
+  // The orb's tip names what a click does, its key, and the double-click.
+  orbEl.dataset.tip = `${first ? tipsFor[first] : v.label} · ${MINIMISE_TIP[lang]}`;
+  orbEl.dataset.key = first === "hangup" ? "⌘." : "Space";
+  tips.refresh(orbEl);
 }
+const MINIMISE_TIP: Record<Lang, string> = { en: "double-click to minimise", zh: "双击最小化" };
 
 function feedOrb(input: OrbInput) {
   orb = nextOrb(orb, input, performance.now());
@@ -326,7 +466,21 @@ function feedOrb(input: OrbInput) {
 mountLedOrb($<HTMLCanvasElement>("orb-canvas"), {
   follow: () => LOOKS[shown?.look ?? "starting"].mood,
   tint: () => LOOKS[shown?.look ?? "starting"].tint,
-  level: () => (mic && !muted ? mic.read() : 0),
+  level: () => micLevel,
+  // Ticket 38: the wave moves only with real activity (orb-wave.ts).
+  wave: () => {
+    micLevel = mic && !muted ? mic.read() : 0;
+    const out = voice?.read() ?? 0;
+    if (out > QUIET) voiceHeard = true;
+    return waveFor({
+      look: shown?.look ?? "starting",
+      t: performance.now() / 1000,
+      mic: micLevel,
+      // Jett's own output level once it has been heard; until then, the gentle motion.
+      voice: voice && voiceHeard ? out : undefined,
+      still: reducedMotion,
+    });
+  },
 });
 
 let transcript: Transcript = emptyTranscript;
@@ -404,7 +558,7 @@ function renderCaptions() {
 const bars = [...document.querySelectorAll<HTMLElement>(".eq i")];
 (function eq() {
   if (!cuePill.hidden && cuePill.dataset.kind === "listen") {
-    const lvl = mic && !muted ? mic.read() : 0;
+    const lvl = micLevel; // read once a frame by the orb's wave
     const t = performance.now() / 1000;
     bars.forEach((b, i) => (b.style.transform = `scaleY(${(0.25 + lvl * (0.55 + 0.45 * Math.abs(Math.sin(t * 7 + i * 1.7)))).toFixed(3)})`));
   }
@@ -443,7 +597,17 @@ async function startCall(core: CoreClient) {
     const s = await core.session();
     room = new Room();
     room.on(RoomEvent.TrackSubscribed, (track, _pub, who) => {
-      if (track.kind === Track.Kind.Audio && who.identity === "agent") document.body.appendChild(track.attach());
+      if (track.kind !== Track.Kind.Audio || who.identity !== "agent") return;
+      document.body.appendChild(track.attach());
+      // Follow Jett's voice for the wave (ticket 38). If Web Audio can't read the remote
+      // track, the level stays 0 and the orb falls back to the gentle speaking motion.
+      try {
+        voice?.stop();
+        voice = followMic(track.mediaStreamTrack);
+        voiceHeard = false;
+      } catch {
+        voice = undefined;
+      }
     });
     // The agent's voice still playing keeps the orb on "speaking" after the text is done.
     room.on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
@@ -458,10 +622,15 @@ async function startCall(core: CoreClient) {
     const track = room.localParticipant.getTrackPublication(Track.Source.Microphone)?.track?.mediaStreamTrack;
     if (track) mic = followMic(track);
     call = "live";
+    // Ctrl+Option let go while this was connecting (ticket 38): the release wins, mute now.
+    const muteNow = pttCall.muteOnLive;
+    pttCall = { ...pttCall, muteOnLive: false };
     render();
+    if (muteNow) await setMuted(true);
   } catch (err) {
     await room?.disconnect();
     room = undefined;
+    pttCall = pttCallIdle;
     call = "off";
     render();
     showError(`mic: ${errorText(err)}`);
@@ -474,6 +643,9 @@ async function endCall(disconnect = true) {
   room = undefined;
   mic?.stop();
   mic = undefined;
+  voice?.stop();
+  voice = undefined;
+  pttCall = pttCallIdle;
   muted = false;
   call = "ended";
   render();
@@ -493,17 +665,24 @@ async function setMuted(on: boolean) {
 }
 
 // ---- push to talk (ticket 37): hold Ctrl+Option, let go to send ----------------
-// The press opens the mic (starting a call if there is none). Letting go mutes it
-// again, unless the mic was already open before the press.
-let pttMutesAfter = false;
+// The press opens the mic (starting a call if there is none) and brings Jett back if
+// minimised. Letting go mutes it again, unless the mic was already open before the
+// press; let go while the call is still connecting and it mutes once connected
+// (overlay.ts `pttPress` / `pttRelease`, ticket 38).
 function pushToTalk(on: boolean) {
   if (!coreRef) return;
   if (on) {
-    pttMutesAfter = call !== "live" || muted;
-    if (call === "off" || call === "ended") void startCall(coreRef);
-    else if (call === "live" && muted) void setMuted(false);
-  } else if (pttMutesAfter && call === "live") {
-    void setMuted(true);
+    if (mini) setMini(false);
+    const step = pttPress(pttCall, call, muted);
+    pttCall = step.state;
+    if (step.act === "start") void startCall(coreRef);
+    else if (step.act === "unmute") void setMuted(false);
+    if (pttUses < 99) store(PTT_USES_KEY, String(++pttUses));
+    render();
+  } else {
+    const step = pttRelease(pttCall, call);
+    pttCall = step.state;
+    if (step.act === "mute") void setMuted(true);
   }
   dock.classList.toggle("ptt", on);
 }
@@ -516,7 +695,23 @@ function primary() {
   if (act === "start") void startCall(coreRef);
   else if (act) void setMuted(act === "mute");
 }
-orbEl.onclick = primary;
+// The orb: a click (not the end of a drag) does the first call button's job, a little
+// later so a double-click can minimise instead (overlay.ts `isDoubleClick`).
+let lastClickAt: number | undefined;
+let clickTimer: ReturnType<typeof setTimeout> | undefined;
+orbEl.onclick = () => {
+  if (swallowClick) return void (swallowClick = false);
+  const now = performance.now();
+  if (isDoubleClick(lastClickAt, now)) {
+    clearTimeout(clickTimer);
+    lastClickAt = undefined;
+    setMini(true);
+    return;
+  }
+  lastClickAt = now;
+  clearTimeout(clickTimer);
+  clickTimer = setTimeout(primary, DOUBLE_MS);
+};
 muteBtn.onclick = () => void setMuted(!muted);
 hangupBtn.onclick = () => void endCall();
 window.addEventListener("keydown", (e) => {
@@ -529,10 +724,16 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     // The reader and the mode menu close themselves first (they prevent default).
     if (e.defaultPrevented) return;
+    if (!shortcutsEl.hidden) return showShortcuts(false);
     if (layer === "center") return setLayer("escape");
     // Jett talking: Esc stops the reply. Otherwise, in a call, it hangs up.
     if (orb.state === "speaking") return void coreRef?.stopReply().catch(() => {});
     if (call === "live" || call === "joining") void endCall();
+    return;
+  }
+  if (e.key === "?" && !(e.target as HTMLElement).closest("input, textarea, [contenteditable]")) {
+    e.preventDefault();
+    showShortcuts(shortcutsEl.hidden === true);
     return;
   }
   if (e.code === "Space" && !e.repeat) {
@@ -547,8 +748,12 @@ window.addEventListener("keydown", (e) => {
 
 async function boot() {
   moveOrb(placeOrb(storedSpot(), dockSize(), view()));
+  // Minimised last time: come back as the dot (ticket 38).
+  setMini(load(MINI_KEY) === "1", false);
   startOverlayPoll();
   void onOpenPanel(() => setLayer("open")).catch(() => {});
+  void onToggleMini(() => setMini(!mini)).catch(() => {});
+  void onShowShortcuts(() => showShortcuts(true)).catch(() => {});
   render();
   let core: CoreClient;
   try {
@@ -670,6 +875,10 @@ if (import.meta.env.DEV) {
       mic = phase === "live" ? { read: () => level * (0.6 + 0.4 * Math.abs(Math.sin(performance.now() / 180))), stop() {} } : undefined;
       render();
       renderCaptions();
+    },
+    /** Minimise to the dot, or bring Jett back (ticket 38). */
+    __jettMini(on: boolean) {
+      setMini(on, false);
     },
   });
 }
