@@ -141,9 +141,14 @@ body {
 
 /* ---- right panel (ticket 25): Canvas and Jobs tabs, X to close ---- */
 .panel { display: flex; flex-direction: column; gap: 12px; padding-top: 8px; }
-.panel-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.panel-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 2px solid var(--edge); }
+/* The panel's own X: small and bare in the tab row, so it never reads as a second
+   control-center X stacked under the top bar's framed one (whose tip goes left). */
+.panel-close { width: 26px; height: 26px; margin-right: 2px; background: none; color: var(--ink-3); }
+.panel-close:hover { background: #0c2b2c; color: var(--ink); }
 .tabs { display: flex; gap: 2px; }
 .tab {
+  margin-bottom: -2px;
   appearance: none; border: 0; background: none; cursor: pointer; position: relative;
   display: inline-flex; align-items: center; gap: 6px; padding: 8px 10px 7px;
   color: var(--ink-3); font: 700 11px/1.2 var(--mono); font-stretch: 87.5%; letter-spacing: .08em; text-transform: uppercase;
