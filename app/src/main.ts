@@ -3,6 +3,7 @@
 import { Room, RoomEvent, Track, type Participant } from "livekit-client";
 import { mountBoardAndBar } from "./board-view.ts";
 import { mountModePill } from "./mode-pill.ts";
+import { mountApprovals } from "./approvals-view.ts";
 import { bubbleLine } from "./bubble.ts";
 import { connectCore, getSetup, onCoreDown, revealLog, waitForCore, type CoreClient } from "./core-client.ts";
 import { mountDiagram } from "./diagram-view.ts";
@@ -284,6 +285,7 @@ async function boot() {
     ],
   });
   mountModePill(core, $<HTMLButtonElement>("mode-pill"), $<HTMLUListElement>("mode-menu"));
+  mountApprovals(core, $("approvals"));
   say("Hi! I'm Jett.");
   mountMini(core, $<HTMLButtonElement>("mini"), orbEl, $("mini-count"));
   mountDiagram(core, $("diagram"));

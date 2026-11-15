@@ -59,6 +59,8 @@
           <div class="composer-wrap">
           <!-- The safety mode menu sits outside the composer's pixel frame, which would clip it. -->
           <ul id="mode-menu" class="pf mode-menu" hidden></ul>
+          <!-- Approve / deny cards for calls waiting on a yes (ticket 28). -->
+          <ul id="approvals" class="approvals" aria-label="Waiting for your yes" aria-live="polite" hidden></ul>
           <form id="type" class="pf composer type">
             <button id="mode-pill" class="pill" type="button" disabled></button>
             <input id="type-input" type="text" placeholder="Type to Jett…" aria-label="Message Jett" autocomplete="off" disabled />

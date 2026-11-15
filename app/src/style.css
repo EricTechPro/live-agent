@@ -175,6 +175,16 @@ body {
 .mode-menu li[data-mode="bypass"][aria-selected="true"] { color: var(--bad); }
 .mode-menu .led { width: 6px; height: 6px; }
 
+/* Approve / deny cards (ticket 28): just above the composer, one per waiting call. */
+.approvals { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.approval { --frame: var(--led); --fill: #08262a; display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 12px; }
+.approval-text { flex: 1; min-width: 0; margin: 0; color: var(--ink); font-size: 12px; line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+.approval-text b { color: var(--led); margin-right: 4px; }
+.answer.approve { --frame: var(--led); --fill: var(--led); color: var(--led-ink); }
+.answer.approve:hover { --frame: var(--led-hi); --fill: var(--led-hi); color: var(--led-ink); }
+.answer.deny { --frame: var(--edge-hi); --fill: #0a2224; color: var(--ink); }
+.answer.deny:hover { --frame: var(--bad); color: var(--bad); }
+
 /* ---- job board: the right panel's Jobs tab, an LED per job ---- */
 .jobs { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 .job-empty { margin: 0; color: var(--ink-3); }
