@@ -33,8 +33,6 @@ export interface ToolContext {
   useNotes(paths: string[]): void;
   /** Report a note this tool wrote into the brain (path inside the brain). The core emits `brain.write` right away. */
   brainWrote(path: string): void;
-  /** Show a diagram (Mermaid source) in the window. The core emits `diagram` right away. */
-  showDiagram(diagram: { source: string; title?: string }): void;
   /**
    * The chat's canvas (src/core/board.ts), tied to this call.
    * draw: one `canvas.beat` per beat; throws (and emits nothing) if a mark id is already on it.

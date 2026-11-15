@@ -28,13 +28,14 @@ const markSchema = {
       description:
         "box: x,y (top-left), w,h, label. text: x,y, text. arrow / line: from, to (arrow may have a label). " +
         "circle: a ring at x,y (centre) with radius r. underline: x,y, w. check / cross: x,y (centre), size. " +
-        "step: a numbered dot at x,y with n and a label.",
+        "step: a numbered dot at x,y with n and a label. " +
+        "diagram: a Mermaid card at x,y (top-left), w,h, with source and an optional title, for flows or structures with many parts.",
     },
     id: { type: "string", description: "p1, p2, p3 ... unique on the canvas; later turns refer to it." },
     x: num("Left edge (box) or centre, 0 to 1000."),
     y: num("Top edge (box) or centre, 0 to 600."),
-    w: num("Width (box, underline)."),
-    h: num("Height (box)."),
+    w: num("Width (box, underline, diagram)."),
+    h: num("Height (box, diagram)."),
     r: num("Radius (circle)."),
     size: num("Size (check, cross, text font size)."),
     n: { type: "integer", description: "The step number (step)." },
@@ -42,6 +43,8 @@ const markSchema = {
     label: { type: "string", description: "A short label (box, arrow, step). One to four words." },
     from: point("Start (arrow, line)."),
     to: point("End (arrow, line)."),
+    source: { type: "string", description: "Mermaid source (diagram), e.g. 'flowchart LR' with short labels, about 15 nodes at most." },
+    title: { type: "string", description: "Two to five words naming the diagram (diagram)." },
     color: { type: "string", enum: [...COLORS], description: "Pen colour. Default ink." },
   },
   required: ["kind", "id"],

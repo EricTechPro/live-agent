@@ -56,7 +56,7 @@ test("chat.started clears the canvas", () => {
 
 test("other events leave the scene untouched (same object)", () => {
   const drawn = addCanvasEvent(emptyScene, beat(0, [box("p1")]));
-  expect(addCanvasEvent(drawn, { type: "diagram", id: "d1", source: "flowchart LR\n a --> b" })).toBe(drawn);
+  expect(addCanvasEvent(drawn, { type: "turn.done", reply: "" })).toBe(drawn);
 });
 
 test("canvas.edit swaps in the changed mark, keeping its place, beat and say line", () => {

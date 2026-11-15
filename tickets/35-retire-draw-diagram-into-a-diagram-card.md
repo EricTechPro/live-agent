@@ -4,13 +4,15 @@
 
 **Blocked by:** 32 Sketch canvas renderer with pen animation
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Priority:** after-talk
 
-- [ ] `draw` accepts a `diagram` mark; it is Zod-checked (non-empty source) and emitted in `canvas.beat`
-- [ ] The Canvas tab renders the diagram card with Mermaid; bad source shows the parse error in the card
-- [ ] `draw_diagram`, `showDiagram`, the `diagram` event and the old panel are gone, and the tool list and README match
-- [ ] `test/diagram.test.ts` is replaced by canvas tests covering the diagram card
+- [x] `draw` accepts a `diagram` mark; it is Zod-checked (non-empty source) and emitted in `canvas.beat`
+- [x] The Canvas tab renders the diagram card with Mermaid; bad source shows the parse error in the card
+- [x] `draw_diagram`, `showDiagram`, the `diagram` event and the old panel are gone, and the tool list and README match
+- [x] `test/diagram.test.ts` is replaced by canvas tests covering the diagram card
 
 ## Comments
+
+- 2026-11-15: The card rendering and the parse error were checked in headless Chromium (Vite dev + a fake core), not in the Tauri app.

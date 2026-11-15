@@ -29,8 +29,9 @@ A small desktop app you talk to.
   (Gemini CLI, Codex or Claude Code) in the background. A job board shows its progress, and
   the voice tells you when it is done. It never freezes while a tool runs. With worktrees on,
   a finished job's changes are committed on its own branch for you to review.
-- **It draws.** "Draw how the voice gets to Gemini" shows a diagram in the window
-  (`draw_diagram`, Mermaid) while the voice keeps talking.
+- **It draws.** "Draw how the voice gets to Gemini" sketches on the Canvas tab while the
+  voice talks: hand-drawn boxes, arrows and Mermaid diagram cards, each beat's strokes timed
+  to the line being said (`draw`). "Make p2 red" or "clear the board" changes it (`edit_canvas`).
 - **It shrinks out of the way.** The **Mini** button turns the window into a small
   always-on-top orb that shows how many jobs are running. Voice keeps working; click the orb
   to open the full window again.
@@ -183,7 +184,7 @@ Every tool has a **risk class**. The mode decides what each class may do:
 
 | risk class | example tools | Ask me | Auto edits | Bypass |
 |---|---|---|---|---|
-| read | `search_brain`, `read_file`, `draw_diagram`, `draw`, `edit_canvas` | runs | runs | runs |
+| read | `search_brain`, `read_file`, `draw`, `edit_canvas` | runs | runs | runs |
 | edit | `remember`, `cancel_job` | asks | runs | runs |
 | command | (shell commands) | asks | asks | runs |
 | helper | `start_helper` | asks | asks | runs |

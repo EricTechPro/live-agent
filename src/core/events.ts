@@ -72,11 +72,6 @@ export type AgentEvent =
    */
   | { type: "chat.started" }
   /**
-   * A diagram to show (ticket 16): Mermaid `source` from the `draw_diagram` tool
-   * (`id` is its call). The window draws it in a panel; bad source shows as an error there.
-   */
-  | { type: "diagram"; id: string; title?: string; source: string }
-  /**
    * One beat of a `draw` call (ticket 31): the line the voice says (`say`) and the
    * marks to draw while it is said, already checked (src/core/canvas.ts). `id` is
    * the call, `beat` counts from 0. Coordinates are on the 1000 x 600 board.

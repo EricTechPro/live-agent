@@ -1,4 +1,4 @@
-// Which layer the window shows (ticket 22). Pure, like diagram.ts.
+// Which layer the window shows (ticket 22). Pure, like panel.ts.
 // - home: the big orb and the call controls, almost nothing else. You just talk.
 // - center: the control center (sidebar, chat, right panel), opened from home and
 //   closed with its X or Escape. The call never notices: only the view changes.

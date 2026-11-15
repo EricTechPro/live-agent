@@ -5,7 +5,7 @@ import type { AgentEvent } from "../src/core/events.ts";
 
 const run = (inputs: (PanelAction | AgentEvent)[], from = startPanel) => inputs.reduce(nextPanel, from);
 const job = (id: string, state: "queued" | "running" | "done"): AgentEvent => ({ type: "job.state", id, kind: "gemini-cli", title: id, state });
-const diagram: AgentEvent = { type: "diagram", id: "d1", source: "flowchart LR\n a --> b" };
+const diagram = { type: "canvas.beat", id: "d1", beat: 0, say: "Here", marks: [] } as unknown as AgentEvent;
 
 test("the panel starts open on Canvas", () => {
   expect(startPanel).toEqual({ open: true, tab: "canvas" });
@@ -15,7 +15,7 @@ test("clicking a tab selects it", () => {
   expect(run([{ type: "panel.select", tab: "jobs" }])).toEqual({ open: true, tab: "jobs" });
 });
 
-test("a diagram opens the Canvas tab, even from a closed panel on Jobs", () => {
+test("something drawn opens the Canvas tab, even from a closed panel on Jobs", () => {
   expect(run([{ type: "panel.select", tab: "jobs" }, { type: "panel.close" }, diagram])).toEqual({ open: true, tab: "canvas" });
 });
 

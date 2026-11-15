@@ -1,4 +1,4 @@
-// The sketch canvas (tickets 32 to 34): paints the core's `canvas.*` marks on the
+// The sketch canvas (tickets 32 to 35): paints the core's `canvas.*` marks on the
 // Canvas tab with a pen that draws each stroke from 0 to 1, one mark after
 // another, and shows the beat's `say` line under the board while it draws.
 // The pen is paced to the voice by pen.ts: a beat's strokes start on its
@@ -8,8 +8,9 @@
 // go onto a cache canvas once, so each frame draws the cache plus the one mark the
 // pen is on. The board is the core's 1000 x 600, scaled into the panel and drawn
 // at the screen's pixel ratio so it stays sharp on Retina.
-// The Mermaid `diagram` view (ticket 16) shares the tab: whichever came last shows.
+// Diagram marks (ticket 35) are cards: the pen draws the frame, card-view.ts puts Mermaid inside.
 // Idea from Roamies (AGPL): idea only, our own code.
+import { mountCards } from "./card-view.ts";
 import type { CoreClient } from "./core-client.ts";
 import { emptyPen, penAddBeat, penInterrupt, penSpeak, type Pen } from "./pen.ts";
 import { addCanvasEvent, emptyScene, fitBoard, inkFor, partialPoints, partsAt, planMarks, taper, type Ink, type Part, type Pt, type Scene, type Slot } from "./sketch.ts";
@@ -33,6 +34,7 @@ export function mountSketch(core: CoreClient, host: HTMLElement) {
   const caption = Object.assign(document.createElement("figcaption"), { className: "sketch-say" });
   caption.setAttribute("aria-live", "polite");
   board.append(canvas);
+  const cards = mountCards(board);
   figure.append(board, caption);
   host.insertBefore(figure, host.querySelector(".canvas-empty"));
 
@@ -65,7 +67,6 @@ export function mountSketch(core: CoreClient, host: HTMLElement) {
 
   // ---- events ----
   core.onEvent((event) => {
-    if (event.type === "diagram") host.dataset.view = "diagram";
     if (event.type !== "chat.started" && !event.type.startsWith("canvas.")) return;
     scene = addCanvasEvent(scene, event);
     if (event.type === "chat.started") {
@@ -207,6 +208,12 @@ export function mountSketch(core: CoreClient, host: HTMLElement) {
     const line = speaking ?? (busy ? caption.textContent : scene.marks.at(-1)?.say) ?? "";
     if (caption.textContent !== line) caption.textContent = line;
     caption.dataset.state = busy ? "drawing" : "done";
+
+    // Diagram cards: placed with the board, shown once their frame is drawn.
+    cards.sync(scene, fit, (id) => {
+      const d = drawn.get(id);
+      return !!d && d.slot.end <= now;
+    });
 
     if (busy) kick();
   }

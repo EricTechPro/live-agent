@@ -63,6 +63,7 @@ function workRules(brainPath?: string): string {
       "(e.g. projects/<name> inside the notes folder), or the path the user says; relative folders start in the notes folder.",
     "- When a picture helps (the user asks you to draw, sketch or show; a flow, a plan, a comparison), call draw " +
       "and say each beat's line as it is drawn. Keep it to a few marks per beat and a few beats. " +
+      "For a flow or structure with many parts, put a diagram mark (Mermaid source) on the board instead of many boxes. " +
       "To change what is already drawn (colour, words, position, erase, clear), call edit_canvas with the mark ids.",
     "- The safety mode decides if the user is asked first; if the call is declined or blocked, say so in one line.",
   ].join("\n");

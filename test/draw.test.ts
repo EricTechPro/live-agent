@@ -56,8 +56,8 @@ test("draw is a read tool in tools/ and in the bundled list, with a flat JSON sc
   // Gemini Live takes a plain OpenAPI subset: no anyOf / oneOf / const.
   expect(schema).not.toMatch(/anyOf|oneOf|allOf|"const"|\$ref/);
   expect(tool.parameters).toMatchObject({ type: "object", required: ["beats"] });
-  // draw_diagram stays until ticket 35.
-  expect(tools.some((t) => t.name === "draw_diagram")).toBe(true);
+  // draw_diagram is retired (ticket 35): diagrams are draw marks now.
+  expect(tools.some((t) => t.name === "draw_diagram")).toBe(false);
 });
 
 test("a good call emits canvas.beat events in order, after the tool call and the allow verdict", async () => {

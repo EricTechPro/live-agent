@@ -1,5 +1,5 @@
 // The control center's right panel (ticket 25): Canvas and Jobs tabs. Pure, like
-// diagram.ts. Something drawn opens the Canvas tab; a job starting never steals
+// transcript.ts. Something drawn opens the Canvas tab; a job starting never steals
 // the tab (the Jobs tab shows a running count badge instead).
 import type { AgentEvent } from "../../src/core/events.ts";
 
@@ -21,9 +21,9 @@ export type PanelAction =
   /** The top bar's Jobs icon: opens the panel on Jobs; on Jobs already, closes it. */
   | { type: "panel.jobs-button" };
 
-/** Events that put something on the canvas: today's `diagram`, and the sketch canvas's `canvas.*` (tickets 31 to 33). */
+/** Events that put something on the canvas: the sketch canvas's `canvas.*` (tickets 31 to 35). */
 export function drawsOnCanvas(event: { type: string }) {
-  return event.type === "diagram" || event.type.startsWith("canvas.");
+  return event.type.startsWith("canvas.");
 }
 
 export function nextPanel(panel: Panel, input: PanelAction | AgentEvent): Panel {

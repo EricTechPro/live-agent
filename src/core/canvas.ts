@@ -32,18 +32,29 @@ const check = z.object({ kind: z.literal("check"), id, x: X, y: Y, size: z.numbe
 const cross = z.object({ kind: z.literal("cross"), id, x: X, y: Y, size: z.number().positive().max(200).optional(), color });
 const step = z.object({ kind: z.literal("step"), id, x: X, y: Y, n: z.number().int().min(1).max(99), label, color });
 
+// A Mermaid card (ticket 35): the old draw_diagram, as a mark placed on the board.
+// The window renders the source (bundled Mermaid, strict) and shows parse errors in the card.
+const diagram = z.object({
+  kind: z.literal("diagram"), id, x: X, y: Y,
+  w: z.number().min(120, "a diagram card is at least 120 wide").max(BOARD.width),
+  h: z.number().min(80, "a diagram card is at least 80 tall").max(BOARD.height),
+  source: z.string({ message: "source is the Mermaid diagram" }).trim().min(1, "source is empty: send Mermaid source").max(4000),
+  title: z.string().trim().min(1).max(60).optional(),
+  color,
+});
+
 const mark = z
-  .discriminatedUnion("kind", [box, text, arrow, line, circle, underline, check, cross, step])
+  .discriminatedUnion("kind", [box, text, arrow, line, circle, underline, check, cross, step, diagram])
   .superRefine((m, ctx) => {
     // Shapes with a size must fit on the board too, not only their corner.
     const off =
-      (m.kind === "box" && (m.x + m.w > BOARD.width || m.y + m.h > BOARD.height)) ||
+      ((m.kind === "box" || m.kind === "diagram") && (m.x + m.w > BOARD.width || m.y + m.h > BOARD.height)) ||
       (m.kind === "circle" && (m.x - m.r < 0 || m.y - m.r < 0 || m.x + m.r > BOARD.width || m.y + m.r > BOARD.height)) ||
       (m.kind === "underline" && m.x + m.w > BOARD.width);
     if (off) ctx.addIssue({ code: "custom", message: `${m.id} goes off the board (${BOARD.width} x ${BOARD.height})` });
   });
 
-export const MARK_KINDS = ["box", "text", "arrow", "line", "circle", "underline", "check", "cross", "step"] as const;
+export const MARK_KINDS = ["box", "text", "arrow", "line", "circle", "underline", "check", "cross", "step", "diagram"] as const;
 export const MAX_BEATS = 8;
 export const MAX_MARKS_PER_BEAT = 12;
 
@@ -111,13 +122,14 @@ const onBoard = (p: { x: number; y: number }) => p.x >= 0 && p.y >= 0 && p.x <= 
  * The mark with one change applied, checked again (it must still fit the board).
  * A move puts the mark's anchor at x / y: a box's corner, a ring's centre, an
  * arrow's or line's start (its end moves with it). `label` is the words of a
- * text mark and the label of a box, arrow or step. Throws a plain message.
+ * text mark, the title of a diagram card, and the label of a box, arrow or step. Throws a plain message.
  */
 export function applyEdit(m: Mark, change: MarkChange): Mark {
   const next: Record<string, unknown> = { ...m };
   if (change.color) next.color = change.color;
   if (change.label !== undefined) {
     if (m.kind === "text") next.text = change.label;
+    else if (m.kind === "diagram") next.title = change.label;
     else if (m.kind === "box" || m.kind === "arrow" || m.kind === "step") next.label = change.label;
     else throw new Error(`${m.id} is a ${m.kind}: it has no label`);
   }

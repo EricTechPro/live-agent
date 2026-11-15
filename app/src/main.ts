@@ -7,7 +7,6 @@ import { mountApprovals } from "./approvals-view.ts";
 import { mountBrainView } from "./brain-view.ts";
 import { bubbleLine } from "./bubble.ts";
 import { connectCore, getSetup, onCoreDown, revealLog, waitForCore, type CoreClient } from "./core-client.ts";
-import { mountDiagram } from "./diagram-view.ts";
 import { mountSketch } from "./sketch-view.ts";
 import { mountTooltips, paintIcons, setIcon } from "./tooltip.ts";
 import { drawsOnCanvas, nextPanel, startPanel, tabForKey, TABS, type Panel, type Tab } from "./panel.ts";
@@ -294,7 +293,6 @@ async function boot() {
   });
   say("Hi! I'm Jett.");
   mountMini(core, $<HTMLButtonElement>("mini"), orbEl, $("mini-count"));
-  mountDiagram(core, $("diagram"));
   mountSketch(core, $("panel-canvas"));
   feedOrb({ type: "core.ready" });
 

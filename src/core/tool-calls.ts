@@ -145,9 +145,6 @@ export function createToolCalls(deps: ToolCallsDeps): ToolCalls {
       brainWrote(path) {
         deps.emit({ type: "brain.write", path, cause: "tool", tool: call.name });
       },
-      showDiagram({ source, title }) {
-        deps.emit({ type: "diagram", id: call.id, ...(title ? { title } : {}), source });
-      },
       canvas: {
         ids: () => deps.canvas.ids(),
         draw: (beats) => deps.canvas.draw(call.id, beats),
