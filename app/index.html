@@ -27,7 +27,7 @@
           <button id="mini" class="pf ib" type="button" disabled aria-label="Mini orb" data-tip="Mini orb" data-icon="mini"></button>
           <button id="jobs-toggle" class="pf ib jobs-toggle" type="button" aria-controls="panel" aria-expanded="false" aria-label="Jobs" data-tip="Jobs"><span class="icon-slot" data-icon="jobs"></span><b id="jobs-count" class="badge" data-count="0" aria-hidden="true">0</b></button>
           <button id="open-center" class="pf ib home-only" type="button" aria-controls="center" aria-label="Open control center" data-tip="Control center" data-icon="center"></button>
-          <button id="close-center" class="pf ib center-only" type="button" aria-controls="center" aria-label="Close control center" data-tip="Close" data-key="Esc" data-icon="close"></button>
+          <button id="close-center" class="pf ib center-only" type="button" aria-controls="center" aria-label="Close control center" data-tip="Close" data-key="Esc" data-side="left" data-icon="close"></button>
         </div>
       </header>
       <section id="home" class="home" aria-label="Home">
@@ -51,12 +51,24 @@
         <aside id="sidebar" class="sidebar" aria-label="Chats and brain">
           <h2 class="side-title">Chats</h2>
           <p class="side-empty">Past chats show here.</p>
-          <h2 class="side-title">Brain</h2>
-          <p class="side-empty">Your notes show here.</p>
+          <h2 class="side-title" id="brain-title">Brain</h2>
+          <!-- The brain file tree (ticket 23): the three parts, folders collapsible. Click a note to read it. -->
+          <ul id="brain-tree" class="brain-tree" role="tree" aria-labelledby="brain-title"></ul>
+          <p id="brain-empty" class="side-empty">Your notes show here.</p>
         </aside>
         <section class="chat" aria-label="Chat">
           <div id="chat-slot" class="chat-slot"></div>
           <ol id="transcript" class="transcript" aria-label="Transcript" aria-live="polite"></ol>
+          <!-- A brain note, read only (ticket 23). It covers the transcript; X (or Escape) goes back to the chat. -->
+          <section id="reader" class="pf reader" aria-labelledby="reader-name" hidden>
+            <header class="reader-head">
+              <span class="reader-icon" data-icon="file" aria-hidden="true"></span>
+              <h2 id="reader-name" class="reader-name"></h2>
+              <span id="reader-path" class="reader-path"></span>
+              <button id="close-reader" class="ib" type="button" aria-label="Close note" data-tip="Back to chat" data-key="Esc" data-side="left" data-icon="close"></button>
+            </header>
+            <pre id="reader-text" class="reader-text" tabindex="0"></pre>
+          </section>
           <div class="composer-wrap">
           <!-- The safety mode menu sits outside the composer's pixel frame, which would clip it. -->
           <ul id="mode-menu" class="pf mode-menu" hidden></ul>
@@ -76,7 +88,7 @@
               <button id="tab-canvas" class="tab" role="tab" type="button" aria-controls="panel-canvas" aria-selected="true">Canvas</button>
               <button id="tab-jobs" class="tab" role="tab" type="button" aria-controls="panel-jobs" aria-selected="false" tabindex="-1">Jobs<b id="tab-jobs-count" class="badge tab-badge" data-count="0" aria-hidden="true">0</b></button>
             </div>
-            <button id="close-panel" class="pf ib" type="button" aria-controls="panel" aria-label="Close panel" data-tip="Close panel" data-icon="close"></button>
+            <button id="close-panel" class="ib panel-close" type="button" aria-controls="panel" aria-label="Close panel" data-tip="Close panel" data-icon="close" data-size="14"></button>
           </div>
           <!-- Canvas: the sketch canvas (ticket 32, sketch-view.ts adds it) and the Mermaid diagram panel; whichever came last shows. -->
           <section id="panel-canvas" class="tabpanel" role="tabpanel" aria-labelledby="tab-canvas">

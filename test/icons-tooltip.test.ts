@@ -38,3 +38,10 @@ test("near a side edge the tip stays inside the window", () => {
   expect(placeTip({ left: 930, top: 6, width: 30, height: 30 }, tip, view).left).toBe(960 - 100 - 6);
   expect(placeTip({ left: 0, top: 6, width: 30, height: 30 }, tip, view).left).toBe(6);
 });
+
+test("a tip asked to sit on the left goes left of its button, centred on it, so it never covers the control below", () => {
+  // The control center's X (top right): its tip must not land on the right panel's own X under it.
+  expect(placeTip({ left: 900, top: 6, width: 34, height: 34 }, tip, view, 8, 6, "left")).toEqual({ left: 792, top: 11, side: "left" });
+  // No room on the left: back to below.
+  expect(placeTip({ left: 20, top: 6, width: 34, height: 34 }, tip, view, 8, 6, "left").side).toBe("below");
+});

@@ -162,7 +162,48 @@ export function capSummary(text: string, fallback: string): string {
   return summary.length > MAX_SUMMARY ? `${summary.slice(0, MAX_SUMMARY)}...` : summary;
 }
 
-/** A job title is one line for the board. */
-export function jobTitle(task: string): string {
-  return task.length > 80 ? `${task.slice(0, 77)}...` : task;
+const MAX_TITLE = 48;
+const MAX_LINE = 120;
+
+/** Cut at a word boundary to at most `max` characters, with "…" when cut. */
+function clip(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max - 1);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > max / 2 ? cut.slice(0, space) : cut).replace(/[\s,;:.-]+$/, "")}…`;
+}
+
+/** The first sentence of one line (up to `. `, `? ` or `! `). */
+const firstSentence = (line: string) => line.match(/^.*?[.?!](?=\s|$)/)?.[0] ?? line;
+
+/**
+ * A job card's title made from the task (ticket 29), when the model gave none:
+ * its first sentence, without "please" / "can you", at most 48 characters.
+ * "Can you check git status? Then tell me." -> "check git status"
+ */
+export function shortTitle(task: string): string {
+  const line = task.trim().split(/\r?\n/)[0] ?? "";
+  const sentence = firstSentence(line)
+    .replace(/^(please|pls|hey|ok(ay)?|so)[,\s]+/i, "")
+    .replace(/^(can|could|would|will) you( please)?\s+/i, "")
+    .replace(/^please\s+/i, "")
+    .replace(/[.?!\s]+$/, "")
+    .trim();
+  return clip(sentence, MAX_TITLE) || "helper job";
+}
+
+/**
+ * The one-line plain summary of a job's output for its card (ticket 29): the
+ * first sentence of the first line that is not a heading, markdown marks
+ * stripped, at most 120 characters. "" for no output.
+ */
+export function oneLine(text: string): string {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const line = lines.find((l) => !l.startsWith("#")) ?? lines[0] ?? "";
+  const plain = line
+    .replace(/^#+\s*/, "")
+    .replace(/^([-*+>]|\d+[.)])\s+/, "")
+    .replace(/[*_`]+/g, "")
+    .trim();
+  return clip(firstSentence(plain), MAX_LINE);
 }

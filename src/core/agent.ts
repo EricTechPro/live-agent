@@ -24,7 +24,7 @@
 //   jobs.ts        background jobs (helpers, tidy) with states and cancel
 //   safety.ts      the gate's mode table
 import { existsSync } from "node:fs";
-import { brainRoot } from "../brain/index.ts";
+import { brainRoot, type BrainFolders } from "../brain/index.ts";
 import { tidyJob, type TidyModel } from "../brain/tidy.ts";
 import { defaultConfig, defaultConfigPath, type Config } from "../config/index.ts";
 import { errorMessage } from "../errors.ts";
@@ -100,6 +100,8 @@ export interface AgentSession {
    * nothing) if no call with that id is waiting, e.g. it was already answered.
    */
   answer(id: string, approve: boolean): boolean;
+  /** The brain folder in use now (absolute) and its part folder names (the window's file tree, ticket 23). */
+  brain(): { root: string; folders: BrainFolders };
   /** The safety mode the gate uses right now. */
   mode(): SafetyMode;
   /**
@@ -455,6 +457,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     },
     jobs: { submit: jobs.submit, cancel: jobs.cancel, list: jobs.list },
     answer: (id, approve) => !closed && approvals.answer(id, approve),
+    brain: () => ({ root: brainPath, folders: config.brainFolders }),
     mode: () => mode,
     setMode,
     cycleMode() {

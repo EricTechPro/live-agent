@@ -35,6 +35,9 @@
 //                     running chat uses it at once (reconnecting for the new voice and tone)
 //   POST /chat/new -> { ok }: end this chat (note + tidy job) and start the next
 //   POST /pause    -> { paused } in and out: Jett stops speaking and hearing, the chat stays
+//   GET  /brain/tree -> the brain's three parts as a file tree (markdown only, junk folders skipped)
+//   GET  /brain/file?path=wiki/x.md -> { path, text }: one note, read only. 400 for anything
+//                     outside the three part folders (.., absolute, a symlink out), 404 when gone
 //
 // Why HTTP + SSE (not a WebSocket): the window only reads the stream, and
 // fetch/EventSource exist in every webview with no library.
@@ -47,6 +50,7 @@ import { MODE_LABELS, MODES, type SafetyMode } from "./core/safety.ts";
 import { errorMessage } from "./errors.ts";
 import { ConfigError, defaultConfigPath } from "./config/index.ts";
 import { brainRoot } from "./brain/index.ts";
+import { BrainFileMissing, BrainPathError, brainTree, readBrainFile } from "./brain/tree.ts";
 import { currentConfig, saveSetup, type SetupAnswers } from "./setup/index.ts";
 import { detectParts, pickFolder as macPickFolder, scanFolder, type FolderPicker } from "./setup/folders.ts";
 import { insideBrain } from "./setup/parts.ts";
@@ -229,6 +233,26 @@ export async function startApp(options: AppOptions): Promise<App> {
           return json({ error: `send { mode: ${MODES.map((m) => `"${m}"`).join(" | ")} } or { cycle: true }` }, 400);
         }
         return json({ mode: session.mode() });
+      },
+
+      // The sidebar's brain tree and the read-only file view (ticket 23). The window
+      // asks again on every `brain.write`, so new notes show up without a restart.
+      async "GET /brain/tree"({ session }) {
+        const { root, folders } = session.brain();
+        return json(await brainTree(root, folders));
+      },
+
+      async "GET /brain/file"({ session }, req) {
+        const path = new URL(req.url).searchParams.get("path");
+        if (!path) return json({ error: "send ?path=<a note inside the brain>" }, 400);
+        const { root, folders } = session.brain();
+        try {
+          return json(await readBrainFile(root, path, folders));
+        } catch (err) {
+          if (err instanceof BrainPathError) return json({ error: err.message }, 400);
+          if (err instanceof BrainFileMissing) return json({ error: err.message }, 404);
+          throw err;
+        }
       },
 
       "GET /events"({ session }) {

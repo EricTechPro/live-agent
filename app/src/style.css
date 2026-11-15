@@ -99,6 +99,40 @@ body {
 .side-title { margin: 0 0 6px; font: 700 10px/1.2 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
 .side-empty { margin: 0 0 18px; color: var(--ink-3); font-size: 11px; }
 .center[data-panel="closed"] { grid-template-columns: 208px minmax(0, 1fr); }
+
+/* ---- brain tree (ticket 23): the three parts, folders collapsible, a click reads a note ---- */
+.brain-tree { list-style: none; margin: 0 -6px 18px; padding: 0; }
+.brain-item {
+  appearance: none; border: 0; background: none; cursor: pointer; width: 100%;
+  display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px calc(6px + var(--depth, 0) * 12px);
+  color: var(--ink-2); font: 500 12px/1.3 var(--mono); font-stretch: 87.5%; text-align: left;
+}
+.brain-item:hover { background: #0c2b2c; color: var(--ink); }
+.brain-item:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.brain-item .icon { flex: none; color: var(--ink-3); }
+.brain-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brain-chev { flex: none; width: 10px; display: grid; place-items: center; color: var(--ink-3); }
+.brain-row[aria-expanded="false"] .brain-chev .icon { transform: rotate(-90deg); }
+.brain-row.part .brain-item { color: var(--ink); font-weight: 700; }
+.brain-row.part .brain-item > .icon { color: var(--led); }
+.brain-count { flex: none; color: var(--ink-3); font-size: 10px; }
+.brain-row[aria-selected="true"] .brain-item { background: #12393a; color: var(--led); }
+.brain-row[aria-selected="true"] .brain-item .icon { color: var(--led); }
+
+/* The note reader: covers the transcript, read only. */
+.reader { flex: 1; min-height: 0; display: flex; flex-direction: column; --frame: var(--edge-hi); --fill: #061719; }
+.reader-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border-bottom: 2px solid var(--edge); }
+.reader-icon { color: var(--led); display: grid; }
+.reader-head .ib { width: 28px; height: 28px; background: none; }
+.reader-head .ib:hover { background: #0c2b2c; }
+.reader-name { margin: 0; font: 700 13px/1.2 var(--mono); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reader-path { flex: 1; min-width: 0; color: var(--ink-3); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reader-text {
+  flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 14px 16px 18px;
+  white-space: pre-wrap; overflow-wrap: anywhere; user-select: text;
+  color: var(--ink-2); font: 400 13px/1.6 var(--mono); font-stretch: 87.5%;
+}
+.reader-text:focus-visible { outline: 2px solid var(--ink); outline-offset: -4px; }
 @media (max-width: 860px) {
   .center { grid-template-columns: minmax(0, 1fr) 260px; } .center[data-panel="closed"] { grid-template-columns: minmax(0, 1fr); }
   .sidebar { display: none; }
@@ -107,9 +141,14 @@ body {
 
 /* ---- right panel (ticket 25): Canvas and Jobs tabs, X to close ---- */
 .panel { display: flex; flex-direction: column; gap: 12px; padding-top: 8px; }
-.panel-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.panel-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 2px solid var(--edge); }
+/* The panel's own X: small and bare in the tab row, so it never reads as a second
+   control-center X stacked under the top bar's framed one (whose tip goes left). */
+.panel-close { width: 26px; height: 26px; margin-right: 2px; background: none; color: var(--ink-3); }
+.panel-close:hover { background: #0c2b2c; color: var(--ink); }
 .tabs { display: flex; gap: 2px; }
 .tab {
+  margin-bottom: -2px;
   appearance: none; border: 0; background: none; cursor: pointer; position: relative;
   display: inline-flex; align-items: center; gap: 6px; padding: 8px 10px 7px;
   color: var(--ink-3); font: 700 11px/1.2 var(--mono); font-stretch: 87.5%; letter-spacing: .08em; text-transform: uppercase;
@@ -189,18 +228,42 @@ body {
 .jobs { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 .job-empty { margin: 0; color: var(--ink-3); }
 .job-list { list-style: none; margin: 0; padding: 0 2px 0 0; display: flex; flex-direction: column; gap: 6px; overflow: auto; min-height: 0; }
-.job { --frame: var(--edge-hi); --fill: #061719; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; flex: none; }
+.job { --frame: var(--edge-hi); --fill: #061719; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; flex: none; }
 .job[data-status="working"] { --frame: var(--led); }
 .job[data-status="failed"] { --frame: var(--bad); }
-.job-head { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 8px; align-items: center; }
-.job-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
-.job-status { font: 700 10px/1.2 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); flex: none; }
+.job-head { display: flex; gap: 8px; align-items: center; min-height: 22px; }
+.job-helper { flex: none; display: grid; place-items: center; width: 22px; height: 22px; background: #0c2b2c; color: var(--led); outline: 1px solid var(--edge-hi); }
+.job-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; color: var(--ink); }
+.job-title::first-letter { text-transform: uppercase; }
+.job-status { display: inline-flex; align-items: center; gap: 5px; font: 700 10px/1.2 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); flex: none; }
+.job-status .led { width: 6px; height: 6px; }
+.job-meta { margin: 0 0 0 30px; display: flex; align-items: center; gap: 0; min-width: 0; font-size: 11px; color: var(--ink-3); white-space: nowrap; }
+.job-meta > span { flex: none; }
+.job-meta > .job-folder { flex: 0 1 auto; }
+.job-meta > span + span::before { content: "·"; margin: 0 6px; color: var(--edge-hi); }
+.job-time { font-variant-numeric: tabular-nums; }
+.job-folder { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.job-summary {
+  appearance: none; border: 0; background: none; margin: 2px 0 0 30px; padding: 0; text-align: left; width: calc(100% - 30px);
+  display: flex; gap: 6px; align-items: baseline; color: var(--ink-2); font: 500 12px/1.4 var(--mono); font-stretch: 87.5%;
+}
+button.job-summary { cursor: pointer; }
+button.job-summary:hover { color: var(--ink); }
+button.job-summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.job[data-status="failed"] .job-summary { color: #ffb4a8; }
+.job-chev { flex: none; color: var(--ink-3); margin-left: auto; }
+.job-chev .icon { display: block; transform: rotate(-90deg); }
+.job-summary[aria-expanded="true"] .job-chev .icon { transform: none; }
+.job-output {
+  margin: 4px 0 0; padding: 8px 10px; max-height: 240px; overflow: auto; background: #04121a; outline: 1px solid var(--edge);
+  white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; font: 400 11px/1.5 var(--mono); color: var(--ink-2);
+}
+.job-output:focus-visible { outline: 2px solid var(--ink); }
 .job[data-status="working"] .job-status { color: var(--led); }
 .job[data-status="done"] .job-status { color: var(--led); }
 .job[data-status="failed"] .job-status { color: var(--bad); }
-.job-message { margin: 0; font-size: 11px; color: var(--ink-3); white-space: pre-wrap; max-height: 6em; overflow: auto; }
-.job-worktree { margin: 0; font-size: 11px; color: var(--ink-3); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
-.job-cancel { align-self: flex-start; }
+.job-cancel { width: 22px; height: 22px; color: var(--ink-3); background: none; }
+.job-cancel:hover { color: var(--bad); }
 
 /* ---- diagram panel (ticket 16) ---- */
 .diagram { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; }
@@ -227,7 +290,7 @@ body {
    orb, its state word and the running-jobs count stay; click the orb to restore.
    The orb stage fills the window wherever the dock is (home or the chat's top). */
 .mini-count { display: none; }
-body.mini .topbar, body.mini .sidebar, body.mini .panel, body.mini .transcript, body.mini .diagram,
+body.mini .topbar, body.mini .sidebar, body.mini .reader, body.mini .panel, body.mini .transcript, body.mini .diagram,
 body.mini .type, body.mini .jobs, body.mini .bar, body.mini .controls, body.mini .say, body.mini .tail { display: none !important; }
 body.mini .center { display: block; border: 0; }
 body.mini .orb-stage { position: fixed; inset: 0; flex-direction: column; justify-content: center; gap: 0; }

@@ -7,10 +7,11 @@
 import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineTool } from "../src/core/tool.ts";
+import { shortTitle } from "../src/helpers/cli-job.ts";
 import { HELPER_IDS, pickHelper } from "../src/helpers/index.ts";
 import { createWorktree, inWorktree } from "../src/helpers/worktree.ts";
 
-export default defineTool<{ task: string; folder?: string; helper?: string }>({
+export default defineTool<{ task: string; title?: string; folder?: string; helper?: string }>({
   name: "start_helper",
   description:
     "Start a helper coding agent in the background for anything that needs the computer: git status or diffs, " +
@@ -24,6 +25,10 @@ export default defineTool<{ task: string; folder?: string; helper?: string }>({
     type: "object",
     properties: {
       task: { type: "string", description: "What the helper should do, in plain words." },
+      title: {
+        type: "string",
+        description: "A short title for the job card, 2 to 6 words (\"Fix flaky login test\"). Default: made from the task.",
+      },
       folder: {
         type: "string",
         description:
@@ -40,7 +45,7 @@ export default defineTool<{ task: string; folder?: string; helper?: string }>({
     },
     required: ["task"],
   },
-  async run({ task, folder, helper: asked }, { brainPath, jobs, helpers }) {
+  async run({ task, title, folder, helper: asked }, { brainPath, jobs, helpers }) {
     if (!jobs || !helpers) throw new Error("helper jobs are not available in this session");
     const { geminiCli, codex = false, claudeCode = false, worktrees, ...paths } = helpers;
     // Off, or none on: a plain fix for the voice, and no job starts.
@@ -59,7 +64,12 @@ export default defineTool<{ task: string; folder?: string; helper?: string }>({
     // Worktrees on: the helper works on its own branch, never in the user's checkout.
     // Not a git project: createWorktree throws a plain fix, and no job starts.
     const worktree = worktrees ? createWorktree({ folder: project, task, root: paths.worktreesRoot }) : undefined;
-    const spec = { ...helper.job({ task, cwd: worktree?.cwd ?? project, ...paths }), folder: project };
+    const spec = {
+      ...helper.job({ task, cwd: worktree?.cwd ?? project, ...paths }),
+      folder: project,
+      // Ticket 29: the model's short title for the card; else the adapter's, made from the task.
+      ...(title?.trim() ? { title: shortTitle(title) } : {}),
+    };
     const jobId = jobs.submit(worktree ? inWorktree(spec, worktree) : spec);
     const job = jobs.list().find((j) => j.id === jobId)!;
     return { jobId, helper: helper.id, state: job.state, folder: project, ...(job.worktree ? { worktree: job.worktree } : {}) };

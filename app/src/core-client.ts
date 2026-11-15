@@ -10,6 +10,7 @@
 //   POST /approvals/:id/approve|decline  the approve / deny card (ticket 28)
 //   GET  /setup, POST /setup/pick-folder|scan|save   the setup wizard (works before a key)
 //   POST /chat/new end this chat (note + tidy job) and start the next
+//   GET  /brain/tree, /brain/file?path=   the sidebar's brain tree and the read-only file view (ticket 23)
 // Every call carries the per-launch token. Each command gets one small method
 // here, so the rest of the window never builds URLs.
 import { invoke } from "@tauri-apps/api/core";
@@ -18,6 +19,7 @@ import type { AgentEvent } from "../../src/core/events.ts";
 import type { SafetyMode } from "../../src/core/safety.ts";
 import type { Config } from "../../src/config/index.ts";
 import type { SetupAnswers } from "../../src/setup/index.ts";
+import type { BrainTree } from "../../src/brain/tree.ts";
 import type { FolderTree, Part, PartChoice } from "./wizard-flow.ts";
 
 export interface CoreInfo {
@@ -53,6 +55,10 @@ export interface CoreClient {
   newChat(): Promise<void>;
   /** Pause (true) or resume: Jett stops speaking and hearing; the chat stays. The core echoes a `paused` event. */
   pause(on: boolean): Promise<void>;
+  /** The brain's three parts as a file tree (ticket 23). */
+  brainTree(): Promise<BrainTree>;
+  /** One note's text, read only. Rejects with the core's plain reason (outside the brain, gone). */
+  brainFile(path: string): Promise<{ path: string; text: string; truncated?: boolean }>;
 }
 
 /** Wait for Rust to report the core is up. Rejects with the reason if it failed to start. */
@@ -216,5 +222,7 @@ export function connectCore(info: CoreInfo): CoreClient {
       const res = await fetch(`${info.url}/chat/new`, { method: "POST", headers: auth });
       if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? `core /chat/new: ${res.status}`);
     },
+    brainTree: () => setupCall<BrainTree>(info, "/brain/tree"),
+    brainFile: (path) => setupCall(info, `/brain/file?path=${encodeURIComponent(path)}`),
   };
 }

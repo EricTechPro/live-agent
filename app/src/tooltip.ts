@@ -1,6 +1,7 @@
 // Tooltips for icon buttons (ticket 26). One floating tip for the whole window,
 // shown on hover (after a short wait) and on keyboard focus, for any element with
-// `data-tip` ("Pause") and optionally `data-key` ("Space"). The tip only repeats
+// `data-tip` ("Pause") and optionally `data-key` ("Space"). `data-side="left"` puts the
+// tip left of the button, for one with another control right under it. The tip only repeats
 // what the button's aria-label already says, so screen readers skip it.
 // It lives outside every pixel frame (.pf clips its children), so it never gets cut.
 // Also here: filling `[data-icon]` elements with their pixel icons.
@@ -40,7 +41,8 @@ export function mountTooltips(root: HTMLElement = document.body) {
     if (key) tip.append(Object.assign(document.createElement("kbd"), { textContent: key }));
     tip.hidden = false;
     const r = el.getBoundingClientRect();
-    const at = placeTip(r, { width: tip.offsetWidth, height: tip.offsetHeight }, { width: innerWidth, height: innerHeight });
+    const side = el.dataset.side === "left" ? "left" : undefined;
+    const at = placeTip(r, { width: tip.offsetWidth, height: tip.offsetHeight }, { width: innerWidth, height: innerHeight }, 8, 6, side);
     tip.style.left = `${at.left}px`;
     tip.style.top = `${at.top}px`;
     tip.dataset.side = at.side;

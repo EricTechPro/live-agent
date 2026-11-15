@@ -20,7 +20,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { JobSpec } from "../core/jobs.ts";
-import { capSummary, childEnv, findBin, jobTitle, jsonLine, liveAgentDataDir, runCli, type HelperPaths } from "./cli-job.ts";
+import { capSummary, childEnv, findBin, shortTitle, jsonLine, liveAgentDataDir, runCli, type HelperPaths } from "./cli-job.ts";
 import { geminiApiKey } from "../gemini-key.ts";
 
 const KEY_GUIDE = "README.md#get-your-gemini-key";
@@ -87,7 +87,7 @@ export function geminiCliJob({
 }: GeminiCliOptions): JobSpec {
   return {
     kind: "gemini-cli",
-    title: jobTitle(task),
+    title: shortTitle(task),
     async run({ signal }) {
       const status = geminiCliStatus({ bin, apiKey });
       if (!status.ok) throw new Error(status.fix);

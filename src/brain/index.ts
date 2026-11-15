@@ -41,10 +41,11 @@ export function brainRoot(brainPath: string, workDir = process.cwd()): string {
 
 // Folders that are never notes: packages, git, build output, scratch. A real brain
 // (a repo like EricOS) has code projects inside it, and their READMEs must not answer.
-const NEVER = new Set(["node_modules", "dist", "build", "out", "vendor", "coverage", "target", "_tmp", "tmp", "__pycache__"]);
+// The window's file tree (src/brain/tree.ts) skips the same ones.
+export const JUNK_FOLDERS: ReadonlySet<string> = new Set(["node_modules", "dist", "build", "out", "vendor", "coverage", "target", "_tmp", "tmp", "__pycache__"]);
 
 /** Plain folder names in the brain's own .gitignore (`coverage/`, `cache`): cheap to honour; globs are skipped. */
-async function ignoredNames(root: string): Promise<Set<string>> {
+export async function ignoredNames(root: string): Promise<Set<string>> {
   try {
     const lines = (await readFile(join(root, ".gitignore"), "utf8")).split(/\r?\n/);
     return new Set(lines.map((l) => l.trim().replace(/^\/|\/$/g, "")).filter((l) => l && !l.startsWith("#") && /^[^*?[\]!/]+$/.test(l)));
@@ -53,7 +54,7 @@ async function ignoredNames(root: string): Promise<Set<string>> {
   }
 }
 
-/** Every `.md` file under `dir`, skipping dot folders (.git, .obsidian), NEVER and ignored names. */
+/** Every `.md` file under `dir`, skipping dot folders (.git, .obsidian), JUNK_FOLDERS and ignored names. */
 async function walkMarkdown(dir: string, ignored: Set<string>): Promise<string[]> {
   let entries;
   try {
@@ -66,7 +67,7 @@ async function walkMarkdown(dir: string, ignored: Set<string>): Promise<string[]
     if (entry.name.startsWith(".") || ignored.has(entry.name)) continue;
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (!NEVER.has(entry.name)) out.push(...(await walkMarkdown(full, ignored)));
+      if (!JUNK_FOLDERS.has(entry.name)) out.push(...(await walkMarkdown(full, ignored)));
     } else if (entry.isFile() && entry.name.endsWith(".md")) out.push(full);
   }
   return out;

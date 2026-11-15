@@ -14,7 +14,7 @@
 //   live-agent never signs in for them and never passes on the Gemini key.
 // - Ready check: `codex login status` exits 0 when signed in (no model call).
 import type { JobSpec } from "../core/jobs.ts";
-import { capSummary, childEnv, jobTitle, jsonLine, runCli, signInStatus, type HelperPaths } from "./cli-job.ts";
+import { capSummary, childEnv, shortTitle, jsonLine, runCli, signInStatus, type HelperPaths } from "./cli-job.ts";
 import type { HelperStatus } from "./index.ts";
 
 export const DEFAULT_CODEX_BIN = "codex";
@@ -30,7 +30,7 @@ export function codexStatus({ codexBin = DEFAULT_CODEX_BIN }: HelperPaths = {}):
 export function codexJob({ task, cwd, cancelGraceMs = 3000, ...paths }: HelperPaths & { task: string; cwd: string }): JobSpec {
   return {
     kind: "codex",
-    title: jobTitle(task),
+    title: shortTitle(task),
     async run({ signal }) {
       const status = await codexStatus(paths);
       if (!status.ok) throw new Error(status.fix);

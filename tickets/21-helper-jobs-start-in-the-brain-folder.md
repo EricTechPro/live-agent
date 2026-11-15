@@ -18,7 +18,7 @@
 - [x] A `start_helper` call with no folder starts its job in the brain folder (`ToolContext.brainPath`), checked through the event stream with the scripted fake model
 - [x] A relative folder (`projects/live-agent`) resolves inside the brain folder; an absolute folder is used as given
 - [x] A folder that doesn't exist fails the call with a plain fix the model hears, and no job starts
-- [ ] Every `job.state` event for a helper job carries the folder it works in, and the job board shows it (core half done: `job.state.folder`; the job board half is window work, left to the app builder)
+- [x] Every `job.state` event for a helper job carries the folder it works in, and the job board shows it (the card shows the folder name, full path on hover; ticket 29)
 - [x] The `start_helper` schema and the system prompt say the same default (the brain folder)
 - [x] Opened like the installed app (`LIVE_AGENT_HOME` set), a helper job never runs in the home folder
 
