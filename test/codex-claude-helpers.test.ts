@@ -122,6 +122,17 @@ async function runJob(args: Record<string, unknown>, config: Config, helpers: Se
   return { events, end };
 }
 
+/** Run one start_helper call that should be refused before any job starts; return its error. */
+async function refusedStart(args: Record<string, unknown>, config: Config, helpers: SessionOptions["helpers"] = {}) {
+  const s = await session([[startHelper("c1", args)], say("Not ready.")], config, helpers);
+  const events = await s.sendText("Fix the bug.");
+  await s.close();
+  expect(events.some((e) => e.type === "job.state")).toBe(false);
+  const result = events.find((e): e is EventOf<"tool.result"> => e.type === "tool.result" && e.id === "c1")!;
+  expect(result.status).toBe("error");
+  return result.error ?? "";
+}
+
 describe("Codex helper", () => {
   test("turning Codex on lets the agent start a Codex job that edits unattended in the folder", async () => {
     const saved = process.env.GOOGLE_API_KEY;
@@ -142,17 +153,15 @@ describe("Codex helper", () => {
     }
   });
 
-  test("a signed-out Codex fails the job with how to sign in, without running a task", async () => {
-    const { end } = await runJob({ helper: "codex" }, configWith({ codex: true }), { codexBin: codexSignedOut });
-    expect(end.state).toBe("failed");
-    expect(end.message).toContain("codex login");
+  test("a signed-out Codex starts no job and says how to sign in, without running a task", async () => {
+    const error = await refusedStart({ helper: "codex" }, configWith({ codex: true }), { codexBin: codexSignedOut });
+    expect(error).toContain("codex login");
     expect(existsSync(join(dir, "codex-out-ran"))).toBe(false);
   });
 
-  test("a missing Codex fails the job with how to install it", async () => {
-    const { end } = await runJob({ helper: "codex" }, configWith({ codex: true }), { codexBin: join(dir, "no-codex") });
-    expect(end.state).toBe("failed");
-    expect(end.message).toContain("npm install -g @openai/codex");
+  test("a missing Codex starts no job and says how to install it", async () => {
+    const error = await refusedStart({ helper: "codex" }, configWith({ codex: true }), { codexBin: join(dir, "no-codex") });
+    expect(error).toContain("npm install -g @openai/codex");
   });
 
   test("a Codex error ends the job failed with the error", async () => {
@@ -200,10 +209,9 @@ describe("Claude Code helper", () => {
     expect(readFileSync(join(dir, "claude-env"), "utf8").trim()).toBe("gemini=none google=none");
   });
 
-  test("a signed-out Claude Code fails the job with how to sign in", async () => {
-    const { end } = await runJob({ helper: "claude-code" }, configWith({ claudeCode: true }), { claudeCodeBin: claudeSignedOut });
-    expect(end.state).toBe("failed");
-    expect(end.message).toContain("claude auth login");
+  test("a signed-out Claude Code starts no job and says how to sign in", async () => {
+    const error = await refusedStart({ helper: "claude-code" }, configWith({ claudeCode: true }), { claudeCodeBin: claudeSignedOut });
+    expect(error).toContain("claude auth login");
     expect(existsSync(join(dir, "claude-out-ran"))).toBe(false);
   });
 

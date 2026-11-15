@@ -301,26 +301,26 @@ describe("cancelling", () => {
 });
 
 describe("Gemini CLI missing or no key", () => {
-  test("a missing binary fails the job with how to install it", async () => {
-    const s = await session([[startHelper("c1")], say("Started."), say("It failed.")], join(dir, "no-such-gemini"));
-    const rec = recorder(s);
-    await s.sendText("Fix the bug.");
-    const end = (await rec.until(jobEnded("job-1"))) as EventOf<"job.state">;
-    expect(end.state).toBe("failed");
-    expect(end.message).toContain("npm install -g @google/gemini-cli");
+  test("a missing binary starts no job and says how to install it", async () => {
+    const s = await session([[startHelper("c1")], say("Install it first.")], join(dir, "no-such-gemini"));
+    const events = await s.sendText("Fix the bug.");
+    expect(events.some((e) => e.type === "job.state")).toBe(false);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "tool.result", id: "c1", status: "error", error: expect.stringContaining("npm install -g @google/gemini-cli"),
+    }));
     await s.close();
   });
 
-  test("with no Gemini key the job fails with where to get one, without running the CLI", async () => {
-    const s = await session([[startHelper("c1")], say("Started."), say("It failed.")], ok, {
+  test("with no Gemini key no job starts, the CLI does not run, and it says where to get one", async () => {
+    const s = await session([[startHelper("c1")], say("Add a key first.")], ok, {
       helpers: { geminiCliBin: ok, geminiCliHome: helperHome, geminiApiKey: "" },
     });
     rmSync(join(dir, "ok-args"), { force: true });
-    const rec = recorder(s);
-    await s.sendText("Fix the bug.");
-    const end = (await rec.until(jobEnded("job-1"))) as EventOf<"job.state">;
-    expect(end.state).toBe("failed");
-    expect(end.message).toContain("README.md#get-your-gemini-key");
+    const events = await s.sendText("Fix the bug.");
+    expect(events.some((e) => e.type === "job.state")).toBe(false);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "tool.result", id: "c1", status: "error", error: expect.stringContaining("README.md#get-your-gemini-key"),
+    }));
     expect(existsSync(join(dir, "ok-args"))).toBe(false);
     await s.close();
   });

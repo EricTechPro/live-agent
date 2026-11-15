@@ -54,12 +54,12 @@ const startHelper = (id: string, folder: string, task = "fix the add bug"): Mode
 });
 const say = (text: string): ModelEvent[] => [{ type: "text", text }];
 
-function session(script: ScriptEntry[], worktrees: boolean) {
+function session(script: ScriptEntry[], worktrees: boolean, geminiCliBin = fixer) {
   const config = defaultConfig();
   config.worktrees = worktrees;
   return startSession({
     model: scriptedModel(script), tools, mode: "bypass", workDir: dir, config,
-    helpers: { geminiCliBin: fixer, geminiCliHome: join(dir, "helper-home"), geminiApiKey: "k", worktreesRoot },
+    helpers: { geminiCliBin, geminiCliHome: join(dir, "helper-home"), geminiApiKey: "k", worktreesRoot },
   });
 }
 
@@ -136,6 +136,19 @@ describe("worktrees on", () => {
     expect(result.error).toContain("is not a git project");
     expect(result.error).toContain("git init");
     expect(result.error).toContain('"worktrees": false');
+    await s.close();
+  });
+
+  test("a helper that is not installed gives the fix right away: no job, no worktree, no branch", async () => {
+    const project = repo();
+    const s = await session([[startHelper("c1", project)], say("Install Gemini CLI first.")], true, join(dir, "no-such-gemini"));
+    const events = await s.sendText("Fix the add bug.");
+    expect(events.some((e) => e.type === "job.state")).toBe(false);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "tool.result", id: "c1", status: "error", error: expect.stringContaining("npm install -g @google/gemini-cli"),
+    }));
+    expect(git(project, "branch", "--list")).toBe("* main");
+    expect(git(project, "worktree", "list").split("\n")).toHaveLength(1);
     await s.close();
   });
 
