@@ -1,4 +1,4 @@
-// The sketch canvas's pure parts (ticket 32). Pure, like diagram.ts and panel.ts:
+// The sketch canvas's pure parts (tickets 32 to 35). Pure, like panel.ts and transcript.ts:
 //
 //   scene = addCanvasEvent(scene, event)   // marks by id, from `canvas.beat`; a new chat clears it
 //   const ink = inkFor(mark)               // the pen strokes and written words of one mark
@@ -36,9 +36,25 @@ export interface Scene {
 
 export const emptyScene: Scene = { marks: [] };
 
-/** A beat adds its marks after the ones already drawn. A known id is replaced in place. `chat.started` clears. */
+/**
+ * A beat adds its marks after the ones already drawn; a known id is replaced in place.
+ * An edit swaps in the changed mark (same place, beat and line); an erase removes ids.
+ * `chat.started` clears.
+ */
 export function addCanvasEvent(scene: Scene, event: AgentEvent): Scene {
   if (event.type === "chat.started") return emptyScene;
+  if (event.type === "canvas.edit") {
+    const at = scene.marks.findIndex((m) => m.mark.id === event.mark.id);
+    if (at < 0) return scene;
+    const marks = [...scene.marks];
+    marks[at] = { ...marks[at]!, mark: event.mark };
+    return { marks };
+  }
+  if (event.type === "canvas.erase") {
+    if (event.all) return emptyScene;
+    const gone = new Set(event.ids);
+    return { marks: scene.marks.filter((m) => !gone.has(m.mark.id)) };
+  }
   if (event.type !== "canvas.beat") return scene;
   const beatKey = `${event.id}:${event.beat}`;
   const marks = [...scene.marks];
@@ -49,6 +65,29 @@ export function addCanvasEvent(scene: Scene, event: AgentEvent): Scene {
     else marks.push(next);
   }
   return { marks };
+}
+
+// ---- diagram cards (ticket 35) ---------------------------------------------------
+
+export type DiagramMark = Extract<Mark, { kind: "diagram" }>;
+
+/** A card's inner padding and title band, in board units. */
+export const CARD = { pad: 14, titleH: 34 } as const;
+
+/** The diagram cards on the canvas, in drawing order. */
+export function diagramCards(scene: Scene): DiagramMark[] {
+  return scene.marks.flatMap(({ mark }) => (mark.kind === "diagram" ? [mark] : []));
+}
+
+/** Where a card's diagram goes, in panel CSS pixels: inside the frame, below the title. */
+export function cardBox(mark: DiagramMark, fit: { scale: number; x: number; y: number }) {
+  const top = mark.y + (mark.title ? CARD.titleH : CARD.pad);
+  return {
+    left: fit.x + (mark.x + CARD.pad) * fit.scale,
+    top: fit.y + top * fit.scale,
+    width: Math.max(0, mark.w - 2 * CARD.pad) * fit.scale,
+    height: Math.max(0, mark.y + mark.h - CARD.pad - top) * fit.scale,
+  };
 }
 
 // ---- fitting the board into the panel ------------------------------------------
@@ -229,6 +268,18 @@ export function inkFor(mark: Mark): Ink {
       const { x, y } = mark;
       parts.push(stroke(roughLine({ x: x - s, y: y - s }, { x: x + s, y: y + s }, rand, 0.4), PEN * 1.2));
       parts.push(stroke(roughLine({ x: x + s, y: y - s }, { x: x - s, y: y + s }, rand, 0.4), PEN * 1.2));
+      break;
+    }
+    case "diagram": {
+      // A card: the pen draws its frame and writes the title; the diagram itself is
+      // Mermaid's SVG on top (sketch-view.ts), placed by cardBox.
+      const { x, y, w, h } = mark;
+      const corners: Pt[] = [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }];
+      for (let i = 0; i < 4; i++) {
+        const [a, b] = overshoot(corners[i]!, corners[(i + 1) % 4]!, 1.5 + rand() * 2);
+        parts.push(stroke(roughLine(a, b, rand, 0.6)));
+      }
+      if (mark.title) parts.push(write(x + CARD.pad, y + CARD.titleH / 2 + 4, mark.title, 16, "left"));
       break;
     }
     case "step": {

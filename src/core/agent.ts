@@ -29,6 +29,7 @@ import { tidyJob, type TidyModel } from "../brain/tidy.ts";
 import { defaultConfig, defaultConfigPath, type Config } from "../config/index.ts";
 import { errorMessage } from "../errors.ts";
 import type { HelperPaths } from "../helpers/cli-job.ts";
+import { createBoard } from "./board.ts";
 import { saveChatNote, SUMMARY_REQUEST, summaryCollector, type ChatLine, type SummaryCollector } from "./chat-end.ts";
 import type { AgentEvent } from "./events.ts";
 import { joinText } from "./join-text.ts";
@@ -193,8 +194,8 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       toolCalls.onJobState(job);
     },
   });
-  // Mark ids on the sketch canvas (ticket 31). A new chat starts a clean board.
-  const canvas = new Set<string>();
+  // The sketch canvas's marks (tickets 31, 33). A new chat starts a clean board.
+  const canvas = createBoard(emit);
   const toolCalls = createToolCalls({
     tools,
     jobs,
@@ -260,6 +261,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     approvals.closeTurn(heard !== "");
     // Why once, at the end: the app shows "notes used" next to the finished answer.
     if (finished.notes.size) emit({ type: "notes.used", notes: [...finished.notes] });
+    canvas.turnDone();
     emit({ type: "turn.done", reply: finished.reply });
     turn = null;
     if (heard) chat.push({ role: "user", text: heard });
@@ -313,10 +315,12 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         // Drop the queued voice first: the user is already talking.
         playAudio({ type: "clear" });
         emit({ type: "interrupted" });
+        canvas.interrupted();
         break;
       case "text":
         { const t = openVoiceTurn(); t.reply = joinText(t.reply, event.text); }
         emit({ type: "transcript", role: "model", text: event.text });
+        canvas.heard(event.text);
         break;
       case "tool.call":
         toolCalls.onCall(event);

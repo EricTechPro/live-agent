@@ -56,8 +56,8 @@ test("draw is a read tool in tools/ and in the bundled list, with a flat JSON sc
   // Gemini Live takes a plain OpenAPI subset: no anyOf / oneOf / const.
   expect(schema).not.toMatch(/anyOf|oneOf|allOf|"const"|\$ref/);
   expect(tool.parameters).toMatchObject({ type: "object", required: ["beats"] });
-  // draw_diagram stays until ticket 35.
-  expect(tools.some((t) => t.name === "draw_diagram")).toBe(true);
+  // draw_diagram is retired (ticket 35): diagrams are draw marks now.
+  expect(tools.some((t) => t.name === "draw_diagram")).toBe(false);
 });
 
 test("a good call emits canvas.beat events in order, after the tool call and the allow verdict", async () => {
@@ -74,7 +74,7 @@ test("a good call emits canvas.beat events in order, after the tool call and the
   expect(out[1]!.marks.map((m) => m.kind)).toEqual(["text", "line", "circle", "underline", "check", "cross", "step"]);
   expect(call).toBeLessThan(allow);
   expect(allow).toBeLessThan(events.indexOf(out[0]!));
-  expect(events).toContainEqual(expect.objectContaining({ type: "tool.result", id: "d1", status: "ok", output: { drawn: 10, ids: ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10"] } }));
+  expect(events).toContainEqual(expect.objectContaining({ type: "tool.result", id: "d1", status: "ok", output: { drawn: 10, ids: ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10"], canvas: ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10"] } }));
   expect(events.at(-1)?.type).toBe("turn.done");
 });
 

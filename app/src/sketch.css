@@ -1,9 +1,23 @@
-/* The sketch canvas (ticket 32), inside the right panel's Canvas tab (#panel-canvas).
-   sketch-view.ts adds the figure and sets #panel-canvas[data-view] to "sketch" or "diagram":
-   whichever came last shows, the other hides. */
+/* The sketch canvas (tickets 32 to 35), inside the right panel's Canvas tab (#panel-canvas).
+   sketch-view.ts adds the figure and sets #panel-canvas[data-view="sketch"] while it shows. */
 
-#panel-canvas[data-view="sketch"] #diagram, #panel-canvas[data-view="diagram"] .sketch { display: none; }
 .sketch:not([hidden]) ~ .canvas-empty { display: none; }
+
+/* Diagram cards (ticket 35): Mermaid's SVG inside a pen-drawn frame on the board.
+   The frame and title are canvas ink; this layer only holds the diagram. */
+.sketch-cards { position: absolute; inset: 0; pointer-events: none; }
+.sketch-card {
+  position: absolute; display: flex; align-items: center; justify-content: center; overflow: hidden;
+  opacity: 0; transition: opacity .5s var(--ease);
+}
+.sketch-card[data-shown="true"] { opacity: 1; }
+.sketch-card svg { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; }
+.sketch-card-note, .sketch-card-error { margin: 0; font: 400 11px/1.45 var(--mono); }
+.sketch-card-note { color: var(--ink-3); }
+.sketch-card-error { color: var(--bad); }
+.sketch-card[data-state="error"] { flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 4px; overflow: auto; pointer-events: auto; }
+.sketch-card-source { margin: 0; font: 400 10px/1.4 var(--mono); color: var(--ink-3); white-space: pre-wrap; user-select: text; }
+@media (prefers-reduced-motion: reduce) { .sketch-card { transition: none; } }
 
 /* A sketch needs room: while one shows, the right column grows (it stays 280px otherwise). */
 .center[data-panel="open"]:has(#panel-canvas[data-view="sketch"]:not([hidden])) { grid-template-columns: 208px minmax(0, 1fr) minmax(280px, 44%); }

@@ -177,7 +177,6 @@ body {
 .tab[data-failed="true"] .tab-badge { display: block; background: var(--bad); color: #2a0b06; }
 .tabpanel { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
 .canvas-empty { margin: auto; color: var(--ink-3); font: 900 13px/1.2 var(--dots); letter-spacing: .06em; text-transform: uppercase; }
-#diagram:not([hidden]) ~ .canvas-empty { display: none; }
 
 .chat { min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 10px 16px 0; width: 100%; max-width: 760px; margin: 0 auto; }
 /* The orb sits small at the top of the chat: orb, state word and call controls in one row. */
@@ -281,15 +280,6 @@ button.job-summary:focus-visible { outline: 2px solid var(--ink); outline-offset
 .job-cancel { width: 22px; height: 22px; color: var(--ink-3); background: none; }
 .job-cancel:hover { color: var(--bad); }
 
-/* ---- diagram panel (ticket 16) ---- */
-.diagram { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; }
-.diagram-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.diagram-title { margin: 0; font: 900 14px/1.2 var(--dots); letter-spacing: .04em; }
-.diagram-body { overflow: auto; min-height: 0; background: #f4fffc; padding: 8px; }
-.diagram-body svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }
-.diagram-note { margin: 0; color: var(--ink-3); }
-.diagram-error { margin: 0; color: var(--bad); }
-.diagram-source { margin: 0; font-size: 11px; color: var(--ink-3); white-space: pre-wrap; user-select: text; }
 
 /* ---- status line under the composer (ticket 10): the notes the last answer used ---- */
 .bar {
@@ -306,7 +296,7 @@ button.job-summary:focus-visible { outline: 2px solid var(--ink); outline-offset
    orb, its state word and the running-jobs count stay; click the orb to restore.
    The orb stage fills the window wherever the dock is (home or the chat's top). */
 .mini-count { display: none; }
-body.mini .topbar, body.mini .sidebar, body.mini .reader, body.mini .panel, body.mini .transcript, body.mini .diagram,
+body.mini .topbar, body.mini .sidebar, body.mini .reader, body.mini .panel, body.mini .transcript,
 body.mini .type, body.mini .jobs, body.mini .bar, body.mini .controls, body.mini .say, body.mini .tail { display: none !important; }
 body.mini .center { display: block; border: 0; }
 body.mini .orb-stage { position: fixed; inset: 0; flex-direction: column; justify-content: center; gap: 0; }

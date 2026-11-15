@@ -1,14 +1,18 @@
-// The sketch canvas (ticket 32): paints the core's `canvas.beat` marks on the
+// The sketch canvas (tickets 32 to 35): paints the core's `canvas.*` marks on the
 // Canvas tab with a pen that draws each stroke from 0 to 1, one mark after
 // another, and shows the beat's `say` line under the board while it draws.
+// The pen is paced to the voice by pen.ts: a beat's strokes start on its
+// `canvas.speak` and spread over the time its line takes to say.
 //
 // The state is sketch.ts (pure, tested); this file only paints it. Finished marks
 // go onto a cache canvas once, so each frame draws the cache plus the one mark the
 // pen is on. The board is the core's 1000 x 600, scaled into the panel and drawn
 // at the screen's pixel ratio so it stays sharp on Retina.
-// The Mermaid `diagram` view (ticket 16) shares the tab: whichever came last shows.
+// Diagram marks (ticket 35) are cards: the pen draws the frame, card-view.ts puts Mermaid inside.
 // Idea from Roamies (AGPL): idea only, our own code.
+import { mountCards } from "./card-view.ts";
 import type { CoreClient } from "./core-client.ts";
+import { emptyPen, penAddBeat, penInterrupt, penSpeak, type Pen } from "./pen.ts";
 import { addCanvasEvent, emptyScene, fitBoard, inkFor, partialPoints, partsAt, planMarks, taper, type Ink, type Part, type Pt, type Scene, type Slot } from "./sketch.ts";
 
 interface Drawn {
@@ -17,6 +21,7 @@ interface Drawn {
   say: string;
 }
 
+const ERASE_MS = 420;
 const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const font = (size: number) => `500 ${size}px "Martian Mono", ui-monospace, monospace`;
 
@@ -29,6 +34,7 @@ export function mountSketch(core: CoreClient, host: HTMLElement) {
   const caption = Object.assign(document.createElement("figcaption"), { className: "sketch-say" });
   caption.setAttribute("aria-live", "polite");
   board.append(canvas);
+  const cards = mountCards(board);
   figure.append(board, caption);
   host.insertBefore(figure, host.querySelector(".canvas-empty"));
 
@@ -39,7 +45,10 @@ export function mountSketch(core: CoreClient, host: HTMLElement) {
 
   let scene: Scene = emptyScene;
   let drawn = new Map<string, Drawn>();
-  let penFreeAt = 0;
+  // Erased marks while they stroke out (ticket 33).
+  let fading = new Map<string, { ink: Ink; slot: Slot }>();
+  // When each beat's marks draw, paced to the voice (ticket 34, pen.ts).
+  let pen: Pen = emptyPen;
   let fit = fitBoard(0, 0);
   let dpr = 1;
   let frame = 0;
@@ -58,32 +67,86 @@ export function mountSketch(core: CoreClient, host: HTMLElement) {
 
   // ---- events ----
   core.onEvent((event) => {
-    if (event.type === "diagram") host.dataset.view = "diagram";
-    if (event.type !== "chat.started" && event.type !== "canvas.beat") return;
+    if (event.type !== "chat.started" && !event.type.startsWith("canvas.")) return;
     scene = addCanvasEvent(scene, event);
     if (event.type === "chat.started") {
       drawn = new Map();
+      fading = new Map();
       cached = new Set();
-      penFreeAt = 0;
+      pen = emptyPen;
       caption.textContent = "";
       figure.hidden = true;
       delete host.dataset.view;
       return;
     }
+    if (event.type === "canvas.edit") {
+      // The changed mark redraws at once with a quick pen; the old one goes from the cache.
+      const old = drawn.get(event.mark.id);
+      if (!old) return;
+      const ink = inkFor(event.mark);
+      const now = performance.now();
+      const [slot] = planMarks({ penFreeAt: 0, now, lengths: [ink.length], newBeat: false, reducedMotion: reducedMotion() });
+      drawn.set(event.mark.id, { ...old, ink, slot: slot! });
+      cached = new Set();
+      kick();
+      return;
+    }
+    if (event.type === "canvas.erase") {
+      // Erased marks stroke out backwards, then they are gone.
+      const now = performance.now();
+      const ms = reducedMotion() ? 0 : ERASE_MS;
+      for (const id of event.ids) {
+        const d = drawn.get(id);
+        if (!d) continue;
+        drawn.delete(id);
+        if (d.slot.start <= now) fading.set(id, { ink: d.ink, slot: { start: now, end: now + ms } });
+      }
+      cached = new Set();
+      kick();
+      return;
+    }
+    if (event.type === "canvas.speak") {
+      // The voice starts this beat's line: the pen goes now (and hurries if it is behind).
+      pen = penSpeak(pen, `${event.id}:${event.beat}`, performance.now(), reducedMotion());
+      syncSlots();
+      return;
+    }
+    if (event.type !== "canvas.beat") return;
     host.dataset.view = "sketch";
     figure.hidden = false;
     const inks = event.marks.map(inkFor);
-    const now = performance.now();
-    const slots = planMarks({ penFreeAt, now, lengths: inks.map((i) => i.length), newBeat: true, reducedMotion: reducedMotion() });
     event.marks.forEach((mark, i) => {
       // A mark redrawn under a known id: start the cache over so the old one goes.
       if (drawn.has(mark.id)) cached = new Set();
-      drawn.set(mark.id, { ink: inks[i]!, slot: slots[i]!, say: event.say });
+      drawn.set(mark.id, { ink: inks[i]!, slot: { start: Infinity, end: Infinity }, say: event.say });
     });
-    penFreeAt = Math.max(penFreeAt, slots.at(-1)?.end ?? now);
+    const key = `${event.id}:${event.beat}`;
+    const beat = { key, say: event.say, ids: event.marks.map((m) => m.id), lengths: inks.map((i) => i.length) };
+    pen = penAddBeat(pen, beat, performance.now(), reducedMotion());
+    syncSlots();
     canvas.setAttribute("aria-label", `Sketch: ${[...new Set(scene.marks.map((m) => m.say))].join(" ")}`);
-    kick();
   });
+
+  // The user talked over Jett: the pen stops; beats not yet spoken stay undrawn.
+  // (The core erases those on its side too, with a `canvas.erase` right after.)
+  core.onEvent((event) => {
+    if (event.type !== "interrupted") return;
+    const stopped = penInterrupt(pen, performance.now());
+    pen = stopped.pen;
+    for (const id of stopped.dropped) drawn.delete(id);
+    if (stopped.dropped.length) scene = addCanvasEvent(scene, { type: "canvas.erase", id: "", ids: stopped.dropped, all: false });
+    syncSlots();
+  });
+
+  /** Copy the pen's timing onto the marks it knows. */
+  function syncSlots() {
+    for (const b of pen.beats)
+      b.ids.forEach((id, i) => {
+        const d = drawn.get(id);
+        if (d) d.slot = b.slots[i]!;
+      });
+    kick();
+  }
 
   function kick() {
     if (!frame) frame = requestAnimationFrame(paint);
@@ -129,10 +192,28 @@ export function mountSketch(core: CoreClient, host: HTMLElement) {
       speaking = d.say;
     }
 
+    // Erased marks: the pen runs backwards until the mark is gone.
+    for (const [id, f] of fading) {
+      const span = f.slot.end - f.slot.start;
+      const p = span > 0 ? (now - f.slot.start) / span : 1;
+      if (p >= 1) {
+        fading.delete(id);
+        continue;
+      }
+      busy = true;
+      drawInk(ctx, f.ink, 1 - easePen(p));
+    }
+
     // The caption: the line being drawn; once the pen rests, the last line, dimmed.
     const line = speaking ?? (busy ? caption.textContent : scene.marks.at(-1)?.say) ?? "";
     if (caption.textContent !== line) caption.textContent = line;
     caption.dataset.state = busy ? "drawing" : "done";
+
+    // Diagram cards: placed with the board, shown once their frame is drawn.
+    cards.sync(scene, fit, (id) => {
+      const d = drawn.get(id);
+      return !!d && d.slot.end <= now;
+    });
 
     if (busy) kick();
   }
