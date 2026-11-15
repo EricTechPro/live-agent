@@ -178,8 +178,110 @@ h3{font:600 16px/1.3 var(--sans);margin:0 0 4px}
 .mapbox{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--soft)}
 .mapbox iframe{display:block;width:100%;height:620px;border:0;background:#fff}
 
+
+/* how it works: hub */
+.hub{display:grid;grid-template-columns:minmax(0,1.05fr) 96px minmax(0,1fr) 96px minmax(0,1.1fr);grid-template-areas:"brain c1 boss c2 help" "brain . vc . help" "brain . tools . help";align-items:center;margin:0 0 10px}
+.hb-brain{grid-area:brain;align-self:start}.hb-c1{grid-area:c1}.hb-boss{grid-area:boss}.hb-vc{grid-area:vc}.hb-tools{grid-area:tools}.hb-c2{grid-area:c2}.hb-help{grid-area:help;align-self:start}
+.grp{border:1px solid var(--border);border-radius:12px;background:var(--soft);padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.grp .gh{display:flex;align-items:center;gap:8px;font-weight:650;margin:0;flex-wrap:wrap}
+.grp .gh .ic{color:var(--brand)}
+.grp .gh small{font-weight:400;color:var(--muted);font-size:13px}
+.grp ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.fl li{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--muted);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px}
+.fl code{color:var(--fg);font-weight:600;min-width:72px}
+.fl span{flex:1;min-width:0}
+.rw{font:600 11px var(--mono);font-style:normal;border-radius:999px;padding:1px 7px;flex:none}
+.rw.r{color:var(--voice);background:color-mix(in srgb,var(--voice) 12%,transparent)}
+.rw.w{color:var(--answer);background:color-mix(in srgb,var(--answer) 14%,transparent)}
+.tidy{font-size:12.5px;color:var(--muted);border:1px dashed var(--border);border-radius:8px;padding:8px 10px;text-align:center}
+.tidy p{margin:0;display:flex;align-items:center;justify-content:center;gap:6px}
+.tidy .tt{color:var(--fg);font-weight:600;margin-bottom:4px}
+.tidy code{color:var(--fg);font-size:12px}
+.tidy .bl{width:16px;height:16px}
+.ar{width:72px;height:12px;color:var(--muted);flex:none;display:block}
+.ar.l{transform:scaleX(-1)}
+.ar.sm{width:22px;height:10px}
+.fn{margin:0;font-size:12.5px;color:var(--muted);display:flex;gap:6px;align-items:flex-start}
+.fn .ic{width:15px;height:15px;color:var(--answer);margin-top:2px}
+.conn{display:flex;flex-direction:column;gap:22px;align-items:center;padding:0 4px}
+.cl{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:12px;color:var(--muted);text-align:center;line-height:1.3}
+.cl b{color:var(--fg);font-weight:600}
+.hb-c1 .cl:first-child .ar,.hb-c2 .cl:first-child .ar{color:var(--voice)}
+.hb-c1 .cl:last-child .ar,.hb-c2 .cl:last-child .ar{color:var(--answer)}
+.boss{text-align:center;border:2px solid var(--brand);border-radius:16px;background:var(--bg);padding:18px 14px 16px;box-shadow:0 0 0 6px color-mix(in srgb,var(--brand) 10%,transparent)}
+.boss .bm{width:52px;height:52px;display:block;margin:0 auto 6px}
+.boss .bn{font:700 19px/1.2 var(--sans);margin:0}
+.boss .bp{margin:6px 0;font:600 12px var(--mono);color:var(--muted)}
+.boss .bp span{background:var(--brand);color:#fff;border-radius:999px;padding:2px 9px;margin-right:4px;font-family:var(--sans)}
+.boss .bs{margin:0;font-size:13.5px;color:var(--muted)}
+.vc{display:flex;align-items:center;justify-content:center;gap:8px;height:52px;font-size:12px;color:var(--muted)}
+.ar.v{transform:rotate(90deg);width:40px}
+.tl{gap:6px!important}
+.tl li,.hl li{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 9px;min-width:0}
+.tl li .ic{width:17px;height:17px;color:var(--brand)}
+.tl li div{flex-direction:row!important;flex-wrap:wrap;gap:0 8px;align-items:baseline}
+.tl li div,.hl li div{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.tl b,.hl b{font-size:13px}
+.tl span,.hl span{font-size:12px;color:var(--muted)}
+.hl li{padding:9px 10px}
+.hl li div{flex:1}
+.hl .bl{width:26px;height:26px;color:var(--fg)}
+.st{align-self:flex-start;margin-top:5px;font:600 11px var(--sans);font-style:normal;border:1px solid var(--border);border-radius:999px;padding:2px 8px;color:var(--muted);white-space:nowrap;flex:none}
+.st.on{color:var(--answer);border-color:color-mix(in srgb,var(--answer) 45%,var(--border));background:color-mix(in srgb,var(--answer) 10%,transparent)}
+.h3b{font-size:18px;margin:0 0 12px}
+.mods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 12px}
+.mod{border:1px solid var(--border);border-radius:10px;background:var(--soft);padding:14px 16px}
+.mod .ml{display:flex;gap:6px;margin:0 0 8px}
+.mod .ml .bl{width:28px;height:28px;color:var(--fg)}
+.mod .mj{margin:0 0 2px;font:600 11.5px var(--mono);text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.mod h3{font-size:15.5px}
+.mod p{margin:0;color:var(--muted);font-size:13.5px}
+.pick{display:flex;gap:8px;align-items:center;margin:0;font-size:14.5px;font-weight:600}
+.pick .ic{color:var(--brand)}
+.soon{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:22px 0 0;font-size:13px;color:var(--muted)}
+.soon .sl{font:600 11.5px var(--mono);text-transform:uppercase;letter-spacing:.04em;color:var(--warn)}
+.soon .sp2{border:1px dashed var(--border);border-radius:999px;padding:3px 11px}
+/* why these parts */
+.parts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 34px}
+.part{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--bg)}
+.part .bl{width:26px;height:26px;color:var(--fg)}
+.part h3{font-size:14.5px}.part h3 small{font-weight:400;color:var(--muted);font-size:12px}
+.part p{margin:0;color:var(--muted);font-size:13px}
+.win{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--bg);max-width:860px;box-shadow:0 8px 24px -12px rgba(0,0,0,.25)}
+.wt{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--soft);font-size:12px;color:var(--muted)}
+.wt i{width:10px;height:10px;border-radius:50%;background:#ff5f57}.wt i:nth-child(2){background:#febc2e}.wt i:nth-child(3){background:#28c840}
+.wt span{margin-left:auto;margin-right:auto;font-weight:600}
+.wb{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}
+.wl{padding:14px;display:flex;flex-direction:column;gap:10px;border-right:1px solid var(--border)}
+.wo{display:flex;align-items:center;gap:12px}
+.wo img{width:56px;height:56px;image-rendering:pixelated}
+.wo div{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+.wo b{color:var(--ring)}
+.wbtn{display:inline-block;background:var(--pri);color:var(--pri-fg);border-radius:6px;padding:4px 10px;font-weight:600;font-size:12.5px}
+.wbs{display:flex;gap:6px;flex-wrap:wrap}
+.wbs span{border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:11.5px;color:var(--muted)}
+.wtr{display:flex;flex-direction:column;gap:6px;border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--soft)}
+.wtr p{margin:0;font-size:12.5px;padding:6px 9px;border-radius:8px;max-width:88%}
+.wtr .u{align-self:flex-end;background:color-mix(in srgb,var(--voice) 14%,var(--bg))}
+.wtr .a{background:color-mix(in srgb,var(--answer) 12%,var(--bg))}
+.wr{padding:14px;display:flex;flex-direction:column;gap:8px;background:var(--soft)}
+.wh{margin:0;font:600 11.5px var(--mono);text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.job{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px}
+.job .bl{width:20px;height:20px;color:var(--fg)}
+.job div{display:flex;flex-direction:column;flex:1;min-width:0;line-height:1.3}
+.job b{font-size:12.5px}.job span{font:11px var(--mono);color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.js{font:600 11px var(--sans);font-style:normal;border-radius:999px;padding:1px 8px;flex:none}
+.js.wk{color:var(--voice);background:color-mix(in srgb,var(--voice) 13%,transparent)}
+.js.dn{color:var(--answer);background:color-mix(in srgb,var(--answer) 13%,transparent)}
+.wf{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;padding:8px 12px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)}
+.wf span{display:inline-flex;align-items:center;gap:6px}
+.wf .ic{width:14px;height:14px}
+.wf .dd{border:1px solid var(--border);border-radius:6px;padding:2px 8px;color:var(--fg)}
+.notyet{display:flex;gap:8px;align-items:center;margin:12px 0 0;font-size:13.5px;color:var(--muted)}
+.notyet .ic{width:16px;height:16px;color:var(--warn)}
+
 /* requirements */
-.rgrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:4px 0 0}
+.rgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:4px 0 0}
 .rcard{position:relative;border:1px solid var(--border);border-radius:8px;padding:14px;background:var(--soft);display:flex;flex-direction:column;gap:6px}
 .rcard .ic,.rcard .bl{width:24px;height:24px;color:var(--fg)}
 .rcard h3{color:var(--fg);font-size:14.5px}
@@ -193,7 +295,16 @@ h3{font:600 16px/1.3 var(--sans);margin:0 0 4px}
 .foot a{color:var(--muted)}
 .foot a:hover{color:var(--accent)}
 
+@media (max-width:1060px){
+  .hub{grid-template-columns:minmax(0,1fr);grid-template-areas:"brain" "c1" "boss" "vc" "tools" "c2" "help";max-width:560px;margin-left:auto;margin-right:auto}
+  .conn{flex-direction:row;justify-content:center;gap:34px;padding:22px 0}
+  .cl{flex-direction:row;gap:8px}
+  .hb-c1 .cl:first-child,.hb-c2 .cl:first-child{flex-direction:row-reverse}
+  .conn .ar{width:40px;transform:rotate(90deg)}
+  .conn .ar.l{transform:rotate(90deg) scaleX(-1)}
+}
 @media (max-width:980px){
+  .parts{grid-template-columns:repeat(2,minmax(0,1fr))}
   .tiles{grid-template-columns:repeat(3,minmax(0,1fr))}
   .rgrid{grid-template-columns:repeat(3,minmax(0,1fr))}
   .steps{grid-template-columns:minmax(0,1fr);gap:10px}
@@ -226,6 +337,9 @@ h3{font:600 16px/1.3 var(--sans);margin:0 0 4px}
   .dg .h{display:none}
   .dg .v{display:block}
   .rgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .mods,.parts{grid-template-columns:minmax(0,1fr)}
+  .wb{grid-template-columns:minmax(0,1fr)}
+  .wl{border-right:0;border-bottom:1px solid var(--border)}
   .mapbox iframe{height:460px}
   .ctas .btn{flex:1 1 auto;justify-content:center}
   .hero .ctas .btn.ghb{display:none}
@@ -237,7 +351,7 @@ h3{font:600 16px/1.3 var(--sans);margin:0 0 4px}
 </head>
 <body>
 
-<!-- Icon sprite. Gemini is the full-colour sparkle redrawn as SVG; other brand marks are Simple Icons paths (CC0); line icons are Lucide-style. -->
+<!-- Icon sprite. Gemini is the full-colour sparkle redrawn as SVG; other brand marks (incl. OpenAI, Claude) are Simple Icons paths (CC0); line icons are Lucide-style. -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
     <clipPath id="gem-c"><path d="M20.616 10.835a14.147 14.147 0 0 1-4.45-3.001 14.111 14.111 0 0 1-3.678-6.452.503.503 0 0 0-.975 0 14.134 14.134 0 0 1-3.679 6.452 14.155 14.155 0 0 1-4.45 3.001c-.65.28-1.318.505-2.002.678a.502.502 0 0 0 0 .975c.684.172 1.35.397 2.002.677a14.147 14.147 0 0 1 4.45 3.001 14.112 14.112 0 0 1 3.679 6.453.502.502 0 0 0 .975 0c.172-.685.397-1.351.677-2.003a14.145 14.145 0 0 1 3.001-4.45 14.113 14.113 0 0 1 6.453-3.678.503.503 0 0 0 0-.975 13.245 13.245 0 0 1-2.003-.678z"/></clipPath>
@@ -265,6 +379,13 @@ h3{font:600 16px/1.3 var(--sans);margin:0 0 4px}
   <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
   <symbol id="i-steth" viewBox="0 0 24 24"><path d="M11 2v2M5 2v2M5 3H4a2 2 0 0 0-2 2v4a6 6 0 0 0 12 0V5a2 2 0 0 0-2-2h-1"/><path d="M8 15a6 6 0 0 0 12 0v-3"/><circle cx="20" cy="10" r="2"/></symbol>
   <symbol id="i-rocket" viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></symbol>
+  <symbol id="b-openai" viewBox="0 0 24 24"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/></symbol>
+  <symbol id="b-claude" viewBox="0 0 24 24"><path fill="#D97757" d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4M10 13H8M16 17H8"/></symbol>
+  <symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 72 12"><path d="M2 6H69M63 1.5 69 6l-6 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 </svg>
 
 <nav class="nav" id="nav" aria-label="Main">
@@ -276,6 +397,7 @@ h3{font:600 16px/1.3 var(--sans);margin:0 0 4px}
       <a href="#install">Install</a>
       <a href="#key">Gemini key</a>
       <a href="#how">How it works</a>
+      <a href="#why">Why these parts</a>
       <a href="#help">Help</a>
       <a href="https://github.com/EricTechPro/live-agent/stargazers" aria-label="GitHub stars"><img alt="GitHub stars" src="https://img.shields.io/github/stars/EricTechPro/live-agent?style=social"></a>
       <a class="btn" href="https://github.com/EricTechPro/live-agent"><i class="gh"></i> GitHub</a>
@@ -322,10 +444,10 @@ h3{font:600 16px/1.3 var(--sans);margin:0 0 4px}
 
 <section class="sec" id="install"><div class="in">
   <h2>Install</h2>
-  <p class="lead">Three steps. About five minutes.</p>
+  <p class="lead">Three steps. About five minutes. One command installs Jett, checks your Mac, and opens it.</p>
   <ol class="steps">
       <li><span class="sic"><b>1</b><svg class="ic"><use href="#i-key"/></svg></span><div><h3>Get a Gemini key</h3><p>Free, two minutes. <a href="#key">Here's how</a>.</p></div></li>
-      <li><span class="sic"><b>2</b><svg class="ic"><use href="#i-term"/></svg></span><div><h3>Paste one line in Terminal</h3><p>Then paste your key when it asks.</p></div></li>
+      <li><span class="sic"><b>2</b><svg class="ic"><use href="#i-term"/></svg></span><div><h3>Paste one line in Terminal</h3><p>It installs, checks your Mac, and opens Jett. Paste your key when it asks.</p></div></li>
       <li><span class="sic"><b>3</b><svg class="ic"><use href="#i-mic"/></svg></span><div><h3>Allow the mic, say hi</h3><p>Press <b>Start talking</b>. Try: "What is my sourdough starter called?"</p></div></li>
     </ol>
   <div class="tabs" role="tablist" aria-label="Install method">
@@ -346,7 +468,7 @@ bun run start          # open the printed /check page to talk</code></div>
   </div>
 
   <details class="fold" id="key"><summary><svg class="ic"><use href="#i-key"/></svg>Get your Gemini key <small>· 2 min</small></summary><div class="a">
-    <p>One key runs it all: the voice, the notes and the helper.</p>
+    <p>One key runs the voice, the notes and the Gemini CLI helper. Codex and Claude Code use your own sign-ins.</p>
     <ol class="kl">
       <li><b>Open <a href="https://aistudio.google.com/apikey">Google AI Studio</a></b> and sign in with Google.</li>
       <li><b>Accept the terms</b> (first visit only). Tick the box, press Continue.</li>
@@ -366,25 +488,97 @@ bun run start          # open the printed /check page to talk</code></div>
       <li><svg class="ic"><use href="#i-folder"/></svg><span>Makes <code>~/Desktop/live-agent</code> with sample notes.</span></li>
       <li><svg class="ic"><use href="#i-key"/></svg><span>Saves your key there. Only you can read it.</span></li>
       <li><svg class="ic"><use href="#i-steth"/></svg><span>Runs the doctor: key, mic, LiveKit.</span></li>
-      <li><svg class="ic"><use href="#i-rocket"/></svg><span>Opens the app. A setup chat asks 4 questions.</span></li>
+      <li><svg class="ic"><use href="#i-rocket"/></svg><span>Opens Jett. The setup chat starts on first launch. Add <code>--no-open</code> to skip this.</span></li>
     </ul>
   </div></details>
 
-  <details class="fold" id="needs"><summary><svg class="ic"><use href="#i-check"/></svg>What you need</summary><div class="a">
+  <details class="fold" id="needs" open><summary><svg class="ic"><use href="#i-check"/></svg>What you need</summary><div class="a">
     <div class="rgrid">
-      <div class="rcard"><svg class="bl"><use href="#b-apple"/></svg><h3>Apple Silicon Mac</h3><p>M1 or newer. macOS 12 or later.</p></div>
+      <div class="rcard"><svg class="bl"><use href="#b-apple"/></svg><h3>Apple Silicon Mac</h3><p>M1 or newer.</p></div>
       <div class="rcard"><svg class="ic"><use href="#i-key"/></svg><h3>A Gemini key</h3><p>Free from <a href="https://aistudio.google.com/apikey">AI Studio</a>.</p></div>
       <div class="rcard"><svg class="ic"><use href="#i-phones"/></svg><h3>Mic + headphones</h3><p>Headphones stop it hearing itself.</p></div>
       <div class="rcard"><svg class="ic"><use href="#i-wifi"/></svg><h3>Internet</h3><p>To reach Gemini.</p></div>
-      <div class="rcard"><span class="opt">optional</span><svg class="bl"><use href="#b-geminicli"/></svg><h3>Gemini CLI</h3><p>Only for helper jobs.</p></div>
+      <div class="rcard"><span class="opt">optional</span><svg class="bl"><use href="#b-geminicli"/></svg><h3>Gemini CLI</h3><p>A helper for big jobs. On by default.</p></div>
+      <div class="rcard"><span class="opt">optional</span><svg class="bl"><use href="#b-openai"/></svg><h3>Codex</h3><p>A helper. Uses your own <code>codex login</code>.</p></div>
+      <div class="rcard"><span class="opt">optional</span><svg class="bl"><use href="#b-claude"/></svg><h3>Claude Code</h3><p>A helper. Uses your own Claude sign-in.</p></div>
     </div>
+    <p class="notyet"><svg class="ic"><use href="#i-alert"/></svg>Intel Mac and Windows: not yet.</p>
   </div></details>
 </div></section>
 
 <section class="sec" id="how"><div class="in">
   <h2>How it works</h2>
-  <p class="lead">Your voice stays on your Mac until it reaches Gemini, and the answer comes back the same way.</p>
+  <p class="lead">Gemini Live is the boss. It hears you, thinks, talks back, and picks the right tool for the job.</p>
 
+  <div class="hub" role="img" aria-label="Gemini Live sits in the middle as the boss. On the left, your second brain: a notes folder it reads from and writes to. Below it, four tools it can pick. On the right, three helpers that do big jobs.">
+    <div class="grp hb-brain">
+      <p class="gh"><svg class="ic"><use href="#i-folder"/></svg>Second brain <small>a plain folder of notes</small></p>
+      <ul class="fl">
+        <li><code>wiki/</code><span>tidy pages</span><em class="rw r">read</em></li>
+        <li><code>projects/</code><span>your projects</span><em class="rw r">read</em></li>
+        <li><code>raw/</code><span>new notes</span><em class="rw w">write</em></li>
+      </ul>
+      <div class="tidy"><p class="tt"><svg class="bl"><use href="#b-gemini"/></svg>Tidy step · Gemini 3.8 Flash</p><p class="tr"><code>raw/</code><svg class="ar sm"><use href="#i-arrow"/></svg><span>clean pages</span><svg class="ar sm"><use href="#i-arrow"/></svg><code>wiki/</code></p></div>
+      <p class="fn">The tidy runs after each chat. Your raw notes are never changed.</p>
+    </div>
+
+    <div class="conn hb-c1">
+      <div class="cl"><span><b>search brain</b> reads</span><svg class="ar"><use href="#i-arrow"/></svg></div>
+      <div class="cl"><svg class="ar l"><use href="#i-arrow"/></svg><span><b>remember</b> writes</span></div>
+    </div>
+
+    <div class="boss hb-boss">
+      <svg class="bm"><use href="#b-gemini"/></svg>
+      <p class="bn">Gemini Live</p>
+      <p class="bp"><span>the boss</span> orchestrator</p>
+      <p class="bs">Hears you, thinks, talks back, and picks a tool.</p>
+    </div>
+
+    <div class="vc hb-vc"><svg class="ar v"><use href="#i-arrow"/></svg><span>picks one</span></div>
+
+    <div class="grp hb-tools">
+      <p class="gh"><svg class="ic"><use href="#i-wrench"/></svg>Tools <small>what the boss can use</small></p>
+      <ul class="tl">
+        <li><svg class="ic"><use href="#i-search"/></svg><div><b>search brain</b><span>looks in wiki/ and projects/</span></div></li>
+        <li><svg class="ic"><use href="#i-pin"/></svg><div><b>remember</b><span>saves a note to raw/</span></div></li>
+        <li><svg class="ic"><use href="#i-file"/></svg><div><b>read file</b><span>opens another file</span></div></li>
+        <li><svg class="ic"><use href="#i-bot"/></svg><div><b>start helper</b><span>hands off a big job</span></div></li>
+      </ul>
+      <p class="fn"><svg class="ic"><use href="#i-shield"/></svg>Every tool goes through the safety gate: Ask me, Auto edits or Bypass.</p>
+    </div>
+
+    <div class="conn hb-c2">
+      <div class="cl"><span><b>start helper</b></span><svg class="ar"><use href="#i-arrow"/></svg></div>
+      <div class="cl"><svg class="ar l"><use href="#i-arrow"/></svg><span>"done!"</span></div>
+    </div>
+
+    <div class="grp hb-help">
+      <p class="gh"><svg class="ic"><use href="#i-bot"/></svg>Helpers <small>do the big jobs</small></p>
+      <ul class="hl">
+        <li><svg class="bl"><use href="#b-geminicli"/></svg><div><b>Gemini CLI</b><span>uses your Gemini key</span><em class="st on">on by default</em></div></li>
+        <li><svg class="bl"><use href="#b-openai"/></svg><div><b>Codex</b><span>uses your own codex login</span><em class="st">off · turn on in setup</em></div></li>
+        <li><svg class="bl"><use href="#b-claude"/></svg><div><b>Claude Code</b><span>uses your own Claude sign-in</span><em class="st">off · turn on in setup</em></div></li>
+      </ul>
+      <p class="fn">Jobs wait in a queue. One runs at a time unless you raise "max at once". Each job can get its own git worktree.</p>
+    </div>
+  </div>
+  <p class="small" style="margin:0 0 36px">There are no subagents. Each job is one helper, running on its own.</p>
+
+  <h3 class="h3b">Who does what</h3>
+  <div class="mods">
+    <div class="mod"><div class="ml"><svg class="bl"><use href="#b-gemini"/></svg></div><p class="mj">Voice + boss</p><h3>Gemini 3.8 Live</h3><p>Hears you, talks back, picks tools.</p></div>
+    <div class="mod"><div class="ml"><svg class="bl"><use href="#b-gemini"/></svg></div><p class="mj">Tidying notes</p><h3>Gemini 3.8 Flash</h3><p>Turns raw/ notes into wiki/ pages.</p></div>
+    <div class="mod"><div class="ml"><svg class="bl"><use href="#b-openai"/></svg><svg class="bl"><use href="#b-claude"/></svg><svg class="bl"><use href="#b-geminicli"/></svg></div><p class="mj">Big jobs</p><h3>Codex / Claude Code / Gemini CLI</h3><p>Each runs on its own default model.</p></div>
+  </div>
+  <p class="pick"><svg class="ic"><use href="#i-bot"/></svg><span>Which helper? Say "use Codex", or it uses the first one you turned on.</span></p>
+  <p class="small">Each model is set for its job. Settings change in the setup chat, the safety dropdown (or <kbd>Shift</kbd>+<kbd>Tab</kbd>), or the config file.</p>
+
+  <div class="soon"><span class="sl">Coming soon</span><span class="sp2">Click-through setup screen</span><span class="sp2">Auto-find your notes folders</span></div>
+</div></section>
+
+<section class="sec" id="why"><div class="in">
+  <h2>Why these parts?</h2>
+  <p class="lead">Your voice stays on your Mac until it reaches Gemini, and the answer comes back the same way.</p>
   <div class="dg" role="img" aria-label="You talk to the app window. The window sends your voice through a LiveKit room on your Mac to the agent core. The core streams it to Gemini Live at Google. The spoken answer comes back the same way.">
     <svg class="h" viewBox="0 0 1000 300" aria-hidden="true">
       <defs>
@@ -458,20 +652,42 @@ bun run start          # open the printed /check page to talk</code></div>
     </svg>
     <div class="legend"><span><i style="background:var(--voice)"></i>your voice</span><span><i style="background:var(--answer)"></i>the spoken answer</span></div>
   </div>
-  <div class="side">
-    <span>The core also:</span>
-    <span class="pill"><svg class="bl"><use href="#b-geminicli"/></svg>starts Gemini CLI helpers</span>
-    <span class="pill"><svg class="ic"><use href="#i-book"/></svg>reads and saves your notes</span>
-    <span class="pill"><svg class="ic"><use href="#i-key"/></svg>keeps your key, sends a 1-use token</span>
+  <div class="parts">
+    <div class="part"><svg class="bl"><use href="#b-tauri"/></svg><div><h3>App window <small>Tauri</small></h3><p>What you see: mic, voice, orb, transcript and job board. It never holds your key.</p></div></div>
+    <div class="part"><svg class="bl mk"><use href="#b-livekit"/></svg><div><h3>LiveKit</h3><p>A tiny video-call pipe on your Mac. Clean audio, with echo cancelling.</p></div></div>
+    <div class="part"><svg class="bl mk"><use href="#b-bun"/></svg><div><h3>Agent core</h3><p>The engine. It keeps your key and runs the tools, the safety gate, the helpers and the brain.</p></div></div>
+    <div class="part"><svg class="bl"><use href="#b-gemini"/></svg><div><h3>Gemini Live</h3><p>One model hears, thinks and speaks. No slow speech-to-text chain.</p></div></div>
   </div>
 
-  <h3 style="font-size:18px;margin-bottom:12px">Built with</h3>
+  <h3 class="h3b">What the window looks like</h3>
+  <div class="win" role="img" aria-label="A sketch of the Jett window: the orb and Start talking on the left with the transcript under it, the job board on the right, and a bottom bar with the notes used and the safety dropdown.">
+    <div class="wt"><i></i><i></i><i></i><span>Jett</span></div>
+    <div class="wb">
+      <div class="wl">
+        <div class="wo"><img src="assets/logo.svg" alt=""><div><b>Listening</b><span class="wbtn">Start talking</span></div></div>
+        <div class="wbs"><span>New chat</span><span>Setup</span></div>
+        <div class="wtr">
+          <p class="u">Fix the login bug in my app. Use Codex.</p>
+          <p class="a">On it. Codex is working on it now. I'll tell you when it's done.</p>
+        </div>
+      </div>
+      <div class="wr">
+        <p class="wh">Jobs</p>
+        <div class="job"><svg class="bl"><use href="#b-openai"/></svg><div><b>Fix the login bug</b><span>live-agent/fix-login-1412</span></div><em class="js wk">Working</em></div>
+        <div class="job"><svg class="bl"><use href="#b-gemini"/></svg><div><b>Tidy notes</b><span>raw/ → wiki/</span></div><em class="js dn">Done</em></div>
+      </div>
+    </div>
+    <div class="wf"><span><svg class="ic"><use href="#i-book"/></svg>Notes used: wiki/sourdough.md</span><span class="dd"><svg class="ic"><use href="#i-shield"/></svg>Ask me ▾</span></div>
+  </div>
+  <p class="small" style="margin:8px 0 34px">A sketch, not a screenshot.</p>
+
+  <h3 class="h3b">Built with</h3>
   <div class="tiles">
     <div class="tile"><span class="mk"><svg class="bl"><use href="#b-gemini"/></svg></span><h3>Gemini Live</h3><p>One model hears, thinks and speaks.</p></div>
     <div class="tile"><span class="mk"><svg class="bl"><use href="#b-livekit"/></svg></span><h3>LiveKit</h3><p>Carries your voice, like a video call.</p></div>
     <div class="tile"><span class="mk"><svg class="bl"><use href="#b-tauri"/></svg></span><h3>Tauri</h3><p>The small app window and the mic.</p></div>
     <div class="tile"><span class="mk"><svg class="bl"><use href="#b-bun"/></svg></span><h3>Bun</h3><p>Runs the agent core, tools and jobs.</p></div>
-    <div class="tile"><span class="mk"><svg class="bl"><use href="#b-geminicli"/></svg></span><h3>Gemini CLI</h3><p>The helper for slow jobs.</p></div>
+    <div class="tile"><span class="mk"><svg class="bl"><use href="#b-geminicli"/></svg></span><h3>Gemini CLI</h3><p>One of three helpers for big jobs.</p></div>
     <div class="tile"><span class="mk"><svg class="bl"><use href="#b-apple"/></svg></span><h3>macOS</h3><p>Apple Silicon. Ships ready-built.</p></div>
   </div>
 
