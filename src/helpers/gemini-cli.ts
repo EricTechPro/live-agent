@@ -25,8 +25,8 @@ import { geminiApiKey } from "../gemini-key.ts";
 
 const KEY_GUIDE = "README.md#get-your-gemini-key";
 export const INSTALL_FIX = "Gemini CLI is not installed. Install it with: npm install -g @google/gemini-cli";
-export const KEY_FIX = `The helper needs a Gemini key. Put GEMINI_API_KEY in your .env file. How to get one: ${KEY_GUIDE}`;
-export const KEY_REJECTED_FIX = `Gemini CLI rejected the Gemini key. Check GEMINI_API_KEY in your .env file. How to get one: ${KEY_GUIDE}`;
+export const KEY_FIX = `The helper needs a Gemini key. Paste it in the live-agent window, or put it after GEMINI_API_KEY= in the .env file in your live-agent folder. How to get one: ${KEY_GUIDE}`;
+export const KEY_REJECTED_FIX = `Gemini CLI rejected the Gemini key. Check GEMINI_API_KEY in the .env file in your live-agent folder, then restart live-agent. How to get one: ${KEY_GUIDE}`;
 
 /** The Gemini CLI binary looked up on PATH unless told otherwise. */
 export const DEFAULT_GEMINI_BIN = "gemini";
