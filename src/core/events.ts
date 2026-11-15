@@ -7,6 +7,7 @@
 // Every event is plain JSON, so the core can later pipe it to the app as
 // JSON lines without a translation layer.
 import type { Config } from "../config/index.ts";
+import type { Mark } from "./canvas.ts";
 import type { JobInfo } from "./jobs.ts";
 import type { SafetyMode, Verdict } from "./safety.ts";
 import type { RiskClass } from "./tool.ts";
@@ -75,6 +76,13 @@ export type AgentEvent =
    * (`id` is its call). The window draws it in a panel; bad source shows as an error there.
    */
   | { type: "diagram"; id: string; title?: string; source: string }
+  /**
+   * One beat of a `draw` call (ticket 31): the line the voice says (`say`) and the
+   * marks to draw while it is said, already checked (src/core/canvas.ts). `id` is
+   * the call, `beat` counts from 0. Coordinates are on the 1000 x 600 board.
+   * Marks stay on the canvas until a new chat (`chat.started`).
+   */
+  | { type: "canvas.beat"; id: string; beat: number; say: string; marks: Mark[] }
   /** The model finished its reply. `reply` is the whole reply, joined for you. */
   | { type: "turn.done"; reply: string }
   /** Something went wrong in the session. The session may still be usable. */

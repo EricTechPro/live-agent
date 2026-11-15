@@ -15,6 +15,7 @@
 
 import type { BrainFolders } from "../config/index.ts";
 import type { HelperPaths } from "../helpers/cli-job.ts";
+import type { Beat } from "./canvas.ts";
 import type { Jobs } from "./jobs.ts";
 
 export type RiskClass = "read" | "edit" | "command" | "helper";
@@ -33,6 +34,11 @@ export interface ToolContext {
   brainWrote(path: string): void;
   /** Show a diagram (Mermaid source) in the window. The core emits `diagram` right away. */
   showDiagram(diagram: { source: string; title?: string }): void;
+  /**
+   * Draw checked beats on the canvas. The core emits one `canvas.beat` per beat.
+   * Throws (and emits nothing) if a mark id is already on the canvas.
+   */
+  drawBeats(beats: Beat[]): void;
   /**
    * The orchestrator (src/core/jobs.ts). A job submitted from a tool call is
    * tied to that call: the core tells the model when the job ends.

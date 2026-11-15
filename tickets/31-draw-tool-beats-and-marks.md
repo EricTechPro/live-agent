@@ -4,14 +4,16 @@
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Priority:** must-have
 
-- [ ] `draw` is a tool in `tools/` with a JSON schema the Live model accepts, and is in the bundled tool list
-- [ ] Every mark kind has a Zod schema; ids and coordinates are checked
-- [ ] A good call emits `canvas.beat` events in order, after the tool call and allow verdict (scripted fake model test)
-- [ ] A bad mark (unknown kind, missing id, duplicate id, off the board) fails the call with a message the model hears, and no `canvas.*` event is emitted
-- [ ] The system prompt tells the model when to draw and to keep it to a few marks per beat
+- [x] `draw` is a tool in `tools/` with a JSON schema the Live model accepts, and is in the bundled tool list
+- [x] Every mark kind has a Zod schema; ids and coordinates are checked
+- [x] A good call emits `canvas.beat` events in order, after the tool call and allow verdict (scripted fake model test)
+- [x] A bad mark (unknown kind, missing id, duplicate id, off the board) fails the call with a message the model hears, and no `canvas.*` event is emitted
+- [x] The system prompt tells the model when to draw and to keep it to a few marks per beat
 
 ## Comments
+
+- 2026-11-15 (core builder): schemas in `src/core/canvas.ts` (board 1000 x 600, ids `p<n>`, colours ink/red/blue/green/orange/purple, at most 8 beats and 12 marks per beat), tool in `tools/draw.ts` with a flat JSON schema (no oneOf, for Gemini Live). Ids stay unique across calls until a new chat clears the board. Event: `{ type: "canvas.beat", id, beat, say, marks }`, all beats emitted at once (ticket 34 times them to the voice). Tests: `test/draw.test.ts`. Not yet checked against real Gemini Live: the smoke run should confirm the model accepts the schema.

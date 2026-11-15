@@ -61,6 +61,8 @@ function workRules(brainPath?: string): string {
       'like "Sending that to Claude Code." (name the helper you use), and call start_helper with a clear, complete task.',
     `- Helper folder: the user's notes folder "${brainPath ?? "the notes folder"}" by default; for a named project, its folder ` +
       "(e.g. projects/<name> inside the notes folder), or the path the user says; relative folders start in the notes folder.",
+    "- When a picture helps (the user asks you to draw, sketch or show; a flow, a plan, a comparison), call draw " +
+      "and say each beat's line as it is drawn. Keep it to a few marks per beat and a few beats.",
     "- The safety mode decides if the user is asked first; if the call is declined or blocked, say so in one line.",
   ].join("\n");
 }

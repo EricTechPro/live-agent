@@ -183,6 +183,8 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       toolCalls.onJobState(job);
     },
   });
+  // Mark ids on the sketch canvas (ticket 31). A new chat starts a clean board.
+  const canvas = new Set<string>();
   const toolCalls = createToolCalls({
     tools,
     jobs,
@@ -204,6 +206,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       },
     }),
     closing: () => closed,
+    canvas,
   });
   const { approvals } = toolCalls;
 
@@ -399,6 +402,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       await modelSession.close();
       modelSession = await connectModel();
       queueTidy(notePath);
+      canvas.clear();
       emit({ type: "chat.started" });
     } finally {
       switching = false;

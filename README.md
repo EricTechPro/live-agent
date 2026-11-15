@@ -183,7 +183,7 @@ Every tool has a **risk class**. The mode decides what each class may do:
 
 | risk class | example tools | Ask me | Auto edits | Bypass |
 |---|---|---|---|---|
-| read | `search_brain`, `read_file`, `draw_diagram` | runs | runs | runs |
+| read | `search_brain`, `read_file`, `draw_diagram`, `draw` | runs | runs | runs |
 | edit | `remember`, `cancel_job` | asks | runs | runs |
 | command | (shell commands) | asks | asks | runs |
 | helper | `start_helper` | asks | asks | runs |
