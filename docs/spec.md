@@ -183,3 +183,59 @@ Prior art: live-dj `adk_tools/smoke_live.py` (text-turn live smoke) and `adk_too
 - Demo backup: publish the YouTube showcase first, play it if live fails.
 - Venue wifi stays a risk. Post the install link 2 days before the talk.
 - No issue tracker is set up for this project. Run `/setup-matt-pocock-skills` to publish this spec as an issue.
+
+## Addendum: Jett v2 layout, call controls and sketch canvas (2026-11-15)
+
+Approved by Eric on 2026-11-15. Tickets 21 to 35. Where this addendum and the sections above disagree, this addendum wins.
+
+### Goal
+
+Jett should feel like a real "Jarvis": you talk, it answers, it shows. Less text everywhere. Words on screen only where they carry something the voice can't (a file, a job result, an approval). Buttons are icons with tooltips, not labels.
+
+### Two layers
+
+- **Home.** A big animated orb (the existing pixel LED orb, `app/src/led-orb.ts`) and almost nothing else: the call controls and one way into the control center. You just talk.
+- **Control center.** Opened from home, closed with an X (Escape too). Laid out like the Codex / ChatGPT desktop apps:
+  - **Left sidebar:** past chats, and the second brain file tree (`raw`, `wiki`, `projects`, using the configured `brainFolders` names). Click a file to read it.
+  - **Middle:** a clean ChatGPT-style chat. The orb sits small at the top. The composer at the bottom holds the text input, the safety mode pill and the inline approval cards.
+  - **Right panel:** tabs for **Canvas** (the sketch canvas) and **Jobs** (the existing job board).
+- The mini orb (ticket 15) stays as it is.
+
+### Call controls and icon buttons
+
+- Icons only, each with a tooltip and an `aria-label`, all reachable by keyboard:
+  - **Start call** (mic / phone), **Pause** that becomes **Resume**, **End call** (red hang-up).
+  - **Close (X)** for panels and the control center.
+  - The top bar's text buttons (New chat, Setup, Show log, Mini, Jobs) become icon buttons too. Jobs keeps its running count as a small badge.
+- Space still toggles pause. Shortcuts show in the tooltip.
+
+### Safety mode in the composer, approvals inline
+
+- The Ask me / Auto edits / Bypass switch moves from the bottom bar dropdown into the chat composer: a small pill at the left of the input, like ChatGPT's model picker. Click to pick; Shift+Tab still cycles. The core's `mode.changed` event stays the only source of truth.
+- A gate verdict of `ask` also shows as an approve / deny card next to the composer, not only as the spoken "May I…?". Approving or denying in the card does the same as a spoken yes or no. The core gets one new way in (approve or decline a call by id), and the outcome shows on the event stream like a spoken answer.
+
+### Job cards
+
+Each job card shows: a short readable title (not the raw prompt cut off), which helper (Claude Code, Codex, Gemini CLI, or Tidy), state, elapsed time, and when done a one-line plain summary of the result. The card expands to show the full output. The core adds what the card needs to `job.state` (helper id, started and ended times, a short title, the full output).
+
+### Helper workspace (bug)
+
+A helper job with no folder must work in the user's brain folder (the configured `brainPath`), and relative folders start there, as the system prompt already says. Never in the app's own home folder (`~/Desktop/live-agent`), which is not a project. A folder that doesn't exist fails with a plain fix, and every job shows the folder it works in.
+
+### Sketch canvas
+
+Replaces the one-shot Mermaid `draw_diagram` tool. Roamies inspired the idea. Roamies is AGPL: borrow ideas only, never its code.
+
+- **`draw` tool** (risk `read`, NON_BLOCKING): `beats: [{ say, marks[] }]`. Each beat is one spoken line plus the marks drawn while it is said.
+- **Marks** are small shapes, each checked with Zod: `box`, `text` (label), `arrow`, `line`, `circle` (or ring), `underline`, `check`, `cross`, `step` (a numbered step), and `diagram` (a Mermaid card, so nothing the old tool did is lost; ticket 35, after `draw_diagram` has served the talk). Every mark has an id (`p1`, `p2`, …) that later turns can use: "make p2 red", "erase p3". Coordinates are on a fixed virtual board (for example 1000 × 600), so the window can scale it.
+- **Edits:** the same tool (or a sibling) takes `edit` (by id: colour, label, position) and `erase` (by id, or all). The canvas keeps its marks across turns until erased or a new chat starts.
+- **Window:** the Canvas tab draws marks with hand-drawn pen strokes that animate from 0 to 1. A beat's strokes are timed to its spoken line.
+- **Event stream:** the core emits `canvas.*` events (`canvas.beat` with the checked marks, `canvas.edit`, `canvas.erase`). Bad marks are a tool error the model hears, and nothing reaches the window.
+
+### Testing
+
+Same single seam: the core's event stream. Core-side tickets (21, 23, 24, 28, 29, 31, 33, 34) add tests through it with the scripted fake model. Window-only pieces get pure reducer tests like `app/src/diagram.ts` and `app/src/transcript.ts`, plus a hand check in the real app.
+
+### DevFest order
+
+Must-have before Nov 27: 21, 22, 23, 25, 26, 27, 28, 29, 30, 31, 32. If time runs short, cut in this order: 32 (keep `draw_diagram`), 31, 29, 23. After the talk: 24, 33, 34, 35.
