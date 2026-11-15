@@ -160,7 +160,7 @@ This is the whole file with every default:
 | `helpers.codex` | allow Codex as a helper (coming after the talk) | `false` |
 | `helpers.claudeCode` | allow Claude Code as a helper (coming after the talk) | `false` |
 | `helpers.maxAtOnce` | most helper jobs running at once; extra jobs wait in the queue | `1` |
-| `worktrees` | give each helper job its own git worktree (coming after the talk) | `false` |
+| `worktrees` | give each helper job its own git worktree and branch, so it never touches your checkout ([Worktrees](#worktrees)) | `false` |
 | `voice` | Gemini Live voice name, e.g. `Puck`, `Kore`, `Charon` (not wired yet: today it always uses Gemini's default voice) | `Puck` |
 
 The full rules are in [`src/config/config.schema.json`](src/config/config.schema.json). Point your
@@ -254,7 +254,27 @@ Gemini Live is the boss. It talks; helpers do the slow work.
   first. A helper runs Gemini CLI in "yolo" mode inside the folder you name, so only point it
   at code you are happy for it to change (git makes that easy to undo).
 
-Codex, Claude Code and per-job git worktrees are in the config but come after the talk.
+Codex and Claude Code are in the config but come after the talk.
+
+### Worktrees
+
+Set `"worktrees": true` in `live-agent.config.json` and each helper job works in its own
+git worktree on a new branch, so your current branch, files and uncommitted work are never
+touched.
+
+- **Branch:** `live-agent/<task>-<date-time>`, made from your current commit (uncommitted
+  changes are not copied in).
+- **Where:** `~/Library/Application Support/live-agent/worktrees/<project>/<branch leaf>`
+  (Linux: `~/.local/share/live-agent/worktrees/...`), outside your project. The job board
+  shows the branch and path, and the agent says the branch when it announces the job.
+- **When done:** the helper's changes are committed on that branch. Review and merge from
+  your project: `git diff main...live-agent/<...>`, then `git merge live-agent/<...>`.
+  A failed or cancelled job commits nothing; its changes stay in the worktree.
+- **Clean up:** worktrees are kept for you to review. Remove one with
+  `git worktree remove <path>` and `git branch -D <branch>` in your project
+  (`git worktree list` shows them all).
+- **Not a git project?** The agent says so and starts nothing. Run `git init` and make a
+  first commit there, or turn worktrees off.
 
 ## Doctor
 
@@ -283,6 +303,13 @@ All checks pass.
 The key, the microphone and LiveKit must pass. A helper CLI only fails when it is turned on in
 the config; otherwise a missing one is a warning with an install hint. A bad key points you
 back to [Get your Gemini key](#get-your-gemini-key).
+
+The installed app and its doctor only use the key in `~/Desktop/live-agent/.env` (or one you set in
+the environment), never a `.env` in the folder you happen to run them from.
+
+**The log.** Opened from Finder, the app keeps what its core says in
+`~/Desktop/live-agent/logs/core.log` (small: old lines are dropped). The key and every token are
+hidden in it. The **Show log** button in the window shows the file in Finder.
 
 ## How it works inside
 

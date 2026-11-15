@@ -7,6 +7,7 @@ import {
   keyNeeded,
   onCoreDown,
   openKeyPage,
+  revealLog,
   sendKey,
   waitForCore,
   type CoreClient,
@@ -235,5 +236,8 @@ async function runSetup(core: CoreClient, ifNeeded: boolean) {
     showError(`setup: ${errorText(err)}`);
   }
 }
+
+// "Show log" works before and after the core is up (it is most useful when the core did not start).
+$<HTMLButtonElement>("show-log").onclick = () => revealLog().catch((err) => showError(`show log: ${errorText(err)}`));
 
 boot();

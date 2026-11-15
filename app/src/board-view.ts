@@ -38,6 +38,9 @@ export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: H
         );
         li.dataset.status = job.status;
         li.dataset.id = job.id;
+        if (job.worktree) {
+          li.append(el("p", { className: "job-worktree", textContent: `Branch ${job.worktree.branch}\n${job.worktree.path}` }));
+        }
         if (job.message) li.append(el("p", { className: "job-message", textContent: job.message }));
         if (job.cancellable) {
           const btn = el("button", { className: "job-cancel", type: "button", textContent: "Cancel" });

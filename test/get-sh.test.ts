@@ -19,7 +19,7 @@ function fakeRelease(dir: string, version: string): string {
   const core = join(app, "Contents", "MacOS", "live-agent-core");
   writeFileSync(
     core,
-    `#!/bin/sh\necho "doctor-ran $* home=$LIVE_AGENT_HOME" >> "$LIVE_AGENT_HOME/doctor.log"\necho "fake doctor: all checks pass"\nexit \${FAKE_DOCTOR_EXIT:-0}\n`,
+    `#!/bin/sh\necho "doctor-ran $* home=$LIVE_AGENT_HOME cwd=$(pwd -P)" >> "$LIVE_AGENT_HOME/doctor.log"\necho "fake doctor: all checks pass"\nexit \${FAKE_DOCTOR_EXIT:-0}\n`,
   );
   chmodSync(core, 0o755);
   const tarball = join(dir, `live-agent-${version}.tar.gz`);
@@ -34,8 +34,9 @@ function sandbox() {
   return { root, home, apps: join(home, "Applications"), folder: join(home, "Desktop", "live-agent") };
 }
 
-function runGet(s: ReturnType<typeof sandbox>, tarball: string, extra: Record<string, string> = {}, args: string[] = []) {
+function runGet(s: ReturnType<typeof sandbox>, tarball: string, extra: Record<string, string> = {}, args: string[] = [], cwd?: string) {
   const r = Bun.spawnSync(["bash", GET_SH, "--no-open", ...args], {
+    cwd,
     env: {
       PATH: process.env.PATH!,
       HOME: s.home,
@@ -128,6 +129,18 @@ describe("get.sh", () => {
     expect(readFileSync(join(s.folder, "sample-brain", "raw", "mine.md"), "utf8")).toBe("my note\n");
     expect(readFileSync(join(s.folder, "live-agent.config.json"), "utf8")).toBe('{"brainPath":"sample-brain"}\n');
     expect(readFileSync(join(s.folder, ".env"), "utf8")).toBe("GEMINI_API_KEY=kept-key\n");
+  });
+
+  test("doctor runs from the live-agent folder, so a .env where get.sh was run is never read", () => {
+    // Bun loads .env from the working folder. Run from a repo with its own key,
+    // doctor must still check the live-agent folder's key (ticket 20).
+    const s = sandbox();
+    const elsewhere = join(s.root, "some-repo");
+    mkdirSync(elsewhere);
+    writeFileSync(join(elsewhere, ".env"), "GEMINI_API_KEY=stray-repo-key\n");
+    const r = runGet(s, fakeRelease(s.root, "1"), {}, [], elsewhere);
+    expect(r.code).toBe(0);
+    expect(readFileSync(join(s.folder, "doctor.log"), "utf8")).toContain(`cwd=${s.folder}`);
   });
 
   test("a failing doctor only warns: the setup chat helps fix it", () => {

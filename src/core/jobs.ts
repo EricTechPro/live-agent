@@ -24,6 +24,8 @@ export interface JobInfo {
   state: JobState;
   /** done: the job's summary; failed: what went wrong and how to fix it. */
   message?: string;
+  /** Helper jobs with worktrees on (config `worktrees`): the git worktree and branch the job works in. */
+  worktree?: { path: string; branch: string };
 }
 
 export interface JobRun {
@@ -34,6 +36,8 @@ export interface JobRun {
 export interface JobSpec {
   kind: string;
   title: string;
+  /** Where the job works, if in its own git worktree (src/helpers/worktree.ts). Shown on every event. */
+  worktree?: JobInfo["worktree"];
   /** Do the work. Resolve with a short summary; throw to fail (the error message is shown). */
   run(job: JobRun): Promise<string>;
 }
@@ -95,7 +99,10 @@ export function createJobs({ maxAtOnce, onState }: JobsOptions): Jobs {
   return {
     submit(spec) {
       const entry: Entry = {
-        info: { id: `job-${nextId++}`, kind: spec.kind, title: spec.title, state: "queued" },
+        info: {
+          id: `job-${nextId++}`, kind: spec.kind, title: spec.title, state: "queued",
+          ...(spec.worktree ? { worktree: { ...spec.worktree } } : {}),
+        },
         spec,
         abort: new AbortController(),
       };

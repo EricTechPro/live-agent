@@ -129,7 +129,9 @@ main() {
 
   # --- check, then open -----------------------------------------------------
   say "🩺 live-agent doctor"
-  LIVE_AGENT_HOME="$home" "$app/Contents/MacOS/live-agent-core" doctor \
+  # Run it from the live-agent folder: a .env in the folder this script was run
+  # from (say, a clone of the repo) must never stand in for the key the app uses.
+  ( cd "$home" && LIVE_AGENT_HOME="$home" "$app/Contents/MacOS/live-agent-core" doctor ) \
     || warn "doctor found problems (see above). The setup chat will help you fix them."
 
   if [ "$open_app" -eq 1 ]; then

@@ -22,6 +22,7 @@ import { bundledTools } from "./core/bundled-tools.ts";
 import { doctorMain } from "./doctor/index.ts";
 import { setupMain } from "./setup/chat.ts";
 import { saveGeminiKey, useHome } from "./home.ts";
+import { captureConsole, openCoreLog } from "./core-log.ts";
 import { geminiApiKey, verifyGeminiKey } from "./gemini-key.ts";
 import { errorMessage } from "./errors.ts";
 import pkg from "../package.json" with { type: "json" };
@@ -44,6 +45,10 @@ if (process.argv[2] === "setup") process.exit(await setupMain());
 // No key yet (first launch, installer run without a terminal): the core still
 // starts, and the window asks for the key (ticket 19, docs/adr/0002).
 const apiKey = geminiApiKey();
+// The installed app: opened from Finder nobody sees stderr, so keep a small log in
+// <home>/logs/core.log too (the window's "Show log" reveals it). Never the key or a token.
+const coreLog = home ? openCoreLog({ home, secrets: [apiKey] }) : undefined;
+if (coreLog) captureConsole(coreLog);
 if (!apiKey) console.error("live-agent: no Gemini key yet: waiting for it in the window.");
 
 const config = loadConfig();
@@ -52,7 +57,10 @@ const app = await startApp({
   geminiApiKey: apiKey,
   // The key pasted in the window: checked with Google, saved to <home>/.env (600), never logged.
   keyGate: {
-    check: (key) => verifyGeminiKey(key),
+    check: (key) => {
+      coreLog?.hide(key); // from here on the log never shows it, whatever goes wrong
+      return verifyGeminiKey(key);
+    },
     save: (key) => saveGeminiKey(home ?? process.cwd(), key),
   },
   // The Live session connects with a fresh single-use token, never the key itself.
@@ -73,6 +81,7 @@ const app = await startApp({
   process.exit(1);
 });
 
+coreLog?.hide(app.launchToken);
 console.log(JSON.stringify({ type: "ready", url: app.url, launchToken: app.launchToken }));
 // For people (stderr, so the shell's stdout stays one JSON line):
 console.error(`live-agent: voice check page: ${app.url}/check#${app.launchToken}`);
