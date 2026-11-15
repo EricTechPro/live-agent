@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/src/pixel.css" />
     <link rel="stylesheet" href="/src/style.css" />
     <link rel="stylesheet" href="/src/wizard.css" />
+    <link rel="stylesheet" href="/src/sketch.css" />
     <script type="module" src="/src/main.ts"></script>
   </head>
   <body>
@@ -77,7 +78,7 @@
             </div>
             <button id="close-panel" class="pf ib" type="button" aria-controls="panel" aria-label="Close panel" data-tip="Close panel" data-icon="close"></button>
           </div>
-          <!-- Canvas: today's diagram panel, until the sketch canvas (ticket 32) draws here. -->
+          <!-- Canvas: the sketch canvas (ticket 32, sketch-view.ts adds it) and the Mermaid diagram panel; whichever came last shows. -->
           <section id="panel-canvas" class="tabpanel" role="tabpanel" aria-labelledby="tab-canvas">
             <section id="diagram" class="pf diagram" hidden aria-label="Diagram"></section>
             <p class="canvas-empty">Jett draws here.</p>

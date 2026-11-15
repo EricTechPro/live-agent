@@ -4,16 +4,16 @@
 
 **Blocked by:** 25 Right panel with Canvas and Jobs tabs, 31 `draw` tool: beats and Zod-checked marks
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Priority:** must-have
 
-- [ ] Every mark kind from ticket 31 draws on the canvas with an animated pen stroke
-- [ ] Marks from a beat draw in order; a later beat adds to the canvas instead of replacing it
-- [ ] The board scales with the panel and stays sharp on a Retina screen
-- [ ] `chat.started` clears the canvas
-- [ ] The canvas state (marks by id) is a pure reducer with a test
-- [ ] Respects reduced motion: with it on, marks appear without the stroke animation
+- [x] Every mark kind from ticket 31 draws on the canvas with an animated pen stroke
+- [x] Marks from a beat draw in order; a later beat adds to the canvas instead of replacing it
+- [x] The board scales with the panel and stays sharp on a Retina screen
+- [x] `chat.started` clears the canvas
+- [x] The canvas state (marks by id) is a pure reducer with a test
+- [x] Respects reduced motion: with it on, marks appear without the stroke animation
 - [ ] Hand check in the real app: "draw how a voice question flows" draws step by step while Jett talks
 
 ## Comments

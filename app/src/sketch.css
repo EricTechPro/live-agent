@@ -1,0 +1,32 @@
+/* The sketch canvas (ticket 32), inside the right panel's Canvas tab (#panel-canvas).
+   sketch-view.ts adds the figure and sets #panel-canvas[data-view] to "sketch" or "diagram":
+   whichever came last shows, the other hides. */
+
+#panel-canvas[data-view="sketch"] #diagram, #panel-canvas[data-view="diagram"] .sketch { display: none; }
+.sketch:not([hidden]) ~ .canvas-empty { display: none; }
+
+/* A sketch needs room: while one shows, the right column grows (it stays 280px otherwise). */
+.center[data-panel="open"]:has(#panel-canvas[data-view="sketch"]:not([hidden])) { grid-template-columns: 208px minmax(0, 1fr) minmax(280px, 44%); }
+@media (max-width: 860px) {
+  .center[data-panel="open"]:has(#panel-canvas[data-view="sketch"]:not([hidden])) { grid-template-columns: minmax(0, 1fr) minmax(260px, 48%); }
+}
+@media (max-width: 700px) {
+  .center[data-panel="open"]:has(#panel-canvas[data-view="sketch"]:not([hidden])) { grid-template-columns: minmax(0, 1fr); }
+}
+
+.sketch { flex: none; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.sketch-board {
+  --frame: var(--edge-hi); --fill: #041416;
+  position: relative; width: 100%; aspect-ratio: 5 / 3;
+  background-image: radial-gradient(circle, rgba(120,255,226,.09) 1px, transparent 1.4px);
+  background-size: 16px 16px; background-position: 8px 8px;
+}
+.sketch-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.sketch-say {
+  min-height: 1.55em; margin: 0; padding: 2px 0 2px 10px; border-left: 2px solid var(--led);
+  color: var(--ink); font: 400 12px/1.55 var(--mono); font-stretch: 87.5%;
+  transition: color .4s var(--ease), border-color .4s var(--ease);
+}
+.sketch-say:empty { visibility: hidden; }
+.sketch-say[data-state="done"] { color: var(--ink-3); border-left-color: var(--edge-hi); }
+@media (prefers-reduced-motion: reduce) { .sketch-say { transition: none; } }
