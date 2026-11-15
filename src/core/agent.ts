@@ -99,6 +99,12 @@ export interface AgentSession {
    * gated with it, and a `mode.changed` event goes on the stream.
    */
   setMode(mode: SafetyMode): void;
+  /**
+   * Pause: stop Jett's voice now (a `clear` on `onAudio`), drop its voice and the
+   * mic until resumed, keep the chat. Emits `paused`. Typed turns still work.
+   */
+  setPaused(on: boolean): void;
+  paused(): boolean;
   /** Shift+Tab: Ask me -> Auto edits -> Bypass -> Ask me. Returns the new mode. */
   cycleMode(): SafetyMode;
   /** The setup wizard (the window's click-through setup). */
@@ -166,6 +172,8 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   let switching = false;
   // Set when close() begins: job ends are no longer announced and late model events are dropped.
   let closed = false;
+  // The window's Pause: no voice out, no mic in, same chat.
+  let paused = false;
 
   // ---- jobs and tool calls -------------------------------------------------
   const jobs = createJobs({
@@ -284,6 +292,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         break;
       }
       case "audio":
+        if (paused) break; // the rest of a sentence that was paused: never played
         openVoiceTurn();
         playAudio(event);
         break;
@@ -414,8 +423,16 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       });
     },
     sendAudio(data, sampleRate) {
+      if (paused) return;
       modelSession.sendAudio(data, sampleRate);
     },
+    setPaused(on) {
+      if (on === paused) return;
+      paused = on;
+      if (on) playAudio({ type: "clear" });
+      emit({ type: "paused", paused: on });
+    },
+    paused: () => paused,
     onEvent(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);

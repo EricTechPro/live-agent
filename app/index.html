@@ -11,27 +11,39 @@
   </head>
   <body>
     <!--
-      Layout (spec story 46/47): orb + transcript on the left, job board on the
-      right, bottom bar under both. Ticket 10 fills #jobs and #bar.
+      Layout: one centred column like the wizard (stage with the orb and its speech
+      bubble, transcript, input), the job board as a drawer on the right that opens
+      when a job starts, and a slim bottom bar. Ticket 10 fills #jobs and #bar.
     -->
     <main class="shell">
       <section class="voice" aria-label="Voice">
-        <div class="orb-wrap" data-tauri-drag-region>
-          <div id="orb" class="orb" data-state="connecting" role="img" aria-label="Agent state: connecting"><canvas id="orb-canvas" width="352" height="352" aria-hidden="true"></canvas></div>
-          <span id="mini-count" class="mini-count" aria-label="Jobs running">0</span>
-          <p id="orb-label" class="orb-label" aria-live="polite">Starting…</p>
-          <button id="talk" class="pf btn go talk" type="button" disabled>Start talking</button>
-          <div class="quiet-buttons">
-            <button id="new-chat" class="pf chip setup" type="button" disabled title="Save this chat to your brain and start a fresh one">New chat</button>
-            <button id="setup" class="pf chip setup" type="button" disabled title="Open setup again">Setup</button>
-            <button id="show-log" class="pf chip setup" type="button" title="Show the core's log file in Finder">Show log</button>
-            <button id="mini" class="pf chip setup" type="button" disabled title="Shrink to a small floating orb">Mini</button>
+        <header class="orb-wrap" data-tauri-drag-region>
+          <div class="orb-stage" data-tauri-drag-region>
+            <p id="say" class="pf say" aria-live="polite">Hi!</p>
+            <span class="tail" aria-hidden="true"></span>
+            <div id="orb" class="orb" data-state="connecting" role="img" aria-label="Agent state: connecting"><canvas id="orb-canvas" width="352" height="352" aria-hidden="true"></canvas></div>
+            <span id="mini-count" class="mini-count" aria-label="Jobs running">0</span>
+            <p id="orb-label" class="orb-label" aria-live="polite">Starting…</p>
           </div>
-        </div>
+          <div class="controls">
+            <div class="talk-row">
+              <button id="talk" class="pf btn go talk" type="button" disabled>Start talking</button>
+              <button id="pause" class="pf btn ghost pause" type="button" disabled aria-pressed="false" title="Pause: Jett stops speaking and listening (Space)">Pause</button>
+            </div>
+            <div class="quiet-buttons">
+              <button id="new-chat" class="pf chip setup" type="button" disabled title="Save this chat to your brain and start a fresh one">New chat</button>
+              <button id="setup" class="pf chip setup" type="button" disabled title="Open setup again">Setup</button>
+              <button id="show-log" class="pf chip setup" type="button" title="Show the core's log file in Finder">Show log</button>
+              <button id="mini" class="pf chip setup" type="button" disabled title="Shrink to a small floating orb">Mini</button>
+              <button id="jobs-toggle" class="pf chip setup jobs-toggle" type="button" aria-controls="jobs" aria-expanded="false" title="Show or hide the job board"><span class="led"></span>Jobs <b id="jobs-count">0</b></button>
+            </div>
+          </div>
+        </header>
         <section id="diagram" class="pf diagram" hidden aria-label="Diagram"></section>
         <ol id="transcript" class="transcript" aria-label="Transcript" aria-live="polite"></ol>
         <form id="type" class="type">
           <span class="pf field"><input id="type-input" type="text" placeholder="Or type to Jett…" autocomplete="off" disabled /></span>
+          <button id="send" class="pf btn go send" type="submit" disabled>Send</button>
         </form>
       </section>
       <aside id="jobs" class="pf jobs" aria-label="Job board"></aside>

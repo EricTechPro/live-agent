@@ -34,6 +34,7 @@
 //                     400 { error }: writes the config, creates missing part folders, and the
 //                     running chat uses it at once (reconnecting for the new voice and tone)
 //   POST /chat/new -> { ok }: end this chat (note + tidy job) and start the next
+//   POST /pause    -> { paused } in and out: Jett stops speaking and hearing, the chat stays
 //
 // Why HTTP + SSE (not a WebSocket): the window only reads the stream, and
 // fetch/EventSource exist in every webview with no library.
@@ -198,6 +199,14 @@ export async function startApp(options: AppOptions): Promise<App> {
         const { text } = await readBody(req);
         if (typeof text !== "string" || !text.trim()) return json({ error: "send { text }" }, 400);
         return session.sendText(text).then((events) => json({ events }), refused);
+      },
+
+      // The window's Pause button (and Space): no voice out, no mic in, same chat.
+      async "POST /pause"({ session }, req) {
+        const { paused } = await readBody(req);
+        if (typeof paused !== "boolean") return json({ error: "send { paused: true | false }" }, 400);
+        session.setPaused(paused);
+        return json({ paused: session.paused() });
       },
 
       // The window's New chat button: end this chat (note + tidy job), start the next.

@@ -48,6 +48,8 @@ export interface CoreClient {
   cancelJob(id: string): Promise<void>;
   /** New chat: the core saves this chat to the brain, tidies it on the job board, and starts fresh. */
   newChat(): Promise<void>;
+  /** Pause (true) or resume: Jett stops speaking and hearing; the chat stays. The core echoes a `paused` event. */
+  pause(on: boolean): Promise<void>;
 }
 
 /** Wait for Rust to report the core is up. Rejects with the reason if it failed to start. */
@@ -194,6 +196,14 @@ export function connectCore(info: CoreInfo): CoreClient {
     async cancelJob(id) {
       const res = await fetch(`${info.url}/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST", headers: auth });
       if (!res.ok) throw new Error(`core cancel ${id}: ${res.status}`);
+    },
+    async pause(on) {
+      const res = await fetch(`${info.url}/pause`, {
+        method: "POST",
+        headers: { ...auth, "Content-Type": "application/json" },
+        body: JSON.stringify({ paused: on }),
+      });
+      if (!res.ok) throw new Error(`core /pause: ${res.status}`);
     },
     async newChat() {
       const res = await fetch(`${info.url}/chat/new`, { method: "POST", headers: auth });

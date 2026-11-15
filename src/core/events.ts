@@ -61,6 +61,8 @@ export type AgentEvent =
    * the mode only from this event, so the dropdown and Shift+Tab never disagree.
    */
   | { type: "mode.changed"; mode: SafetyMode }
+  /** Pause on or off (the window's Pause button): while paused Jett neither speaks nor hears the mic. */
+  | { type: "paused"; paused: boolean }
   /** The setup wizard wrote the config file. Its settings are in use at once (a `mode.changed` comes first if the mode changed). */
   | { type: "setup.saved"; configPath: string; config: Config }
   /**

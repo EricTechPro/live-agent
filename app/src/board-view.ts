@@ -17,9 +17,25 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string,
   return node;
 }
 
-export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: HTMLElement) {
+// The bar shows at most this many notes as chips (file name; full path on hover), then "+N".
+const NOTE_CHIPS = 3;
+
+/** The job board drawer's toggle chip ("Jobs 0") and its count. */
+export interface JobsToggle {
+  button: HTMLButtonElement;
+  count: HTMLElement;
+}
+
+export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: HTMLElement, toggle?: JobsToggle) {
   let board: JobBoard = emptyBoard;
   let bar: Bar = emptyBar;
+
+  // The board is a drawer: shut while empty, opened by the Jobs chip or when a job starts.
+  const setOpen = (open: boolean) => {
+    jobsEl.classList.toggle("open", open);
+    toggle?.button.setAttribute("aria-expanded", String(open));
+  };
+  if (toggle) toggle.button.onclick = () => setOpen(!jobsEl.classList.contains("open"));
 
   // ---- job board ----
   const list = el("ol", { className: "job-list" });
@@ -28,6 +44,11 @@ export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: H
 
   function renderBoard() {
     empty.hidden = board.length > 0;
+    if (toggle) {
+      const running = board.filter((j) => j.status === "working" || j.status === "waiting").length;
+      toggle.count.textContent = String(running);
+      toggle.button.querySelector(".led")!.className = running ? "led busy" : board.some((j) => j.status === "failed") ? "led bad" : "led";
+    }
     list.replaceChildren(
       ...board.map((job) => {
         const li = el(
@@ -77,7 +98,13 @@ export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: H
   function renderBar() {
     notesEl.replaceChildren(
       ...(bar.notes.length
-        ? [el("span", { className: "bar-label", textContent: "Notes used" }), ...bar.notes.map((n) => el("code", { className: "bar-note", textContent: n }))]
+        ? [
+            el("span", { className: "bar-label", textContent: "Notes used" }),
+            ...bar.notes.slice(0, NOTE_CHIPS).map((n) => el("code", { className: "bar-note", textContent: n.split("/").pop() ?? n, title: n })),
+            ...(bar.notes.length > NOTE_CHIPS
+              ? [el("span", { className: "bar-more", textContent: `+${bar.notes.length - NOTE_CHIPS}`, title: bar.notes.slice(NOTE_CHIPS).join("\n") })]
+              : []),
+          ]
         : [el("span", { className: "bar-label", textContent: "No notes used" })]),
     );
     if (bar.mode) {
@@ -89,6 +116,8 @@ export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: H
 
   core.onEvent((event) => {
     const nextBoard = addJobEvent(board, event);
+    // A job just started: show the drawer.
+    if (event.type === "job.state" && (event.state === "queued" || event.state === "running") && !board.some((j) => j.id === event.id)) setOpen(true);
     const nextBar = addBarEvent(bar, event);
     if (nextBoard !== board) (board = nextBoard), renderBoard();
     if (nextBar !== bar) (bar = nextBar), renderBar();

@@ -146,6 +146,12 @@ describe("setup wizard, as the window sees it", () => {
     expect(events.map((e) => e.type)).toEqual(expect.arrayContaining(["mode.changed", "setup.saved", "chat.started"]));
   });
 
+  test("pause and resume over the window's API", async () => {
+    expect(await (await post("/pause", { paused: true })).json()).toEqual({ paused: true });
+    expect(await (await post("/pause", { paused: false })).json()).toEqual({ paused: false });
+    expect((await post("/pause", {})).status).toBe(400);
+  });
+
   test("the old setup chat route is gone", async () => {
     expect((await post("/setup", { ifNeeded: true })).status).toBe(404);
   });

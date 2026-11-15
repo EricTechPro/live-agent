@@ -18,6 +18,9 @@ const transcriptEl = $<HTMLOListElement>("transcript");
 const typeForm = $<HTMLFormElement>("type");
 const typeInput = $<HTMLInputElement>("type-input");
 const setupBtn = $<HTMLButtonElement>("setup");
+const pauseBtn = $<HTMLButtonElement>("pause");
+const sendBtn = $<HTMLButtonElement>("send");
+const sayEl = $("say");
 const newChatBtn = $<HTMLButtonElement>("new-chat");
 
 const LABELS: Record<OrbState, string> = {
@@ -35,8 +38,25 @@ const LABELS: Record<OrbState, string> = {
 const ORB_MOODS: Record<OrbState, Mood> = { connecting: "off", listening: "listen", thinking: "think", speaking: "speak", offline: "off" };
 // "listening" with no mic open is the resting state: the orb breathes.
 mountLedOrb($<HTMLCanvasElement>("orb-canvas"), {
-  follow: () => (orb.state === "listening" && !room ? "idle" : ORB_MOODS[orb.state]),
+  follow: () => (paused ? "off" : orb.state === "listening" && !room ? "idle" : ORB_MOODS[orb.state]),
 });
+
+// The speech bubble over the orb, like the wizard's: Jett's latest short line, typed out.
+let typer: ReturnType<typeof setInterval> | undefined;
+function say(text: string) {
+  clearInterval(typer);
+  let n = 0;
+  sayEl.textContent = "";
+  typer = setInterval(() => {
+    sayEl.textContent = text.slice(0, ++n);
+    if (n >= text.length) clearInterval(typer);
+  }, 24);
+}
+/** A reply as a bubble line: its first line, cut to a few words. */
+function bubbleLine(reply: string): string {
+  const first = reply.trim().split("\n")[0] ?? "";
+  return first.length <= 40 ? first : `${first.slice(0, 38).replace(/\s+\S*$/, "")}…`;
+}
 
 let orb: Orb = orbStart;
 let transcript: Transcript = emptyTranscript;
@@ -58,7 +78,8 @@ function renderTranscript() {
   lines.forEach((line, i) => {
     let li = transcriptEl.children[i] as HTMLLIElement | undefined;
     if (!li) li = transcriptEl.appendChild(document.createElement("li"));
-    if (li.className !== line.role) li.className = line.role;
+    const cls = line.role === "note" ? "note" : `pf ${line.role}`;
+    if (li.className !== cls) li.className = cls;
     if (li.textContent !== line.text) li.textContent = line.text;
   });
   transcriptEl.scrollTop = transcriptEl.scrollHeight;
@@ -101,7 +122,7 @@ async function startTalking(core: CoreClient) {
     await room.connect(s.livekitUrl, s.token);
     await room.startAudio(); // inside the click: WebKit's autoplay rule
     // First call asks macOS for the mic (Info.plist NSMicrophoneUsageDescription).
-    await room.localParticipant.setMicrophoneEnabled(true);
+    await room.localParticipant.setMicrophoneEnabled(!paused); // paused: join, but keep the mic quiet
     setTalking(true);
   } catch (err) {
     await room?.disconnect();
@@ -117,9 +138,23 @@ async function stopTalking() {
   setTalking(false);
 }
 
-// "Listening" only while the mic is open; with it closed Jett is just ready.
+// "Listening" only while the mic is open; with it closed Jett is just ready. Paused wins.
 function labelFor(state: OrbState): string {
+  if (paused && state !== "offline" && state !== "connecting") return "Paused";
   return state === "listening" && !room ? "Ready" : LABELS[state];
+}
+
+// ---- pause: Jett stops speaking and hearing; the chat and transcript stay ----
+let paused = false;
+function showPaused(on: boolean) {
+  paused = on;
+  document.body.classList.toggle("paused", on);
+  pauseBtn.textContent = on ? "Resume" : "Pause";
+  pauseBtn.setAttribute("aria-pressed", String(on));
+  orbLabel.textContent = labelFor(orb.state);
+  say(on ? "Paused." : "I'm back.");
+  // The mic itself goes quiet too, so nothing leaves the Mac while paused.
+  void room?.localParticipant.setMicrophoneEnabled(!on).catch(() => {});
 }
 
 function setTalking(on: boolean) {
@@ -147,6 +182,8 @@ async function boot() {
     feedOrb({ type: "core.down" });
     orbLabel.textContent = `Core stopped: ${reason}`;
     talkBtn.disabled = true;
+    pauseBtn.disabled = true;
+    sendBtn.disabled = true;
     typeInput.disabled = true;
     setupBtn.disabled = true;
     newChatBtn.disabled = true;
@@ -156,8 +193,12 @@ async function boot() {
     feedOrb(event);
     transcript = addToTranscript(transcript, event);
     renderTranscript();
+    if (event.type === "paused") showPaused(event.paused);
+    if (event.type === "turn.done" && event.reply.trim()) say(bubbleLine(event.reply));
+    if (event.type === "chat.started") say("New chat!");
   });
-  mountBoardAndBar(core, $("jobs"), $("bar"));
+  mountBoardAndBar(core, $("jobs"), $("bar"), { button: $<HTMLButtonElement>("jobs-toggle"), count: $("jobs-count") });
+  say("Hi! I'm Jett.");
   mountMini(core, $<HTMLButtonElement>("mini"), orbEl, $("mini-count"));
   mountDiagram(core, $("diagram"));
   feedOrb({ type: "core.ready" });
@@ -165,6 +206,20 @@ async function boot() {
   talkBtn.disabled = false;
   talkBtn.onclick = () => (room ? stopTalking() : startTalking(core));
   typeInput.disabled = false;
+  sendBtn.disabled = false;
+
+  // Pause / Resume, and Space for it while you are not typing.
+  pauseBtn.disabled = false;
+  const togglePause = () => core.pause(!paused).catch((err) => showError(`pause: ${errorText(err)}`));
+  pauseBtn.onclick = togglePause;
+  window.addEventListener("keydown", (e) => {
+    if (e.code !== "Space" || e.repeat || !$("wizard").hidden) return;
+    const t = e.target as HTMLElement;
+    if (t.closest("input, textarea, select, button, [contenteditable]")) return;
+    e.preventDefault();
+    void togglePause();
+  });
+
   typeForm.onsubmit = async (e) => {
     e.preventDefault();
     const text = typeInput.value.trim();

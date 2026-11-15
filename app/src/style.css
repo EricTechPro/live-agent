@@ -15,57 +15,69 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Orb + transcript left, job board right, bottom bar under both. */
-.shell {
-  display: grid;
-  grid-template-columns: minmax(320px, 1fr) minmax(240px, 300px);
-  grid-template-rows: minmax(0, 1fr) auto;
-  grid-template-areas: "voice jobs" "bar bar";
-  height: 100vh;
-  gap: 0 12px;
-  padding: 12px 12px 0;
+/* One centred column (like the wizard), whatever the window size; the bar under it. */
+.shell { display: flex; flex-direction: column; height: 100vh; }
+.voice {
+  flex: 1; min-height: 0; width: min(760px, 100%); margin: 0 auto;
+  display: flex; flex-direction: column; gap: 12px; padding: 16px 16px 12px;
 }
-.voice { grid-area: voice; display: flex; flex-direction: column; min-height: 0; padding: 8px 8px 12px; gap: 12px; }
-.jobs { grid-area: jobs; margin-bottom: 12px; }
-.bar { grid-area: bar; }
+.bar { flex: none; }
 
-/* ---- the orb: Jett's LED orb (led-orb.ts draws the canvas from data-state) ---- */
-.orb-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.orb { width: 152px; height: 152px; }
+/* ---- the stage: bubble over the LED orb, controls beside it ---- */
+.orb-wrap { display: grid; grid-template-columns: 200px minmax(0, 1fr); align-items: center; gap: 4px 20px; }
+.orb-stage { display: flex; flex-direction: column; align-items: center; }
+.orb-stage .say {
+  --frame: var(--led); --fill: #04191b;
+  margin: 0 0 12px; max-width: 196px; min-height: 30px; padding: 6px 10px 7px; text-align: center;
+  color: #d6fff6; font: 900 13px/1.2 var(--dots); letter-spacing: .03em; text-transform: uppercase;
+  text-shadow: 0 0 6px rgba(120,255,226,.6); overflow-wrap: break-word;
+}
+.orb-stage .tail { width: 10px; height: 6px; margin: -12px 0 8px; background: var(--led);
+  clip-path: polygon(0 0,100% 0,100% 2px,80% 2px,80% 4px,60% 4px,60% 6px,40% 6px,40% 4px,20% 4px,20% 2px,0 2px); }
+.orb { width: 104px; height: 104px; }
 .orb canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
 .orb-label {
-  margin: 0; color: var(--led); font: 900 14px/1.2 var(--dots); letter-spacing: .06em; text-transform: uppercase;
+  margin: 6px 0 0; color: var(--led); font: 900 12px/1.2 var(--dots); letter-spacing: .08em; text-transform: uppercase;
   text-shadow: 0 0 6px rgba(120,255,226,.5);
 }
-.orb[data-state="connecting"] + .mini-count + .orb-label,
-.orb[data-state="offline"] + .mini-count + .orb-label { color: var(--ink-3); text-shadow: none; }
+.orb[data-state="connecting"] ~ .orb-label, .orb[data-state="offline"] ~ .orb-label, body.paused .orb-label { color: var(--ink-3); text-shadow: none; }
+.controls { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; min-width: 0; }
+.talk-row { display: flex; gap: 8px; }
 
 /* Start talking: the one solid teal button. aria-pressed = talking now. */
 .talk { min-width: 168px; }
 .talk[aria-pressed="true"] { --frame: var(--bad); --fill: var(--bad); color: #2a0b06; }
-.talk:disabled { --frame: #1c3634; --fill: #1c3634; color: #8db0aa; cursor: default; }
+.talk:disabled, .pause:disabled, .send:disabled { --frame: #1c3634; --fill: #1c3634; color: #8db0aa; cursor: default; }
+.pause[aria-pressed="true"] { --frame: var(--led); color: var(--led); }
 
-/* New chat, Setup, Show log, Mini: small pixel chips. */
-.quiet-buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
-.setup.chip { padding: 5px 9px; font-size: 11px; color: var(--ink-2); }
+/* New chat, Setup, Show log, Mini, Jobs: small pixel chips. */
+.quiet-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.setup.chip { padding: 5px 9px; font-size: 11px; color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; }
 .setup.chip:hover { color: var(--ink); }
 .setup.chip:disabled { color: #6f8f8a; cursor: default; --frame: var(--edge); }
+.jobs-toggle[aria-expanded="true"] { --frame: var(--led); color: var(--led); }
+.jobs-toggle .led { width: 6px; height: 6px; }
 
-/* ---- transcript: you in ink-2, Jett in teal ---- */
-.transcript { flex: 1; overflow: auto; margin: 0; padding: 0 4px; list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.transcript li { white-space: pre-wrap; font-size: 13px; line-height: 1.5; }
-.transcript .user { color: var(--ink-2); }
-.transcript .user::before { content: "you  "; color: var(--ink-3); font-weight: 700; }
-.transcript .model { color: var(--led); }
-.transcript .model::before { content: "Jett  "; color: var(--led); font-weight: 700; }
-.transcript .note { color: var(--ink-3); font-size: 11px; }
-.transcript .note::before { content: "· "; }
+/* ---- transcript: pixel-framed chat rows. You on the right in ink-2, Jett on the left in teal ---- */
+.transcript { flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 2px 4px; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.transcript li { white-space: pre-wrap; font-size: 13px; line-height: 1.5; max-width: 82%; }
+.transcript .user, .transcript .model { position: relative; isolation: isolate; padding: 7px 11px; }
+.transcript .user { align-self: flex-end; color: var(--ink-2); --frame: var(--edge-hi); --fill: #0a2224; }
+.transcript .model { align-self: flex-start; color: var(--led); --frame: #24675f; --fill: #061b1c; }
+.transcript .note { align-self: center; color: var(--ink-3); font-size: 11px; max-width: 100%; text-align: center; }
 
-.type { display: flex; }
+.type { display: flex; gap: 8px; }
 .type .field { flex: 1; }
+.send { min-width: 84px; }
 
+/* ---- job board: a drawer on the right, open when a job starts or from the Jobs chip ---- */
+.jobs {
+  position: fixed; top: 12px; right: 12px; bottom: 52px; width: min(300px, calc(100vw - 24px)); z-index: 20;
+  transform: translateX(calc(100% + 24px)); transition: transform .2s var(--ease);
+}
+.jobs.open { transform: none; }
 /* ---- job board: a pixel-framed panel, an LED per job ---- */
-.jobs { --fill: var(--panel); display: flex; flex-direction: column; gap: 10px; padding: 14px; min-height: 0; overflow: hidden; }
+.jobs { --fill: var(--panel); display: flex; flex-direction: column; gap: 10px; padding: 14px; overflow: hidden; }
 .jobs-title { margin: 0; font: 900 18px/1.1 var(--dots); letter-spacing: .04em; text-shadow: 0 0 10px rgba(120,255,226,.3); }
 .job-empty { margin: 0; color: var(--ink-3); }
 .job-list { list-style: none; margin: 0; padding: 0 2px 0 0; display: flex; flex-direction: column; gap: 6px; overflow: auto; min-height: 0; }
@@ -98,14 +110,16 @@ body {
 /* ---- bottom bar (ticket 10): notes used, and the safety select ---- */
 .bar {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  margin: 0 -12px; padding: 6px 14px; min-height: 40px; font-size: 11px;
+  padding: 4px 14px; min-height: 36px; font-size: 11px;
   border-top: 2px solid var(--edge); background: rgba(7,26,28,.92);
 }
 .bar-notes { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; min-width: 0; }
 .bar-label { color: var(--ink-3); }
-.bar-note { color: var(--led); background: #061719; padding: 1px 6px; font: 500 11px/1.4 var(--mono); }
+.bar-note { color: var(--led); background: #061719; outline: 1px solid var(--edge-hi); padding: 1px 6px; font: 500 11px/1.4 var(--mono); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-more { color: var(--ink-3); }
 .bar-mode-wrap { display: flex; gap: 8px; align-items: center; color: var(--ink-3); flex: none; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
-.bar-mode-wrap .sel { min-width: 140px; }
+.bar-mode-wrap .sel { min-width: 132px; }
+.bar-mode-wrap .sel select { padding-block: 4px; }
 .bar[data-mode="bypass"] .sel { --frame: var(--bad); }
 
 /* ---- mini orb (ticket 15) ----
@@ -113,11 +127,10 @@ body {
    orb, its state word and the running-jobs count stay; click the orb to restore.
    The background around the orb drags the window (data-tauri-drag-region). */
 .mini-count { display: none; }
-body.mini .shell { display: block; height: 100vh; padding: 0; }
-body.mini .voice { height: 100%; padding: 0; }
+body.mini .voice { height: 100%; padding: 0; width: 100%; }
 body.mini .transcript, body.mini .diagram, body.mini .type, body.mini .jobs, body.mini .bar,
-body.mini .talk, body.mini .quiet-buttons { display: none; }
-body.mini .orb-wrap { position: relative; height: 100%; justify-content: center; gap: 4px; }
+body.mini .controls, body.mini .say, body.mini .tail { display: none; }
+body.mini .orb-wrap { position: relative; height: 100%; display: flex; justify-content: center; }
 body.mini .orb { width: 76px; height: 76px; cursor: pointer; }
 body.mini .orb-label { font-size: 11px; pointer-events: none; }
 body.mini .mini-count {
