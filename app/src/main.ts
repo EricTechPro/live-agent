@@ -24,14 +24,15 @@ import { nextLayer, startLayer, type Layer, type LayerAction } from "./layers.ts
 import { mountLedOrb, type Mood } from "./led-orb.ts";
 import { nextOrb, orbStart, type Orb, type OrbInput } from "./orb-state.ts";
 import { addToTranscript, emptyTranscript, type Transcript } from "./transcript.ts";
-import { callView, spaceAction, talkHint, type CallLook, type CallPhase, type CallView } from "./call-state.ts";
+import { callView, showCallButtons, spaceAction, talkHint, type CallLook, type CallPhase, type CallView } from "./call-state.ts";
 import { addCaption, noCaptions, shownCaptions, type Captions } from "./captions.ts";
 import { spokenLang, WORDS, type Lang } from "./lang.ts";
 import { followMic } from "./mic-follow.ts";
 import {
-  capture, DOUBLE_MS, dragTo, followStep, hoverOrb, isDoubleClick, isDrag, keepOn, parseSaved, placeCard, placeOrb, placePopover,
+  capture, DOUBLE_MS, dragTo, followStep, isDoubleClick, pollHover, isDrag, keepOn, parseSaved, placeCard, placeOrb, placePopover,
   pttCallIdle, pttIdle, pttPress, pttRelease, pttStep, type PttCall, type Point, type Ptt, type Rect,
 } from "./overlay.ts";
+import { UI, type UiKey } from "./ui-words.ts";
 import { dockPill, hoverPill, migrateDot, morph, MORPH_MS, parsePill, PILL, pillActions, pillAt, pillBars, pillFlyout, placePill, type PillAction, type PillSpot } from "./pill.ts";
 import { runWizard } from "./wizard.ts";
 
@@ -57,6 +58,8 @@ const popover = $("popover");
 const approvalsEl = $("approvals");
 const stage = $("stage");
 const wizardEl = $("wizard");
+/** The UI language: the one you last spoke (lang.ts); every label and tooltip follows it. */
+let lang: Lang = "en";
 
 // ---- the orb's spot: drag it by the grip; it stays where you leave it ----------
 const ORB_KEY = "jett.orb";
@@ -253,6 +256,8 @@ $<HTMLButtonElement>("pill-expand").onclick = () => void setMini(false);
 pillCallBtn.onclick = () => primary();
 pillHangupBtn.onclick = () => void endCall();
 if (!inTauri()) window.addEventListener("pointermove", (e: PointerEvent) => updatePillHover({ x: e.clientX, y: e.clientY }));
+dock.addEventListener("focusin", () => updateControls());
+dock.addEventListener("focusout", () => setTimeout(updateControls));
 // The grip moves by keyboard too: arrow keys, Shift for bigger steps.
 grip.addEventListener("keydown", (e) => {
   const step = e.shiftKey ? 80 : 20;
@@ -322,7 +327,8 @@ try {
 }
 function showFollow() {
   followBtn.setAttribute("aria-pressed", String(following));
-  followBtn.dataset.tip = following ? "Stay where I put it" : "Follow my pointer";
+  followBtn.dataset.tip = UI[lang][following ? "stay" : "follow"];
+  followBtn.setAttribute("aria-label", UI[lang].follow);
   tips.refresh(followBtn);
 }
 followBtn.onclick = () => {
@@ -344,6 +350,7 @@ showFollow();
 let ptt: Ptt = pttIdle;
 function startOverlayPoll() {
   if (!inTauri()) return; // a browser preview has no window to make click-through
+  document.documentElement.dataset.polled = "1"; // hover comes from here, not DOM :hover
   let through: boolean | undefined;
   let busy = false;
   setInterval(async () => {
@@ -357,7 +364,12 @@ function startOverlayPoll() {
       if (step.act === "talk") pushToTalk(true);
       if (step.act === "release") pushToTalk(false);
       // Hover from the cursor, not DOM hover: WebKit sends none while another app is in front.
-      dock.classList.toggle("hover", !mini && hoverOrb(point, { ...orbAt, ...dockSize() }));
+      const h = pollHover(dock.classList.contains("hover"), mini ? undefined : point, { ...orbAt, ...dockSize() });
+      if (h.hover !== dock.classList.contains("hover")) {
+        dock.classList.toggle("hover", h.hover);
+        updateControls();
+      }
+      if (h.hideTip) tips.hide();
       updatePillHover(point);
       if (following && !drag && !mini && layer === "home") {
         const next = followStep(orbAt, dockSize(), point, view());
@@ -366,6 +378,8 @@ function startOverlayPoll() {
       const take = capture({ point, rects: hitRects(), hold: !!drag || !wizardEl.hidden });
       if (through !== !take) {
         through = !take;
+        // The cursor left everything Jett shows: no tooltip may stay behind (ticket 39).
+        if (through) tips.hide();
         await setClickThrough(through);
       }
     } catch {
@@ -463,7 +477,6 @@ $("clear-canvas").onclick = () => {
 let orb: Orb = orbStart;
 let call: CallPhase = "off";
 let muted = false;
-let lang: Lang = "en";
 let shown: CallView | undefined;
 let endedTimer: ReturnType<typeof setTimeout> | undefined;
 let mic: ReturnType<typeof followMic> | undefined;
@@ -548,11 +561,53 @@ function render() {
   orbEl.setAttribute("aria-label", first ? tipsFor[first === "hangup" ? "hangup" : first] : v.label);
   orbEl.disabled = !first || talkBtn.disabled;
   // The orb's tip names what a click does, its key, and the double-click.
-  orbEl.dataset.tip = `${first ? tipsFor[first] : v.label} · ${MINIMISE_TIP[lang]}`;
+  orbEl.dataset.tip = `${first ? tipsFor[first] : v.label} · ${UI[lang].minimiseTip}`;
   orbEl.dataset.key = first === "hangup" ? "⌘." : "Space";
   tips.refresh(orbEl);
+  applyLang();
+  updateControls();
 }
-const MINIMISE_TIP: Record<Lang, string> = { en: "double-click to minimise", zh: "双击最小化" };
+// One UI language (ticket 39): every static tooltip and label follows the language you last spoke.
+const UI_IDS: [string, UiKey][] = [
+  ["hide", "hide"], ["grip", "move"], ["open-center", "menu"], ["orb-new-chat", "newChat"], ["new-chat", "newChat"], ["jobs-toggle", "jobs"],
+  ["pill", "showJett"], ["pill-expand", "expand"], ["tab-chat", "chat"], ["tab-jobs", "jobs"], ["tab-brain", "brain"], ["setup", "setup"],
+  ["show-log", "showLog"], ["open-shortcuts", "shortcuts"], ["close-center", "close"], ["close-shortcuts", "close"], ["clear-canvas", "hideDrawing"],
+  ["send", "send"], ["close-reader", "back"],
+];
+let wordsLang: Lang | undefined;
+function applyLang() {
+  if (wordsLang === lang) return;
+  wordsLang = lang;
+  document.documentElement.lang = lang === "zh" ? "zh-Hans" : "en";
+  const words = UI[lang];
+  for (const [id, key] of UI_IDS) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.dataset.tip = words[key];
+    el.setAttribute("aria-label", words[key]);
+    tips.refresh(el);
+  }
+  typeInput.placeholder = words.typeHere;
+  $("chats-title").textContent = words.pastChats;
+  $("brain-title").textContent = words.notes;
+  bubbleMore.dataset.tip = words[bubble.dataset.open === "true" ? "less" : "more"];
+  showFollow();
+  if (!shortcutsEl.hidden) showShortcuts(true);
+}
+// Less on screen at rest (ticket 39): in a call, Mute and Hang up only under the cursor or
+// while someone is talking (call-state.ts `showCallButtons`).
+const controlsEl = dock.querySelector<HTMLElement>(".controls")!;
+const TALK_HOLD_MS = 1500;
+let micHeardAt = -Infinity;
+function updateControls() {
+  const rest = !showCallButtons({
+    look: shown?.look ?? "starting",
+    inCall: call === "live" || call === "joining",
+    hovered: dock.classList.contains("hover") || (!inTauri() && dock.matches(":hover")) || dock.contains(document.activeElement),
+    talking: performance.now() - micHeardAt < TALK_HOLD_MS,
+  });
+  if (controlsEl.dataset.rest !== String(rest)) controlsEl.dataset.rest = String(rest);
+}
 
 function feedOrb(input: OrbInput) {
   orb = nextOrb(orb, input, performance.now());
@@ -566,6 +621,7 @@ mountLedOrb($<HTMLCanvasElement>("orb-canvas"), {
   // Ticket 38: the wave moves only with real activity (orb-wave.ts).
   wave: () => {
     micLevel = mic && !muted ? mic.read() : 0;
+    if (micLevel > QUIET) micHeardAt = performance.now();
     const out = voice?.read() ?? 0;
     voiceOut = out;
     if (out > QUIET) voiceHeard = true;
@@ -611,7 +667,7 @@ bubbleMore.onclick = () => {
   bubble.dataset.open = String(open);
   bubbleMore.setAttribute("aria-expanded", String(open));
   bubbleMore.setAttribute("aria-label", open ? "Fold the reply" : "Show the whole reply");
-  bubbleMore.dataset.tip = open ? "Less" : "More";
+  bubbleMore.dataset.tip = UI[lang][open ? "less" : "more"];
   placeFloaters();
 };
 const drawingShown = () => stage.dataset.view === "sketch" && stage.dataset.dismissed !== "true";
@@ -716,6 +772,7 @@ function say(text: string) {
 }
 setInterval(() => {
   renderCaptions();
+  updateControls();
   if (orb.heardAt !== undefined) feedOrb({ type: "tick" });
 }, 200);
 

@@ -70,9 +70,11 @@ body {
 /* New chat (ticket 39) sits next to the minus; the grip narrows to make room. */
 .newchat-btn { left: 32px; }
 .menu-btn { transition: opacity .15s var(--ease), background-color .15s var(--ease); }
-.dock:hover .menu-btn, .dock.hover .menu-btn, .menu-btn:focus-visible, .menu-btn[aria-expanded="true"], .overlay[data-layer="center"] .menu-btn,
-.dock:hover .hide-btn, .dock.hover .hide-btn, .hide-btn:focus-visible,
-.dock:hover .newchat-btn, .dock.hover .newchat-btn, .newchat-btn:focus-visible { opacity: 1; }
+/* Ticket 39: in the app (html[data-polled]) only the poll's .hover counts. WebKit keeps
+   :hover stuck after the cursor leaves for another app, which left these up for seconds. */
+html:not([data-polled]) .dock:hover .menu-btn, .dock.hover .menu-btn, .menu-btn:focus-visible, .menu-btn[aria-expanded="true"], .overlay[data-layer="center"] .menu-btn,
+html:not([data-polled]) .dock:hover .hide-btn, .dock.hover .hide-btn, .hide-btn:focus-visible,
+html:not([data-polled]) .dock:hover .newchat-btn, .dock.hover .newchat-btn, .newchat-btn:focus-visible { opacity: 1; }
 .dock.hover .grip span { background: rgba(200, 255, 244, .6); }
 .dock.dragging .orb { cursor: grabbing; transform: scale(1.04); }
 
@@ -123,7 +125,9 @@ body {
   margin: -2px 0 0; padding: 1px 8px 2px; border-radius: 9px; background: rgba(4, 16, 18, .42);
   color: rgba(200, 255, 244, .62); font: 500 10.5px/1.25 var(--mono); font-stretch: 87.5%; white-space: nowrap;
 }
-.controls { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+.controls { display: flex; gap: 10px; align-items: center; margin-top: 4px; transition: opacity .15s var(--ease); }
+/* Ticket 39: at rest in a call, just the orb and its state; the buttons keep their space. */
+.controls[data-rest="true"] { opacity: 0; visibility: hidden; transition: opacity .15s var(--ease), visibility 0s .15s; }
 
 /* Minimised (ticket 39): the orb and its cues go; a slim pill docks flush to a side edge.
    Dark glass with a teal edge and a deep shadow, so it reads on a white page and on a
@@ -144,8 +148,8 @@ body {
 .edge-pill[data-look="speaking"] { --look: 140, 206, 255; }
 .edge-pill[data-look="muted"], .edge-pill[data-look="ended"], .edge-pill[data-look="starting"] { --look: 206, 218, 216; }
 .edge-pill[data-look="offline"] { --look: 255, 150, 130; }
-.edge-pill.hover, .edge-pill:hover, .edge-pill.dragging { width: 32px; border-color: rgba(var(--look), .6); box-shadow: 0 10px 26px rgba(0, 0, 0, .5), 0 0 0 1px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .1), 0 0 18px rgba(var(--look), .25); }
-.edge-pill[data-dock="right"].hover, .edge-pill[data-dock="right"]:hover, .edge-pill[data-dock="right"].dragging { transform: translateX(-4px); }
+.edge-pill.hover, html:not([data-polled]) .edge-pill:hover, .edge-pill.dragging { width: 32px; border-color: rgba(var(--look), .6); box-shadow: 0 10px 26px rgba(0, 0, 0, .5), 0 0 0 1px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .1), 0 0 18px rgba(var(--look), .25); }
+.edge-pill[data-dock="right"].hover, html:not([data-polled]) .edge-pill[data-dock="right"]:hover, .edge-pill[data-dock="right"].dragging { transform: translateX(-4px); }
 .edge-pill.dragging { cursor: grabbing; transition: none; }
 .edge-pill:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .pill-led { width: 8px; height: 8px; border-radius: 50%; background: rgb(var(--look)); box-shadow: 0 0 0 1px rgba(0, 0, 0, .5), 0 0 8px rgba(var(--look), .8); }
