@@ -14,15 +14,17 @@
 :root{
   --bg:#ffffff; --soft:#f6f8fa; --fg:#1f2328; --muted:#59636e; --border:#d1d9e0;
   --accent:#0969da; --pri:#1f883d; --pri-fg:#ffffff; --brand:#6a4cff; --warn:#9a6700; --bad:#cf222e;
+  --voice:#0969da; --answer:#1a7f37;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif;
   --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
   color-scheme:light;
 }
 @media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){--bg:#0d1117;--soft:#151b23;--fg:#f0f6fc;--muted:#9198a1;--border:#3d444d;--accent:#4493f8;--pri:#238636;--brand:#9b8cff;--warn:#d29922;--bad:#f85149;color-scheme:dark}
+  :root:not([data-theme="light"]){--bg:#0d1117;--soft:#151b23;--fg:#f0f6fc;--muted:#9198a1;--border:#3d444d;--accent:#4493f8;--pri:#238636;--brand:#9b8cff;--warn:#d29922;--bad:#f85149;--voice:#4493f8;--answer:#3fb950;color-scheme:dark}
 }
-:root[data-theme="dark"]{--bg:#0d1117;--soft:#151b23;--fg:#f0f6fc;--muted:#9198a1;--border:#3d444d;--accent:#4493f8;--pri:#238636;--brand:#9b8cff;--warn:#d29922;--bad:#f85149;color-scheme:dark}
+:root[data-theme="dark"]{--bg:#0d1117;--soft:#151b23;--fg:#f0f6fc;--muted:#9198a1;--border:#3d444d;--accent:#4493f8;--pri:#238636;--brand:#9b8cff;--warn:#d29922;--bad:#f85149;--voice:#4493f8;--answer:#3fb950;color-scheme:dark}
 *{box-sizing:border-box}
+img{max-width:100%;height:auto}
 html{scroll-behavior:smooth}
 html,body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 var(--sans)}
 a{color:var(--accent);text-decoration:none}
@@ -71,10 +73,10 @@ h3{font:600 16px/1.3 var(--sans);margin:0 0 4px}
 .tbtn svg{fill:currentColor}
 
 /* hero */
-.hero{text-align:center;padding-top:72px;padding-bottom:72px;border-top:0}
-.orb{position:relative;width:104px;height:104px;margin:0 auto 22px}
-.orb img{position:relative;width:104px;height:104px;display:block;border-radius:24px;z-index:1}
-.orb::before,.orb::after{content:"";position:absolute;inset:0;border-radius:28px;border:2px solid var(--brand);opacity:0;animation:ring 2.8s ease-out infinite}
+.hero{text-align:center;padding-top:64px;padding-bottom:56px;border-top:0}
+.orb{position:relative;width:96px;height:96px;margin:0 auto 20px}
+.orb img{position:relative;width:96px;height:96px;display:block;border-radius:22px;z-index:1}
+.orb::before,.orb::after{content:"";position:absolute;inset:0;border-radius:26px;border:2px solid var(--brand);opacity:0;animation:ring 2.8s ease-out infinite}
 .orb::after{animation-delay:1.4s}
 @keyframes ring{0%{transform:scale(1);opacity:.5}100%{transform:scale(1.55);opacity:0}}
 @media (prefers-reduced-motion: reduce){.orb::before,.orb::after{animation:none}}
@@ -84,82 +86,103 @@ h3{font:600 16px/1.3 var(--sans);margin:0 0 4px}
 .hero .ctas{justify-content:center}
 .pitch{font:600 22px/1.35 var(--sans);margin:0 0 8px}
 .sub{color:var(--muted);margin:0 auto;font-size:16px;max-width:620px}
-.built{display:flex;flex-wrap:wrap;justify-content:center;gap:10px 22px;margin-top:34px;color:var(--muted);font-size:13px;align-items:center}
-.built span{display:inline-flex;align-items:center;gap:6px}
-.built .bl{width:18px;height:18px}
 
-/* feature cards */
-.fgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
-.fcard{border:1px solid var(--border);border-radius:8px;padding:18px;background:var(--bg)}
-.fcard .fi{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;margin-bottom:12px;color:var(--brand);background:color-mix(in srgb,var(--brand) 12%,transparent)}
-.fcard .fi .ic{width:22px;height:22px}
-.fcard p{margin:0;color:var(--muted);font-size:14px}
+/* feature cards: what it does */
+.feats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:44px 0 0;text-align:left}
+.cw{border:1px solid var(--border);border-radius:10px;background:var(--soft);padding:16px 18px 18px;display:flex;flex-direction:column;gap:10px}
+.cw .art{width:100%;max-width:240px;aspect-ratio:4/3;margin:0 auto;display:block}
+.art .pn{fill:var(--bg);stroke:var(--border);stroke-width:1.5}
+.art .ln{fill:none;stroke:var(--fg);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.art .wv{fill:var(--voice)}
+.art .ink{color:var(--fg);fill:currentColor}
+.art .bar{fill:var(--border)}.art .bar.dim{opacity:.55}
+.art .sep{stroke:var(--border);stroke-width:1.5}
+.art .ok{fill:var(--answer)}.art .okm{fill:none;stroke:var(--bg);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.art .trk{fill:none;stroke:var(--border);stroke-width:2.5}
+.art .spin{fill:none;stroke:var(--voice);stroke-width:2.5;stroke-linecap:round}
+.art .sh{fill:color-mix(in srgb,var(--answer) 12%,var(--bg));stroke:var(--answer);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.art .okq{fill:var(--fg);font:700 26px var(--sans)}
+.cw h3{display:flex;align-items:center;gap:8px}
+.cw h3 .ic{color:var(--brand);width:18px;height:18px}
+.cw p{margin:0;color:var(--muted);font-size:14px}
 
-/* install steps */
-.steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:0 0 22px;padding:0;list-style:none}
-.steps li{border:1px solid var(--border);border-radius:8px;padding:16px;background:var(--soft);display:flex;gap:12px}
-.num{flex:none;width:26px;height:26px;border-radius:999px;background:var(--pri);color:var(--pri-fg);display:grid;place-items:center;font:700 13px var(--sans)}
+/* install */
+.steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 22px;padding:0;list-style:none}
+.steps li{border:1px solid var(--border);border-radius:8px;padding:14px 16px;background:var(--bg);display:flex;gap:14px;align-items:center}
+.sic{position:relative;flex:none;width:44px;height:44px;border-radius:10px;display:grid;place-items:center;color:var(--pri);background:color-mix(in srgb,var(--pri) 13%,transparent)}
+.sic .ic{width:22px;height:22px}
+.sic b{position:absolute;top:-7px;left:-7px;width:20px;height:20px;border-radius:999px;background:var(--pri);color:var(--pri-fg);display:grid;place-items:center;font:700 11px var(--sans)}
 .steps p{margin:0;color:var(--muted);font-size:14px}
-.tabbed .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:16px;overflow-x:auto}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:16px;overflow-x:auto}
 .tabs button{background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);padding:8px 12px;font:600 14px var(--sans);cursor:pointer;white-space:nowrap}
 .tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:#fd8c73}
-.does{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:18px 0 0;padding:0;list-style:none}
-.does li{font-size:13.5px;color:var(--muted);display:flex;gap:8px;align-items:flex-start}
+.does{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;margin:0;padding:0;list-style:none}
+.does li{font-size:14px;color:var(--muted);display:flex;gap:10px;align-items:flex-start}
 .does .ic{width:18px;height:18px;color:var(--pri);margin-top:2px}
 .note{border-left:3px solid var(--accent);padding:6px 12px;color:var(--muted);font-size:14px;margin:14px 0 0}
-
-/* key guide */
-.kgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:0 0 18px;padding:0;list-style:none;counter-reset:k}
-.kgrid li{border:1px solid var(--border);border-radius:8px;padding:16px;display:flex;gap:12px;background:var(--bg)}
-.kgrid .num{background:#6a4cff;color:#fff}
-.kgrid p{margin:0;color:var(--muted);font-size:14px}
-.kgrid b{color:var(--fg)}
-.warnbox{display:flex;gap:10px;align-items:flex-start;border:1px solid color-mix(in srgb,var(--warn) 40%,var(--border));background:color-mix(in srgb,var(--warn) 8%,transparent);border-radius:8px;padding:12px 14px;font-size:14px;margin-top:16px}
+.kl{margin:0 0 14px;padding:0 0 0 22px;color:var(--muted);font-size:14px}
+.kl li{margin:0 0 6px}
+.kl b{color:var(--fg)}
+.warnbox{display:flex;gap:10px;align-items:flex-start;border:1px solid color-mix(in srgb,var(--warn) 40%,var(--border));background:color-mix(in srgb,var(--warn) 8%,transparent);border-radius:8px;padding:12px 14px;font-size:14px;margin-top:14px}
 .warnbox .ic{color:var(--warn);margin-top:1px}
 
-/* how it works: simple diagram */
-.chain{display:flex;align-items:stretch;gap:0;margin:8px 0 14px}
-.macbox{flex:4.4;display:flex;align-items:stretch;border:1.5px dashed var(--border);border-radius:12px;padding:30px 12px 12px;position:relative}
-.macbox>.tag,.cloud>.tag{position:absolute;top:8px;left:12px;font:600 11.5px var(--mono);color:var(--muted);display:flex;gap:5px;align-items:center}
-.macbox>.tag .bl{width:12px;height:12px}
-.cloud{flex:1.2;display:flex;align-items:stretch;border:1.5px dashed color-mix(in srgb,var(--brand) 50%,var(--border));border-radius:12px;padding:30px 12px 12px;position:relative}
-.node{flex:1;min-width:0;border:1px solid var(--border);border-radius:8px;background:var(--bg);padding:14px 8px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px}
-.node b{font-size:14px}
-.node span{font-size:12.5px;color:var(--muted);line-height:1.35}
-.node .bl{width:30px;height:30px}
-.node .tx{display:flex;flex-direction:column;align-items:center;gap:2px}
-.arr.wide{width:84px}
-.node.you .bl{color:var(--brand)}
-.arr{flex:none;width:58px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--muted);font:11px var(--mono);text-align:center}
-.arr svg{width:28px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.side{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:14px;color:var(--muted)}
+/* tap-to-open boxes */
+.fold{border:1px solid var(--border);border-radius:8px;background:var(--bg);margin:0 0 10px;scroll-margin-top:64px}
+.fold>summary{cursor:pointer;padding:13px 16px;font-weight:600;display:flex;gap:10px;align-items:center;list-style:none}
+.fold>summary::-webkit-details-marker{display:none}
+.fold>summary::after{content:"+";margin-left:auto;color:var(--muted);font:400 20px/1 var(--sans)}
+.fold[open]>summary::after{content:"−"}
+.fold>summary .ic{width:18px;height:18px;color:var(--muted)}
+.fold>summary .bl{width:18px;height:18px}
+.fold>summary small{font-weight:400;color:var(--muted);font-size:13px}
+.fold>.a{padding:2px 16px 16px 44px;color:var(--muted);font-size:14px}
+.fold>.a>p{margin:0 0 8px}
+.fold .a .code{margin:6px 0 10px}
+.fold .fold{background:var(--soft)}
+.fold .fold>summary{padding:10px 14px;font-size:14px}
+.fold .fold>.a{padding:0 14px 12px 42px}
+.fold .x{color:var(--bad)!important}.fold .w{color:var(--warn)!important}
+
+/* how it works: one big drawing */
+.dg{border:1px solid var(--border);border-radius:12px;background:var(--soft);padding:18px;margin:0 0 12px}
+.dg>svg{display:block;width:100%;height:auto}
+.dg svg svg{fill:currentColor;color:var(--fg)}
+.dg .v{display:none;max-width:360px;margin:0 auto}
+.dg text{fill:var(--fg);font-family:var(--sans)}
+.dg .t1{font-size:17px;font-weight:650}
+.dg .t2{font-size:13px;fill:var(--muted)}
+.dg .tg{font:600 13px var(--mono);fill:var(--muted)}
+.dg .box{fill:none;stroke:var(--border);stroke-width:1.6;stroke-dasharray:6 5}
+.dg .box.g{stroke:color-mix(in srgb,var(--brand) 55%,var(--border))}
+.dg .nd{fill:var(--bg);stroke:var(--border);stroke-width:1.2}
+.dg .nd.you{stroke:var(--brand);stroke-width:2}
+.dg .mk{color:var(--fg)}
+.dg svg .usr{color:var(--brand)}
+.dg .av{stroke:var(--voice);stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.dg .aa{stroke:var(--answer);stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.legend{display:flex;flex-wrap:wrap;gap:8px 22px;justify-content:center;font-size:14px;color:var(--muted);margin:12px 0 0}
+.legend span{display:inline-flex;align-items:center;gap:8px}
+.legend i{display:inline-block;width:26px;height:3px;border-radius:2px}
+.side{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:14px;color:var(--muted);margin:0 0 30px}
 .side .pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:999px;padding:5px 12px 5px 8px;color:var(--fg);background:var(--soft)}
 .side .pill .bl,.side .pill .ic{width:18px;height:18px}
-.lgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:30px 0 34px}
-.lcard{border:1px solid var(--border);border-radius:8px;padding:16px;display:flex;gap:14px;align-items:flex-start;background:var(--bg)}
-.lcard .lt{width:46px;height:46px;flex:none;border-radius:10px;border:1px solid var(--border);background:var(--soft);display:grid;place-items:center}
-.lcard p{margin:0;color:var(--muted);font-size:14px}
+
+/* big logo tiles */
+.tiles{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:0 0 28px}
+.tile{border:1px solid var(--border);border-radius:12px;background:var(--bg);padding:20px 12px 16px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px}
+.tile .mk{width:76px;height:76px;border-radius:18px;background:var(--soft);border:1px solid var(--border);display:grid;place-items:center;margin-bottom:6px}
+.tile .bl{width:46px;height:46px}
+.tile p{margin:0;color:var(--muted);font-size:13px;line-height:1.4}
 .mapbox{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--soft)}
 .mapbox iframe{display:block;width:100%;height:620px;border:0;background:#fff}
 
 /* requirements */
-.rgrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}
-.rcard{position:relative;border:1px solid var(--border);border-radius:8px;padding:16px;background:var(--bg);display:flex;flex-direction:column;gap:8px}
-.rcard .ic,.rcard .bl{width:26px;height:26px;color:var(--fg)}
-.rcard p{margin:0;color:var(--muted);font-size:13.5px}
-.rcard .opt{position:absolute;top:14px;right:14px;font:600 11px var(--mono);color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:0 7px}
-
-/* faq */
-.faq details{border:1px solid var(--border);border-radius:8px;background:var(--bg);margin:0 0 10px}
-.faq summary{cursor:pointer;padding:13px 16px;font-weight:600;display:flex;gap:10px;align-items:center;list-style:none}
-.faq summary::-webkit-details-marker{display:none}
-.faq summary::after{content:"+";margin-left:auto;color:var(--muted);font:400 20px/1 var(--sans)}
-.faq details[open] summary::after{content:"−"}
-.faq summary .ic{width:18px;height:18px}
-.faq .x{color:var(--bad)}.faq .w{color:var(--warn)}
-.faq .a{padding:0 16px 14px 44px;color:var(--muted);font-size:14px}
-.faq .a p{margin:0 0 8px}
-.faq .a .code{margin:6px 0 0}
+.rgrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:4px 0 0}
+.rcard{position:relative;border:1px solid var(--border);border-radius:8px;padding:14px;background:var(--soft);display:flex;flex-direction:column;gap:6px}
+.rcard .ic,.rcard .bl{width:24px;height:24px;color:var(--fg)}
+.rcard h3{color:var(--fg);font-size:14.5px}
+.rcard p{margin:0;color:var(--muted);font-size:13px}
+.rcard .opt{position:absolute;top:12px;right:12px;font:600 11px var(--mono);color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:0 7px}
 
 /* footer */
 .foot{padding:26px 32px;border-top:1px solid var(--border);color:var(--muted);font-size:13.5px}
@@ -169,17 +192,9 @@ h3{font:600 16px/1.3 var(--sans);margin:0 0 4px}
 .foot a:hover{color:var(--accent)}
 
 @media (max-width:980px){
-  .fgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .tiles{grid-template-columns:repeat(3,minmax(0,1fr))}
   .rgrid{grid-template-columns:repeat(3,minmax(0,1fr))}
-  .does{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .lgrid,.kgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .chain,.macbox,.cloud{flex-direction:column}
-  .macbox,.cloud{padding-top:32px}
-  .arr{width:auto;height:46px;flex-direction:row;gap:8px}
-  .arr svg{transform:rotate(90deg)}
-  .node{flex-direction:row;text-align:left;padding:12px 14px;gap:12px}
-  .node .tx{align-items:flex-start}
-  .arr.wide{width:auto}
+  .steps{grid-template-columns:minmax(0,1fr);gap:10px}
 }
 @media (max-width:760px){
   .sec{padding:40px 16px}
@@ -188,27 +203,47 @@ h3{font:600 16px/1.3 var(--sans);margin:0 0 4px}
   .nav .lk{display:none;width:100%;flex-direction:column;align-items:flex-start;gap:12px;padding:8px 0 4px}
   .nav.open .lk{display:flex}
   h1.big{font-size:40px}
+  h2{font-size:24px}
   .pitch{font-size:19px}
-  .hero{padding-top:44px;padding-bottom:48px}
-  .fgrid,.steps,.kgrid,.lgrid,.does{grid-template-columns:minmax(0,1fr)}
+  .lead{margin-bottom:18px}
+  .hero{padding-top:36px;padding-bottom:40px}
+  .orb,.orb img{width:76px;height:76px}
+  .feats{grid-template-columns:minmax(0,1fr);gap:10px;margin-top:30px}
+  .cw{flex-direction:row;align-items:center;padding:10px 14px 10px 8px;gap:12px}
+  .cw .art{width:104px;max-width:none;flex:none;margin:0}
+  .cw h3{font-size:15px}
+  .cw h3 .ic{display:none}
+  .cw p{font-size:13.5px}
+  .tiles{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .tile{padding:12px 4px 10px;gap:2px}
+  .tile .mk{width:56px;height:56px;border-radius:14px;margin-bottom:4px}
+  .tile .bl{width:34px;height:34px}
+  .tile h3{font-size:13px}
+  .tile p{display:none}
+  .dg{padding:12px}
+  .dg .h{display:none}
+  .dg .v{display:block}
   .rgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .mapbox iframe{height:460px}
   .ctas .btn{flex:1 1 auto;justify-content:center}
-  .faq .a{padding-left:16px}
+  .hero .ctas .btn.ghb{display:none}
+  .fold>.a{padding-left:16px}
+  .fold .fold>.a{padding-left:14px}
   .foot{padding:22px 16px}
 }
 </style>
 </head>
 <body>
 
-<!-- Icon sprite. Brand marks are Simple Icons paths (CC0); line icons are Lucide-style. -->
+<!-- Icon sprite. Gemini is the full-colour sparkle redrawn as SVG; other brand marks are Simple Icons paths (CC0); line icons are Lucide-style. -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
-    <linearGradient id="gem" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4796e3"/><stop offset=".55" stop-color="#9177c7"/><stop offset="1" stop-color="#ca6673"/></linearGradient>
+    <clipPath id="gem-c"><path d="M20.616 10.835a14.147 14.147 0 0 1-4.45-3.001 14.111 14.111 0 0 1-3.678-6.452.503.503 0 0 0-.975 0 14.134 14.134 0 0 1-3.679 6.452 14.155 14.155 0 0 1-4.45 3.001c-.65.28-1.318.505-2.002.678a.502.502 0 0 0 0 .975c.684.172 1.35.397 2.002.677a14.147 14.147 0 0 1 4.45 3.001 14.112 14.112 0 0 1 3.679 6.453.502.502 0 0 0 .975 0c.172-.685.397-1.351.677-2.003a14.145 14.145 0 0 1 3.001-4.45 14.113 14.113 0 0 1 6.453-3.678.503.503 0 0 0 0-.975 13.245 13.245 0 0 1-2.003-.678z"/></clipPath>
+    <filter id="gem-b" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.8"/></filter>
   </defs>
   <symbol id="b-livekit" viewBox="0 0 24 24"><path d="M0 0v24h14.4v-4.799h4.8V24H24v-4.8h-4.799v-4.8h-4.8v4.8H4.8V0H0zm14.4 14.4V9.602h4.801V4.8H24V0h-4.8v4.8h-4.8v4.8H9.6v4.8h4.8z"/></symbol>
-  <symbol id="b-gemini" viewBox="0 0 24 24"><path fill="url(#gem)" d="M11.04 19.32Q12 21.51 12 24q0-2.490.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.810-2.58 12.3 12.3 0 0 1-2.580-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"/></symbol>
-  <symbol id="b-geminicli" viewBox="0 0 24 24"><rect x="1" y="3" width="22" height="18" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5.5 9l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path fill="url(#gem)" transform="translate(11 7) scale(.42)" d="M11.04 19.32Q12 21.51 12 24q0-2.490.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.810-2.58 12.3 12.3 0 0 1-2.580-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.490 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"/></symbol>
+  <symbol id="b-gemini" viewBox="0 0 24 24"><g clip-path="url(#gem-c)"><rect width="24" height="24" fill="#3186ff"/><g filter="url(#gem-b)"><path d="M12-2 18 3 13 8 5 9Z" fill="#ff4641"/><path d="M-2 9 6 7 9 12 5 16-2 15Z" fill="#fbbc04"/><path d="M4 15 10 11.5 14 14 15 26H7Z" fill="#00b95c"/><ellipse cx="6.5" cy="15" rx="2.5" ry="2" fill="#88c43c"/><ellipse cx="7" cy="8" rx="2.5" ry="2" fill="#d9773b" opacity=".85"/></g></g></symbol>
+  <symbol id="b-geminicli" viewBox="0 0 24 24"><rect x="1" y="3" width="22" height="18" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5.5 9l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><use href="#b-gemini" x="11" y="7.5" width="10" height="10"/></symbol>
   <symbol id="b-tauri" viewBox="0 0 24 24"><path fill="#24c8d8" d="M13.912 0a8.72 8.72 0 0 0-8.308 6.139c1.05-.515 2.18-.845 3.342-.976 2.415-3.363 7.4-3.412 9.880-.097 2.48 3.315 1.025 8.084-2.883 9.450a6.131 6.131 0 0 1-.3 2.762 8.72 8.72 0 0 0 3.010-1.225A8.72 8.72 0 0 0 13.913 0zm.082 6.451a2.284 2.284 0 1 0-.15 4.566 2.284 2.284 0 0 0 .15-4.566zm-5.629.27a8.72 8.72 0 0 0-3.031 1.235 8.72 8.72 0 1 0 13.060 9.9131 10.173 10.174 0 0 1-3.343.965 6.125 6.125 0 1 1-7.028-9.343 6.114 6.115 0 0 1 .342-2.772zm1.713 6.27a2.284 2.284 0 0 0-2.284 2.283 2.284 2.284 0 0 0 2.284 2.284 2.284 2.284 0 0 0 2.284-2.284 2.284 2.284 0 0 0-2.284-2.284z"/></symbol>
   <symbol id="b-bun" viewBox="0 0 24 24"><path d="M12 22.596c6.628 0 12-4.338 12-9.688 0-3.318-2.057-6.248-5.219-7.986-1.286-.715-2.297-1.357-3.139-1.890C14.058 2.025 13.080 1.404 12 1.404c-1.097 0-2.334.785-3.966 1.821a49.920 49.920 0 0 1-2.816 1.697C2.057 6.660 0 9.590 0 12.908c0 5.350 5.372 9.687 12 9.687v.001ZM10.599 4.715c.334-.759.503-1.580.498-2.409 0-.145.202-.187.230-.029.658 2.783-.902 4.162-2.057 4.624-.124.048-.199-.121-.103-.209a5.763 5.763 0 0 0 1.432-1.977Zm2.058-.102a5.820 5.820 0 0 0-.782-2.306v-.016c-.069-.123.086-.263.185-.172 1.962 2.111 1.307 4.067.556 5.051-.082.103-.230-.003-.189-.126a5.850 5.850 0 0 0 .230-2.431Zm1.776-.561a5.727 5.727 0 0 0-1.612-1.806v-.014c-.112-.085-.024-.274.114-.218 2.595 1.087 2.774 3.180 2.459 4.407a.116.116 0 0 1-.049.071.110.110 0 0 1-.153-.026.122.122 0 0 1-.022-.083 5.891 5.891 0 0 0-.737-2.331Zm-5.087.561c-.617.546-1.282.760-2.063 1-.117 0-.195-.078-.156-.181 1.752-.909 2.376-1.649 2.999-2.778 0 0 .155-.118.188.085 0 .304-.349 1.329-.968 1.874Zm4.945 11.237a2.957 2.957 0 0 1-.937 1.553c-.346.346-.8.565-1.286.620a2.178 2.178 0 0 1-1.327-.620 2.955 2.955 0 0 1-.925-1.553.244.244 0 0 1 .064-.198.234.234 0 0 1 .193-.069h3.965a.226.226 0 0 1 .190.070c.050.053.073.125.063.197Zm-5.458-2.176a1.862 1.862 0 0 1-2.384-.245 1.980 1.980 0 0 1-.233-2.447c.207-.319.503-.566.848-.713a1.840 1.840 0 0 1 1.092-.110c.366.075.703.261.967.531a1.980 1.980 0 0 1 .408 2.114 1.931 1.931 0 0 1-.698.869v.001Zm8.495.005a1.860 1.860 0 0 1-2.381-.253 1.964 1.964 0 0 1-.547-1.366c0-.384.110-.760.320-1.079.207-.319.503-.567.849-.713a1.844 1.844 0 0 1 1.093-.108c.367.076.704.262.968.534a1.980 1.980 0 0 1 .4 2.117 1.932 1.932 0 0 1-.702.868Z"/></symbol>
   <symbol id="b-apple" viewBox="0 0 24 24"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.960-1.040-2.040.027-3.910 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.090 1.013 1.454 2.208 3.090 3.792 3.039 1.520-.065 2.090-.987 3.935-.987 1.831 0 2.350.987 3.960.948 1.637-.026 2.676-1.480 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.220-4.857-.026-3.040 2.480-4.494 2.597-4.559-1.429-2.090-3.623-2.324-4.390-2.376-2-.156-3.675 1.090-4.610 1.090zM15.530 3.830c.843-1.012 1.400-2.427 1.245-3.830-1.207.052-2.662.805-3.532 1.818-.780.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></symbol>
@@ -236,11 +271,10 @@ h3{font:600 16px/1.3 var(--sans);margin:0 0 4px}
     <a class="vpill" href="https://github.com/EricTechPro/live-agent/releases/latest">macOS</a>
     <button class="burger" id="burger" type="button" aria-label="Menu" aria-expanded="false" aria-controls="links">☰</button>
     <div class="lk" id="links">
-      <a href="#what">What it does</a>
       <a href="#install">Install</a>
       <a href="#key">Gemini key</a>
       <a href="#how">How it works</a>
-      <a href="#faq">Help</a>
+      <a href="#help">Help</a>
       <a href="https://github.com/EricTechPro/live-agent/stargazers" aria-label="GitHub stars"><img alt="GitHub stars" src="https://img.shields.io/github/stars/EricTechPro/live-agent?style=social"></a>
       <a class="btn" href="https://github.com/EricTechPro/live-agent"><i class="gh"></i> GitHub</a>
       <button class="tbtn" id="tt" type="button" aria-label="Toggle light or dark theme" title="Theme"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM8 13V3a5 5 0 0 1 0 10Z"/></svg></button>
@@ -259,51 +293,45 @@ h3{font:600 16px/1.3 var(--sans);margin:0 0 4px}
   <div class="ctas">
     <a class="btn pri" href="#install">Install in 3 steps</a>
     <a class="btn" href="#key"><svg class="ic" style="width:16px;height:16px;fill:none"><use href="#i-key"/></svg> Get a Gemini key</a>
-    <a class="btn" href="https://github.com/EricTechPro/live-agent"><i class="gh"></i> GitHub</a>
+    <a class="btn ghb" href="https://github.com/EricTechPro/live-agent"><i class="gh"></i> GitHub</a>
   </div>
-  <div class="built" aria-label="Built with">
-    <span>Built with</span>
-    <span><svg class="bl"><use href="#b-gemini"/></svg>Gemini Live</span>
-    <span><svg class="bl"><use href="#b-livekit"/></svg>LiveKit</span>
-    <span><svg class="bl"><use href="#b-tauri"/></svg>Tauri</span>
-    <span><svg class="bl"><use href="#b-bun"/></svg>Bun</span>
-    <span><svg class="bl"><use href="#b-apple"/></svg>macOS</span>
+  <div class="feats" id="what" aria-label="What it does">
+    <div class="cw"><svg class="art" viewBox="0 0 240 180" role="img" aria-label="A mic sends a sound wave to the Gemini sparkle">
+      <circle class="pn" cx="44" cy="90" r="28"/><svg x="28" y="74" width="32" height="32" class="ln"><use href="#i-mic"/></svg>
+      <g class="wv"><rect x="94" y="80" width="6" height="20" rx="3"/><rect x="106" y="66" width="6" height="48" rx="3"/><rect x="118" y="56" width="6" height="68" rx="3"/><rect x="130" y="70" width="6" height="40" rx="3"/><rect x="142" y="78" width="6" height="24" rx="3"/></g>
+      <circle class="pn" cx="196" cy="90" r="28"/><svg x="178" y="72" width="36" height="36"><use href="#b-gemini"/></svg>
+    </svg><div><h3><svg class="ic"><use href="#i-mic"/></svg>Talks back, live</h3><p>You speak, it answers out loud from your notes. Cut in any time and it stops.</p></div></div>
+    <div class="cw"><svg class="art" viewBox="0 0 240 180" role="img" aria-label="A job list run by Gemini CLI: one done, one running, one waiting">
+      <rect class="pn" x="36" y="22" width="168" height="136" rx="14"/>
+      <svg x="50" y="31" width="32" height="32" class="ink"><use href="#b-geminicli"/></svg><rect class="bar" x="92" y="43" width="56" height="8" rx="4"/>
+      <path class="sep" d="M36 70H204"/>
+      <circle class="ok" cx="62" cy="91" r="9"/><path class="okm" d="m57.5 91 3 3 5.5-5.5"/><rect class="bar" x="82" y="87" width="96" height="8" rx="4"/>
+      <circle class="trk" cx="62" cy="116" r="8"/><path class="spin" d="M62 108a8 8 0 0 1 8 8"/><rect class="bar" x="82" y="112" width="74" height="8" rx="4"/>
+      <circle class="trk" cx="62" cy="141" r="8"/><rect class="bar dim" x="82" y="137" width="84" height="8" rx="4"/>
+    </svg><div><h3><svg class="ic"><use href="#i-bot"/></svg>Hands off big jobs</h3><p>A helper agent works in the background. The voice tells you when it's done.</p></div></div>
+    <div class="cw"><svg class="art" viewBox="0 0 240 180" role="img" aria-label="A shield asks: ok?">
+      <svg x="34" y="38" width="112" height="112" class="sh"><use href="#i-shield"/></svg>
+      <path class="pn" d="M138 26h66a14 14 0 0 1 14 14v30a14 14 0 0 1-14 14h-40l-16 14V84h-10a14 14 0 0 1-14-14V40a14 14 0 0 1 14-14Z"/>
+      <text class="okq" x="171" y="66" text-anchor="middle">ok?</text>
+    </svg><div><h3><svg class="ic"><use href="#i-shield"/></svg>Asks you first</h3><p>A safety gate checks every action. Ask me, Auto edits or Bypass: <kbd>Shift</kbd>+<kbd>Tab</kbd>.</p></div></div>
   </div>
 </div></section>
 
-<section class="sec" id="what"><div class="in">
-  <h2>What it does</h2>
-  <p class="lead">A small app you talk to. Like a phone call with your own AI.</p>
-  <div class="fgrid">
-    <div class="fcard"><div class="fi"><svg class="ic"><use href="#i-mic"/></svg></div><h3>Talks back, live</h3><p>You speak, it answers out loud. Cut in any time and it stops.</p></div>
-    <div class="fcard"><div class="fi"><svg class="ic"><use href="#i-book"/></svg></div><h3>Knows your notes</h3><p>It reads a folder of notes and shows which ones it used.</p></div>
-    <div class="fcard"><div class="fi"><svg class="ic"><use href="#i-bot"/></svg></div><h3>Hands off big jobs</h3><p>A helper agent works in the background. The voice tells you when it's done.</p></div>
-    <div class="fcard"><div class="fi"><svg class="ic"><use href="#i-shield"/></svg></div><h3>You stay in charge</h3><p>Three safety modes: Ask me, Auto edits, Bypass. <kbd>Shift</kbd>+<kbd>Tab</kbd> to switch.</p></div>
-  </div>
-</div></section>
-
-<section class="sec" id="install"><div class="in tabbed">
+<section class="sec" id="install"><div class="in">
   <h2>Install</h2>
   <p class="lead">Three steps. About five minutes.</p>
   <ol class="steps">
-    <li><span class="num">1</span><div><h3>Get a Gemini key</h3><p>Free, two minutes. <a href="#key">Here's how</a>.</p></div></li>
-    <li><span class="num">2</span><div><h3>Paste one line in Terminal</h3><p>Then paste your key when it asks.</p></div></li>
-    <li><span class="num">3</span><div><h3>Allow the mic, say hi</h3><p>Press <b>Start talking</b>. Try: "What is my sourdough starter called?"</p></div></li>
-  </ol>
+      <li><span class="sic"><b>1</b><svg class="ic"><use href="#i-key"/></svg></span><div><h3>Get a Gemini key</h3><p>Free, two minutes. <a href="#key">Here's how</a>.</p></div></li>
+      <li><span class="sic"><b>2</b><svg class="ic"><use href="#i-term"/></svg></span><div><h3>Paste one line in Terminal</h3><p>Then paste your key when it asks.</p></div></li>
+      <li><span class="sic"><b>3</b><svg class="ic"><use href="#i-mic"/></svg></span><div><h3>Allow the mic, say hi</h3><p>Press <b>Start talking</b>. Try: "What is my sourdough starter called?"</p></div></li>
+    </ol>
   <div class="tabs" role="tablist" aria-label="Install method">
     <button type="button" role="tab" id="tab-t" aria-controls="tp-t" aria-selected="true">Terminal</button>
     <button type="button" role="tab" id="tab-d" aria-controls="tp-d" aria-selected="false">From the repo (developers)</button>
   </div>
   <div class="tp" role="tabpanel" id="tp-t" aria-labelledby="tab-t">
     <div class="code"><code>curl -fsSL https://raw.githubusercontent.com/EricTechPro/live-agent/main/get.sh | bash</code></div>
-    <p class="small" style="margin:0">Open Terminal (<kbd>⌘</kbd> <kbd>Space</kbd>, type "Terminal"). Run it again any time to upgrade. It keeps your notes, settings and key.</p>
-    <ul class="does" aria-label="What the installer does">
-      <li><svg class="ic"><use href="#i-down"/></svg><span>Downloads the ready-built app. No build.</span></li>
-      <li><svg class="ic"><use href="#i-folder"/></svg><span>Makes <code>~/Desktop/live-agent</code> with sample notes.</span></li>
-      <li><svg class="ic"><use href="#i-key"/></svg><span>Saves your key there. Only you can read it.</span></li>
-      <li><svg class="ic"><use href="#i-steth"/></svg><span>Runs the doctor: key, mic, LiveKit.</span></li>
-      <li><svg class="ic"><use href="#i-rocket"/></svg><span>Opens the app. A setup chat asks 4 questions.</span></li>
-    </ul>
+    <p class="small" style="margin:0 0 16px">Open Terminal (<kbd>⌘</kbd> <kbd>Space</kbd>, type "Terminal"). Run it again any time to upgrade. It keeps your notes, settings and key.</p>
   </div>
   <div class="tp" role="tabpanel" id="tp-d" aria-labelledby="tab-d" hidden>
     <div class="code"><code>brew install oven-sh/bun/bun livekit
@@ -311,46 +339,121 @@ git clone https://github.com/EricTechPro/live-agent.git && cd live-agent
 bun install
 cp .env.example .env   # add your GEMINI_API_KEY
 bun run start          # open the printed /check page to talk</code></div>
-    <p class="note">Runs the core from source. More commands (tests, doctor, building the app) are in the <a href="https://github.com/EricTechPro/live-agent#develop">README</a>.</p>
+    <p class="note" style="margin:0 0 16px">Runs the core from source. More commands (tests, doctor, building the app) are in the <a href="https://github.com/EricTechPro/live-agent#develop">README</a>.</p>
   </div>
+
+  <details class="fold" id="key"><summary><svg class="ic"><use href="#i-key"/></svg>Get your Gemini key <small>· 2 min</small></summary><div class="a">
+    <p>One key runs it all: the voice, the notes and the helper.</p>
+    <ol class="kl">
+      <li><b>Open <a href="https://aistudio.google.com/apikey">Google AI Studio</a></b> and sign in with Google.</li>
+      <li><b>Accept the terms</b> (first visit only). Tick the box, press Continue.</li>
+      <li><b>Find API keys.</b> Already see a key? Skip to step 5.</li>
+      <li><b>Press Create API key.</b> Name it <code>live-agent</code>, pick a project, press Create key.</li>
+      <li><b>Copy the key.</b> It's a long string that starts with <code>AIza</code>.</li>
+      <li><b>Paste it in the installer</b> at <code>Paste your Gemini key</code>. Nothing shows while you paste. That's on purpose.</li>
+    </ol>
+    <p>Skipped it, or got a new key? Put it after <code>GEMINI_API_KEY=</code> in this file, then quit and reopen the app:</p>
+    <div class="code" style="max-width:520px"><code>open -e ~/Desktop/live-agent/.env</code></div>
+    <div class="warnbox"><svg class="ic"><use href="#i-alert"/></svg><span>Keep the key secret. Never paste it in a chat, a screenshot or a git repo. If it leaks, delete it in AI Studio and make a new one. The free tier is enough to try it.</span></div>
+  </div></details>
+
+  <details class="fold"><summary><svg class="ic"><use href="#i-down"/></svg>What the installer does</summary><div class="a">
+    <ul class="does">
+      <li><svg class="ic"><use href="#i-down"/></svg><span>Downloads the ready-built app. No build.</span></li>
+      <li><svg class="ic"><use href="#i-folder"/></svg><span>Makes <code>~/Desktop/live-agent</code> with sample notes.</span></li>
+      <li><svg class="ic"><use href="#i-key"/></svg><span>Saves your key there. Only you can read it.</span></li>
+      <li><svg class="ic"><use href="#i-steth"/></svg><span>Runs the doctor: key, mic, LiveKit.</span></li>
+      <li><svg class="ic"><use href="#i-rocket"/></svg><span>Opens the app. A setup chat asks 4 questions.</span></li>
+    </ul>
+  </div></details>
+
+  <details class="fold" id="needs"><summary><svg class="ic"><use href="#i-check"/></svg>What you need</summary><div class="a">
+    <div class="rgrid">
+      <div class="rcard"><svg class="bl"><use href="#b-apple"/></svg><h3>Apple Silicon Mac</h3><p>M1 or newer. macOS 12 or later.</p></div>
+      <div class="rcard"><svg class="ic"><use href="#i-key"/></svg><h3>A Gemini key</h3><p>Free from <a href="https://aistudio.google.com/apikey">AI Studio</a>.</p></div>
+      <div class="rcard"><svg class="ic"><use href="#i-phones"/></svg><h3>Mic + headphones</h3><p>Headphones stop it hearing itself.</p></div>
+      <div class="rcard"><svg class="ic"><use href="#i-wifi"/></svg><h3>Internet</h3><p>To reach Gemini.</p></div>
+      <div class="rcard"><span class="opt">optional</span><svg class="bl"><use href="#b-geminicli"/></svg><h3>Gemini CLI</h3><p>Only for helper jobs.</p></div>
+    </div>
+  </div></details>
 </div></section>
 
-<section class="sec" id="key"><div class="in">
-  <h2>Get your Gemini key</h2>
-  <p class="lead">One key runs it all: the voice, the notes and the helper. About two minutes.</p>
-  <ol class="kgrid">
-    <li><span class="num">1</span><div><p><b>Open Google AI Studio</b> and sign in with Google.</p></div></li>
-    <li><span class="num">2</span><div><p><b>Accept the terms</b> (first visit only). Tick the box, press Continue.</p></div></li>
-    <li><span class="num">3</span><div><p><b>Find API keys.</b> Already see a key? Skip to step 5.</p></div></li>
-    <li><span class="num">4</span><div><p><b>Press Create API key.</b> Name it <code>live-agent</code>, pick a project, press Create key.</p></div></li>
-    <li><span class="num">5</span><div><p><b>Copy the key.</b> It's a long string that starts with <code>AIza</code>.</p></div></li>
-    <li><span class="num">6</span><div><p><b>Paste it in the installer</b> at <code>Paste your Gemini key</code>. Nothing shows while you paste. That's on purpose.</p></div></li>
-  </ol>
-  <div class="ctas" style="margin-top:0"><a class="btn pri" href="https://aistudio.google.com/apikey">Open AI Studio ↗</a></div>
-  <p class="small" style="margin-top:18px">Skipped it, or got a new key? Put it after <code>GEMINI_API_KEY=</code> in this file, then quit and reopen the app:</p>
-  <div class="code" style="margin-top:8px;max-width:520px"><code>open -e ~/Desktop/live-agent/.env</code></div>
-  <div class="warnbox"><svg class="ic"><use href="#i-alert"/></svg><span>Keep the key secret. Never paste it in a chat, a screenshot or a git repo. If it leaks, delete it in AI Studio and make a new one. The free tier is enough to try it.</span></div>
-</div></section>
-
-<section class="sec" id="how"><div class="in tabbed">
+<section class="sec" id="how"><div class="in">
   <h2>How it works</h2>
-  <p class="lead">Your voice stays on your Mac until it reaches Gemini.</p>
-  <div class="chain" role="img" aria-label="You talk to the window. The window sends your voice through a LiveKit server on your Mac to the agent core. The core streams it to Gemini Live at Google and plays the answer back the same way.">
-    <div class="macbox">
-      <span class="tag"><svg class="bl"><use href="#b-apple"/></svg>your Mac</span>
-      <div class="node you"><svg class="ic bl" style="fill:none"><use href="#i-user"/></svg><div class="tx"><b>You</b><span>talk, cut in</span></div></div>
-      <div class="arr"><svg viewBox="0 0 28 14"><path d="M2 4h22l-4-3M26 10H4l4 3"/></svg>voice</div>
-      <div class="node"><svg class="bl"><use href="#b-tauri"/></svg><div class="tx"><b>Window</b><span>Tauri app</span></div></div>
-      <div class="arr"><svg viewBox="0 0 28 14"><path d="M2 4h22l-4-3M26 10H4l4 3"/></svg>WebRTC</div>
-      <div class="node"><svg class="bl"><use href="#b-livekit"/></svg><div class="tx"><b>LiveKit</b><span>local room</span></div></div>
-      <div class="arr"><svg viewBox="0 0 28 14"><path d="M2 4h22l-4-3M26 10H4l4 3"/></svg>WebRTC</div>
-      <div class="node"><svg class="bl"><use href="#b-bun"/></svg><div class="tx"><b>Agent core</b><span>Bun · tools · safety</span></div></div>
-    </div>
-    <div class="arr wide"><svg viewBox="0 0 28 14"><path d="M2 4h22l-4-3M26 10H4l4 3"/></svg>WebSocket</div>
-    <div class="cloud">
-      <span class="tag">Google</span>
-      <div class="node"><svg class="bl"><use href="#b-gemini"/></svg><div class="tx"><b>Gemini Live</b><span>hears, thinks, speaks</span></div></div>
-    </div>
+  <p class="lead">Your voice stays on your Mac until it reaches Gemini, and the answer comes back the same way.</p>
+
+  <div class="dg" role="img" aria-label="You talk to the app window. The window sends your voice through a LiveKit room on your Mac to the agent core. The core streams it to Gemini Live at Google. The spoken answer comes back the same way.">
+    <svg class="h" viewBox="0 0 1000 300" aria-hidden="true">
+      <defs>
+        <marker id="hv" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M1 1 9 5 1 9" fill="none" stroke="var(--voice)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+        <marker id="ha" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M1 1 9 5 1 9" fill="none" stroke="var(--answer)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+      </defs>
+      <rect class="box" x="6" y="8" width="774" height="284" rx="18"/>
+      <svg x="24" y="21" width="16" height="16" class="mk"><use href="#b-apple"/></svg><text class="tg" x="46" y="34">your Mac</text>
+      <rect class="box g" x="806" y="8" width="188" height="284" rx="18"/>
+      <text class="tg" x="824" y="34">Google</text>
+
+      <rect class="nd you" x="30" y="66" width="150" height="176" rx="14"/>
+      <svg x="77" y="88" width="56" height="56" class="usr"><use href="#i-user" style="fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round"/></svg>
+      <text class="t1" x="105" y="184" text-anchor="middle">You</text><text class="t2" x="105" y="208" text-anchor="middle">talk, cut in</text>
+
+      <rect class="nd" x="220" y="66" width="150" height="176" rx="14"/>
+      <svg x="267" y="88" width="56" height="56"><use href="#b-tauri"/></svg>
+      <text class="t1" x="295" y="184" text-anchor="middle">App window</text><text class="t2" x="295" y="208" text-anchor="middle">Tauri · mic</text>
+
+      <rect class="nd" x="410" y="66" width="150" height="176" rx="14"/>
+      <svg x="457" y="88" width="56" height="56" class="mk"><use href="#b-livekit"/></svg>
+      <text class="t1" x="485" y="184" text-anchor="middle">LiveKit</text><text class="t2" x="485" y="208" text-anchor="middle">local voice room</text>
+
+      <rect class="nd" x="600" y="66" width="150" height="176" rx="14"/>
+      <svg x="647" y="88" width="56" height="56" class="mk"><use href="#b-bun"/></svg>
+      <text class="t1" x="675" y="184" text-anchor="middle">Agent core</text><text class="t2" x="675" y="208" text-anchor="middle">Bun · tools · safety</text>
+
+      <rect class="nd" x="826" y="66" width="150" height="176" rx="14"/>
+      <svg x="873" y="88" width="56" height="56"><use href="#b-gemini"/></svg>
+      <text class="t1" x="901" y="184" text-anchor="middle">Gemini Live</text><text class="t2" x="901" y="208" text-anchor="middle">hears, thinks, speaks</text>
+
+      <path class="av" d="M184 132H214" marker-end="url(#hv)"/><path class="aa" d="M216 176H186" marker-end="url(#ha)"/>
+      <path class="av" d="M374 132H404" marker-end="url(#hv)"/><path class="aa" d="M406 176H376" marker-end="url(#ha)"/>
+      <path class="av" d="M564 132H594" marker-end="url(#hv)"/><path class="aa" d="M596 176H566" marker-end="url(#ha)"/>
+      <path class="av" d="M754 132H820" marker-end="url(#hv)"/><path class="aa" d="M822 176H756" marker-end="url(#ha)"/>
+    </svg>
+    <svg class="v" viewBox="0 0 340 640" aria-hidden="true">
+      <defs>
+        <marker id="vv" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M1 1 9 5 1 9" fill="none" stroke="var(--voice)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+        <marker id="va" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M1 1 9 5 1 9" fill="none" stroke="var(--answer)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+      </defs>
+      <rect class="box" x="4" y="4" width="332" height="476" rx="16"/>
+      <svg x="18" y="15" width="15" height="15" class="mk"><use href="#b-apple"/></svg><text class="tg" x="40" y="27">your Mac</text>
+      <rect class="box g" x="4" y="508" width="332" height="128" rx="16"/>
+      <text class="tg" x="18" y="531">Google</text>
+
+      <rect class="nd you" x="24" y="44" width="292" height="80" rx="12"/>
+      <svg x="42" y="60" width="48" height="48" class="usr"><use href="#i-user" style="fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round"/></svg>
+      <text class="t1" x="108" y="80">You</text><text class="t2" x="108" y="102">talk, cut in</text>
+
+      <rect class="nd" x="24" y="156" width="292" height="80" rx="12"/>
+      <svg x="42" y="172" width="48" height="48"><use href="#b-tauri"/></svg>
+      <text class="t1" x="108" y="192">App window</text><text class="t2" x="108" y="214">Tauri · mic</text>
+
+      <rect class="nd" x="24" y="268" width="292" height="80" rx="12"/>
+      <svg x="42" y="284" width="48" height="48" class="mk"><use href="#b-livekit"/></svg>
+      <text class="t1" x="108" y="304">LiveKit</text><text class="t2" x="108" y="326">local voice room</text>
+
+      <rect class="nd" x="24" y="380" width="292" height="80" rx="12"/>
+      <svg x="42" y="396" width="48" height="48" class="mk"><use href="#b-bun"/></svg>
+      <text class="t1" x="108" y="416">Agent core</text><text class="t2" x="108" y="438">Bun · tools · safety</text>
+
+      <rect class="nd" x="24" y="542" width="292" height="80" rx="12"/>
+      <svg x="42" y="558" width="48" height="48"><use href="#b-gemini"/></svg>
+      <text class="t1" x="108" y="578">Gemini Live</text><text class="t2" x="108" y="600">hears, thinks, speaks</text>
+
+      <path class="av" d="M150 127V150" marker-end="url(#vv)"/><path class="aa" d="M190 153V130" marker-end="url(#va)"/>
+      <path class="av" d="M150 239V262" marker-end="url(#vv)"/><path class="aa" d="M190 265V242" marker-end="url(#va)"/>
+      <path class="av" d="M150 351V374" marker-end="url(#vv)"/><path class="aa" d="M190 377V354" marker-end="url(#va)"/>
+      <path class="av" d="M150 463V536" marker-end="url(#vv)"/><path class="aa" d="M190 539V466" marker-end="url(#va)"/>
+    </svg>
+    <div class="legend"><span><i style="background:var(--voice)"></i>your voice</span><span><i style="background:var(--answer)"></i>the spoken answer</span></div>
   </div>
   <div class="side">
     <span>The core also:</span>
@@ -359,58 +462,50 @@ bun run start          # open the printed /check page to talk</code></div>
     <span class="pill"><svg class="ic"><use href="#i-key"/></svg>keeps your key, sends a 1-use token</span>
   </div>
 
-  <div class="lgrid">
-    <div class="lcard"><span class="lt"><svg class="bl"><use href="#b-gemini"/></svg></span><div><h3>Gemini Live</h3><p>One model hears, thinks and speaks. No slow hand-offs.</p></div></div>
-    <div class="lcard"><span class="lt"><svg class="bl"><use href="#b-livekit"/></svg></span><div><h3>LiveKit</h3><p>Carries your voice, like a video call. Runs inside the app.</p></div></div>
-    <div class="lcard"><span class="lt"><svg class="bl"><use href="#b-tauri"/></svg></span><div><h3>Tauri</h3><p>The small app window: the orb, the chat, the job board.</p></div></div>
-    <div class="lcard"><span class="lt"><svg class="bl"><use href="#b-bun"/></svg></span><div><h3>Bun</h3><p>Runs the agent core: tools, safety gate, jobs, notes.</p></div></div>
-    <div class="lcard"><span class="lt"><svg class="bl"><use href="#b-geminicli"/></svg></span><div><h3>Gemini CLI</h3><p>The helper agent. It does slow jobs while you keep talking.</p></div></div>
-    <div class="lcard"><span class="lt"><svg class="bl"><use href="#b-apple"/></svg></span><div><h3>macOS</h3><p>Apple Silicon Macs. The app ships ready-built.</p></div></div>
+  <h3 style="font-size:18px;margin-bottom:12px">Built with</h3>
+  <div class="tiles">
+    <div class="tile"><span class="mk"><svg class="bl"><use href="#b-gemini"/></svg></span><h3>Gemini Live</h3><p>One model hears, thinks and speaks.</p></div>
+    <div class="tile"><span class="mk"><svg class="bl"><use href="#b-livekit"/></svg></span><h3>LiveKit</h3><p>Carries your voice, like a video call.</p></div>
+    <div class="tile"><span class="mk"><svg class="bl"><use href="#b-tauri"/></svg></span><h3>Tauri</h3><p>The small app window and the mic.</p></div>
+    <div class="tile"><span class="mk"><svg class="bl"><use href="#b-bun"/></svg></span><h3>Bun</h3><p>Runs the agent core, tools and jobs.</p></div>
+    <div class="tile"><span class="mk"><svg class="bl"><use href="#b-geminicli"/></svg></span><h3>Gemini CLI</h3><p>The helper for slow jobs.</p></div>
+    <div class="tile"><span class="mk"><svg class="bl"><use href="#b-apple"/></svg></span><h3>macOS</h3><p>Apple Silicon. Ships ready-built.</p></div>
   </div>
 
-  <h3 style="font-size:18px;margin-bottom:10px">The full picture</h3>
-  <div class="tabs" role="tablist" aria-label="Diagram">
-    <button type="button" role="tab" id="tab-a" aria-controls="tp-a" aria-selected="true">Every part</button>
-    <button type="button" role="tab" id="tab-f" aria-controls="tp-f" aria-selected="false">One spoken question</button>
-  </div>
-  <div class="tp" role="tabpanel" id="tp-a" aria-labelledby="tab-a">
-    <div class="mapbox"><iframe src="diagrams/live-agent-architecture.html" title="live-agent architecture diagram" loading="lazy"></iframe></div>
-    <p class="small"><a href="diagrams/live-agent-architecture.html">Open full screen ↗</a> · pan, zoom, click a box</p>
-  </div>
-  <div class="tp" role="tabpanel" id="tp-f" aria-labelledby="tab-f" hidden>
-    <div class="mapbox"><iframe data-src="diagrams/live-agent-flow.html" title="live-agent: one spoken question, step by step" loading="lazy"></iframe></div>
-    <p class="small"><a href="diagrams/live-agent-flow.html">Open full screen ↗</a> · from your voice to the answer, step by step</p>
-  </div>
+  <details class="fold" id="full"><summary><svg class="ic"><use href="#i-book"/></svg>See every part <small>· interactive diagrams</small></summary><div class="a">
+    <div class="tabs" role="tablist" aria-label="Diagram">
+      <button type="button" role="tab" id="tab-a" aria-controls="tp-a" aria-selected="true">Every part</button>
+      <button type="button" role="tab" id="tab-f" aria-controls="tp-f" aria-selected="false">One spoken question</button>
+    </div>
+    <div class="tp" role="tabpanel" id="tp-a" aria-labelledby="tab-a">
+      <div class="mapbox"><iframe data-src="diagrams/live-agent-architecture.html" title="live-agent architecture diagram"></iframe></div>
+      <p class="small"><a href="diagrams/live-agent-architecture.html">Open full screen ↗</a> · pan, zoom, click a box</p>
+    </div>
+    <div class="tp" role="tabpanel" id="tp-f" aria-labelledby="tab-f" hidden>
+      <div class="mapbox"><iframe data-src="diagrams/live-agent-flow.html" title="live-agent: one spoken question, step by step"></iframe></div>
+      <p class="small"><a href="diagrams/live-agent-flow.html">Open full screen ↗</a> · from your voice to the answer, step by step</p>
+    </div>
+  </div></details>
 </div></section>
 
-<section class="sec" id="needs"><div class="in">
-  <h2>What you need</h2>
-  <p class="lead">No accounts and no servers, apart from Google for Gemini.</p>
-  <div class="rgrid">
-    <div class="rcard"><svg class="bl"><use href="#b-apple"/></svg><h3>Apple Silicon Mac</h3><p>M1 or newer. macOS 12 or later.</p></div>
-    <div class="rcard"><svg class="ic"><use href="#i-key"/></svg><h3>A Gemini key</h3><p>Free from <a href="https://aistudio.google.com/apikey">AI Studio</a>.</p></div>
-    <div class="rcard"><svg class="ic"><use href="#i-phones"/></svg><h3>Mic + headphones</h3><p>Headphones stop it hearing itself.</p></div>
-    <div class="rcard"><svg class="ic"><use href="#i-wifi"/></svg><h3>Internet</h3><p>To reach Gemini.</p></div>
-    <div class="rcard"><span class="opt">optional</span><svg class="bl"><use href="#b-geminicli"/></svg><h3>Gemini CLI</h3><p>Only for helper jobs. Installs with npm.</p></div>
-  </div>
-</div></section>
-
-<section class="sec faq" id="faq"><div class="in">
+<section class="sec" id="help"><div class="in">
   <h2>Help</h2>
-  <p class="lead">The doctor checks your setup and prints one fix per problem. The installer runs it. To run it again:</p>
-  <div class="code"><code>LIVE_AGENT_HOME=~/Desktop/live-agent /Applications/live-agent.app/Contents/MacOS/live-agent-core doctor</code></div>
-  <p class="small" style="margin:0 0 22px">Installed to <code>~/Applications</code>? Use that path. Key, mic and LiveKit must pass. Helpers only fail when turned on.</p>
-
-  <details><summary><svg class="ic x"><use href="#i-x"/></svg>"No Gemini key found."</summary><div class="a"><p>Open the key file and put your key after <code>GEMINI_API_KEY=</code>. Then quit and reopen the app.</p><div class="code"><code>open -e ~/Desktop/live-agent/.env</code></div></div></details>
-  <details><summary><svg class="ic x"><use href="#i-x"/></svg>"Gemini key is not valid."</summary><div class="a"><p>Make a new key in <a href="https://aistudio.google.com/apikey">AI Studio</a> and paste it in <code>.env</code>. If the doctor says "may not use the Gemini API", make the key in AI Studio, not Google Cloud.</p></div></details>
-  <details><summary><svg class="ic w"><use href="#i-alert"/></svg>"Key works but is over its quota right now."</summary><div class="a"><p>Wait a minute and try again, or check your quota in AI Studio.</p></div></details>
-  <details><summary><svg class="ic x"><use href="#i-x"/></svg>"No microphone found."</summary><div class="a"><p>Plug in a mic or headset, or pick one in System Settings › Sound › Input.</p></div></details>
-  <details><summary><svg class="ic x"><use href="#i-x"/></svg>"LiveKit did not start" or "livekit-server not found."</summary><div class="a"><p>Run the installer again. It puts LiveKit back inside the app. Working from the repo? <code>brew install livekit</code>.</p></div></details>
-  <details><summary><svg class="ic w"><use href="#i-alert"/></svg>"Gemini CLI is not installed."</summary><div class="a"><p>Only needed for helper jobs. Install it once, then restart the app:</p><div class="code"><code>npm install -g @google/gemini-cli</code></div></div></details>
-  <details><summary><svg class="ic x"><use href="#i-x"/></svg>The app stops with a config error.</summary><div class="a"><p>The message names the bad field. Fix it in <code>~/Desktop/live-agent/live-agent.config.json</code>, or delete the file to use the defaults.</p></div></details>
-  <details><summary><svg class="ic w"><use href="#i-alert"/></svg>"This build is for Apple Silicon Macs."</summary><div class="a"><p>live-agent runs on M1 or newer Macs only, for now. Intel Macs, Windows and Linux are not supported yet.</p></div></details>
-  <details><summary><svg class="ic w"><use href="#i-alert"/></svg>macOS asks for the mic again after an upgrade.</summary><div class="a"><p>That's normal. Each build has a new signature. Press Allow.</p></div></details>
-  <details><summary><svg class="ic w"><use href="#i-alert"/></svg>It talks to itself, or cuts itself off.</summary><div class="a"><p>It hears its own voice from your speakers. Use headphones.</p></div></details>
+  <p class="lead">Something not working? The doctor checks your setup and prints one fix per problem.</p>
+  <details class="fold" id="faq"><summary><svg class="ic"><use href="#i-steth"/></svg>Fix common problems <small>· 10 fixes</small></summary><div class="a">
+    <p>The installer runs the doctor. To run it again:</p>
+    <div class="code"><code>LIVE_AGENT_HOME=~/Desktop/live-agent /Applications/live-agent.app/Contents/MacOS/live-agent-core doctor</code></div>
+    <p>Installed to <code>~/Applications</code>? Use that path. Key, mic and LiveKit must pass. Helpers only fail when turned on.</p>
+    <details class="fold"><summary><svg class="ic x"><use href="#i-x"/></svg>"No Gemini key found."</summary><div class="a"><p>Open the key file and put your key after <code>GEMINI_API_KEY=</code>. Then quit and reopen the app.</p><div class="code"><code>open -e ~/Desktop/live-agent/.env</code></div></div></details>
+    <details class="fold"><summary><svg class="ic x"><use href="#i-x"/></svg>"Gemini key is not valid."</summary><div class="a"><p>Make a new key in <a href="https://aistudio.google.com/apikey">AI Studio</a> and paste it in <code>.env</code>. If the doctor says "may not use the Gemini API", make the key in AI Studio, not Google Cloud.</p></div></details>
+    <details class="fold"><summary><svg class="ic w"><use href="#i-alert"/></svg>"Key works but is over its quota right now."</summary><div class="a"><p>Wait a minute and try again, or check your quota in AI Studio.</p></div></details>
+    <details class="fold"><summary><svg class="ic x"><use href="#i-x"/></svg>"No microphone found."</summary><div class="a"><p>Plug in a mic or headset, or pick one in System Settings › Sound › Input.</p></div></details>
+    <details class="fold"><summary><svg class="ic x"><use href="#i-x"/></svg>"LiveKit did not start" or "livekit-server not found."</summary><div class="a"><p>Run the installer again. It puts LiveKit back inside the app. Working from the repo? <code>brew install livekit</code>.</p></div></details>
+    <details class="fold"><summary><svg class="ic w"><use href="#i-alert"/></svg>"Gemini CLI is not installed."</summary><div class="a"><p>Only needed for helper jobs. Install it once, then restart the app:</p><div class="code"><code>npm install -g @google/gemini-cli</code></div></div></details>
+    <details class="fold"><summary><svg class="ic x"><use href="#i-x"/></svg>The app stops with a config error.</summary><div class="a"><p>The message names the bad field. Fix it in <code>~/Desktop/live-agent/live-agent.config.json</code>, or delete the file to use the defaults.</p></div></details>
+    <details class="fold"><summary><svg class="ic w"><use href="#i-alert"/></svg>"This build is for Apple Silicon Macs."</summary><div class="a"><p>live-agent runs on M1 or newer Macs only, for now. Intel Macs, Windows and Linux are not supported yet.</p></div></details>
+    <details class="fold"><summary><svg class="ic w"><use href="#i-alert"/></svg>macOS asks for the mic again after an upgrade.</summary><div class="a"><p>That's normal. Each build has a new signature. Press Allow.</p></div></details>
+    <details class="fold"><summary><svg class="ic w"><use href="#i-alert"/></svg>It talks to itself, or cuts itself off.</summary><div class="a"><p>It hears its own voice from your speakers. Use headphones.</p></div></details>
+  </div></details>
 </div></section>
 </main>
 
@@ -442,7 +537,13 @@ bun run start          # open the printed /check page to talk</code></div>
     function fb(){var a=document.createElement('textarea');a.value=tx;document.body.appendChild(a);a.select();try{document.execCommand('copy');ok();}catch(e){}document.body.removeChild(a);}
     try{navigator.clipboard.writeText(tx).then(ok,fb);}catch(e){fb();}
   }
+  function loadFrames(scope){[].forEach.call(scope.querySelectorAll('.tp:not([hidden]) iframe[data-src]'),function(f){f.src=f.getAttribute('data-src');f.removeAttribute('data-src');});}
+  [].forEach.call(document.querySelectorAll('details.fold'),function(d){d.addEventListener('toggle',function(){if(d.open)loadFrames(d);});});
+  function openHash(){var h=location.hash.slice(1); if(!h)return; var el=document.getElementById(h);
+    if(el&&el.tagName==='DETAILS'){el.open=true; setTimeout(function(){el.scrollIntoView({block:'start'});},0);}}
+  window.addEventListener('hashchange',openHash); openHash();
   document.addEventListener('click',function(e){
+    var hl=e.target.closest('a[href^="#"]'); if(hl){var tg=document.getElementById(hl.getAttribute('href').slice(1)); if(tg&&tg.tagName==='DETAILS')tg.open=true;}
     var c=e.target.closest('.cpy');
     if(c){var code=c.parentNode.querySelector('code');
       copyText(code.textContent,function(){c.innerHTML=CHECK;c.classList.add('ok');setTimeout(function(){c.innerHTML=COPY;c.classList.remove('ok');},1500);});return;}
@@ -450,7 +551,7 @@ bun run start          # open the printed /check page to talk</code></div>
     if(t){var list=t.closest('[role="tablist"]'), panels=[];
       [].forEach.call(list.querySelectorAll('[role="tab"]'),function(b){b.setAttribute('aria-selected',b===t?'true':'false');panels.push(document.getElementById(b.getAttribute('aria-controls')));});
       panels.forEach(function(p){p.hidden=p.id!==t.getAttribute('aria-controls');
-        var f=p.querySelector('iframe[data-src]'); if(!p.hidden&&f){f.src=f.getAttribute('data-src');f.removeAttribute('data-src');}});return;}
+});loadFrames(list.parentNode);return;}
     var nav=document.getElementById('nav');
     if(e.target.closest('#burger')){var o=nav.classList.toggle('open');document.getElementById('burger').setAttribute('aria-expanded',o?'true':'false');return;}
     if(e.target.closest('#links a')){nav.classList.remove('open');document.getElementById('burger').setAttribute('aria-expanded','false');}
@@ -459,3 +560,4 @@ bun run start          # open the printed /check page to talk</code></div>
 </script>
 </body>
 </html>
+
