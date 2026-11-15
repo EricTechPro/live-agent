@@ -123,6 +123,8 @@ body {
 .reader { flex: 1; min-height: 0; display: flex; flex-direction: column; --frame: var(--edge-hi); --fill: #061719; }
 .reader-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border-bottom: 2px solid var(--edge); }
 .reader-icon { color: var(--led); display: grid; }
+.reader-head .ib { width: 28px; height: 28px; background: none; }
+.reader-head .ib:hover { background: #0c2b2c; }
 .reader-name { margin: 0; font: 700 13px/1.2 var(--mono); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .reader-path { flex: 1; min-width: 0; color: var(--ink-3); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .reader-text {
@@ -221,18 +223,42 @@ body {
 .jobs { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 .job-empty { margin: 0; color: var(--ink-3); }
 .job-list { list-style: none; margin: 0; padding: 0 2px 0 0; display: flex; flex-direction: column; gap: 6px; overflow: auto; min-height: 0; }
-.job { --frame: var(--edge-hi); --fill: #061719; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; flex: none; }
+.job { --frame: var(--edge-hi); --fill: #061719; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; flex: none; }
 .job[data-status="working"] { --frame: var(--led); }
 .job[data-status="failed"] { --frame: var(--bad); }
-.job-head { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 8px; align-items: center; }
-.job-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
-.job-status { font: 700 10px/1.2 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); flex: none; }
+.job-head { display: flex; gap: 8px; align-items: center; min-height: 22px; }
+.job-helper { flex: none; display: grid; place-items: center; width: 22px; height: 22px; background: #0c2b2c; color: var(--led); outline: 1px solid var(--edge-hi); }
+.job-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; color: var(--ink); }
+.job-title::first-letter { text-transform: uppercase; }
+.job-status { display: inline-flex; align-items: center; gap: 5px; font: 700 10px/1.2 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); flex: none; }
+.job-status .led { width: 6px; height: 6px; }
+.job-meta { margin: 0 0 0 30px; display: flex; align-items: center; gap: 0; min-width: 0; font-size: 11px; color: var(--ink-3); white-space: nowrap; }
+.job-meta > span { flex: none; }
+.job-meta > .job-folder { flex: 0 1 auto; }
+.job-meta > span + span::before { content: "·"; margin: 0 6px; color: var(--edge-hi); }
+.job-time { font-variant-numeric: tabular-nums; }
+.job-folder { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.job-summary {
+  appearance: none; border: 0; background: none; margin: 2px 0 0 30px; padding: 0; text-align: left; width: calc(100% - 30px);
+  display: flex; gap: 6px; align-items: baseline; color: var(--ink-2); font: 500 12px/1.4 var(--mono); font-stretch: 87.5%;
+}
+button.job-summary { cursor: pointer; }
+button.job-summary:hover { color: var(--ink); }
+button.job-summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.job[data-status="failed"] .job-summary { color: #ffb4a8; }
+.job-chev { flex: none; color: var(--ink-3); margin-left: auto; }
+.job-chev .icon { display: block; transform: rotate(-90deg); }
+.job-summary[aria-expanded="true"] .job-chev .icon { transform: none; }
+.job-output {
+  margin: 4px 0 0; padding: 8px 10px; max-height: 240px; overflow: auto; background: #04121a; outline: 1px solid var(--edge);
+  white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; font: 400 11px/1.5 var(--mono); color: var(--ink-2);
+}
+.job-output:focus-visible { outline: 2px solid var(--ink); }
 .job[data-status="working"] .job-status { color: var(--led); }
 .job[data-status="done"] .job-status { color: var(--led); }
 .job[data-status="failed"] .job-status { color: var(--bad); }
-.job-message { margin: 0; font-size: 11px; color: var(--ink-3); white-space: pre-wrap; max-height: 6em; overflow: auto; }
-.job-worktree { margin: 0; font-size: 11px; color: var(--ink-3); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
-.job-cancel { align-self: flex-start; }
+.job-cancel { width: 22px; height: 22px; color: var(--ink-3); background: none; }
+.job-cancel:hover { color: var(--bad); }
 
 /* ---- diagram panel (ticket 16) ---- */
 .diagram { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; }

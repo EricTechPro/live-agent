@@ -11,19 +11,28 @@
 // or anything else is just `run({ signal }) -> summary`, and all of them show
 // the same states on the job board.
 import { errorMessage } from "../errors.ts";
+import { oneLine } from "../helpers/cli-job.ts";
 
 export type JobState ="queued" | "running" | "done" | "failed" | "cancelled";
 
 /** A job as the app sees it. Plain JSON. */
 export interface JobInfo {
   id: string;
-  /** What kind of job, e.g. "gemini-cli" or "tidy". */
+  /** What kind of job: the helper id ("gemini-cli", "codex", "claude-code") or "tidy". */
   kind: string;
-  /** One short line for the job board. */
+  /** One short line for the job board: the model's own `title`, else made from the task. */
   title: string;
   state: JobState;
   /** done: the job's summary; failed: what went wrong and how to fix it. */
   message?: string;
+  /** When it started running (ms since 1970). Unset while queued. */
+  startedAt?: number;
+  /** When it ended: done, failed or cancelled (ms since 1970). */
+  endedAt?: number;
+  /** done or failed: the card's one plain line (the first sentence of `output`). */
+  summary?: string;
+  /** done or failed: the whole answer or error, capped at MAX_OUTPUT characters (the card expands to it). */
+  output?: string;
   /** Helper jobs: the folder the job works in (the asked-for project folder; see `worktree` for where the code changes land). */
   folder?: string;
   /** Helper jobs with worktrees on (config `worktrees`): the git worktree and branch the job works in. */
@@ -65,6 +74,9 @@ export interface JobsOptions {
   onState(job: JobInfo): void;
 }
 
+/** A card's full output stops here. */
+export const MAX_OUTPUT = 8000;
+
 export function createJobs({ maxAtOnce, onState }: JobsOptions): Jobs {
   // `maxAtOnce` is reassigned by setMaxAtOnce (the setup chat can change it live).
   type Entry = { info: JobInfo; spec: JobSpec; abort: AbortController; settled?: Promise<void> };
@@ -74,9 +86,16 @@ export function createJobs({ maxAtOnce, onState }: JobsOptions): Jobs {
   let nextId = 1;
 
   function set(entry: Entry, state: JobState, message?: string) {
-    entry.info.state = state;
-    if (message !== undefined) entry.info.message = message;
-    onState({ ...entry.info });
+    const info = entry.info;
+    info.state = state;
+    if (message !== undefined) info.message = message;
+    if (state === "running") info.startedAt = Date.now();
+    if (state === "done" || state === "failed" || state === "cancelled") info.endedAt = Date.now();
+    if ((state === "done" || state === "failed") && message !== undefined) {
+      info.output = message.length > MAX_OUTPUT ? `${message.slice(0, MAX_OUTPUT)}…` : message;
+      info.summary = oneLine(message);
+    }
+    onState({ ...info });
   }
 
   function pump() {

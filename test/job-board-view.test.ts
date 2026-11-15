@@ -1,7 +1,8 @@
-// The window's job board and bottom bar, built from the core's events (ticket 10).
+// The window's job board and bottom bar, built from the core's events (ticket 10),
+// and the readable job cards (ticket 29).
 import { expect, test } from "bun:test";
 import { addBarEvent, emptyBar } from "../app/src/bottom-bar.ts";
-import { addJobEvent, emptyBoard } from "../app/src/job-board.ts";
+import { addJobEvent, elapsed, emptyBoard, HELPER_LABELS } from "../app/src/job-board.ts";
 import type { AgentEvent } from "../src/core/events.ts";
 
 const board = (events: AgentEvent[]) => events.reduce(addJobEvent, emptyBoard);
@@ -14,9 +15,45 @@ test("each job shows once, in the order it started, with its latest state in boa
   expect(
     board([job("job-1", "queued"), job("job-2", "queued"), job("job-1", "running"), job("job-1", "done", "Fixed it.")]),
   ).toEqual([
-    { id: "job-1", title: "task job-1", status: "done", message: "Fixed it.", cancellable: false },
-    { id: "job-2", title: "task job-2", status: "waiting", cancellable: true },
+    { id: "job-1", title: "task job-1", status: "done", helper: "gemini-cli", helperLabel: "Gemini CLI", message: "Fixed it.", cancellable: false },
+    { id: "job-2", title: "task job-2", status: "waiting", helper: "gemini-cli", helperLabel: "Gemini CLI", cancellable: true },
   ]);
+});
+
+test("a card carries the helper, its folder, the times, and when done a one-line summary plus the full output", () => {
+  const base = { type: "job.state", id: "job-1", kind: "claude-code", title: "Fix flaky login test", folder: "/Users/eric/brain/projects/app" } as const;
+  const rows = board([
+    { ...base, state: "queued" },
+    { ...base, state: "running", startedAt: 1000 },
+    { ...base, state: "done", startedAt: 1000, endedAt: 66_000, message: "Fixed it.\nMore.", summary: "Fixed it.", output: "Fixed it.\nMore." },
+  ]);
+  expect(rows).toEqual([
+    {
+      id: "job-1", title: "Fix flaky login test", status: "done", helper: "claude-code", helperLabel: "Claude Code",
+      folder: "/Users/eric/brain/projects/app", startedAt: 1000, endedAt: 66_000,
+      message: "Fixed it.\nMore.", summary: "Fixed it.", output: "Fixed it.\nMore.", cancellable: false,
+    },
+  ]);
+});
+
+test("every helper has a plain name; an unknown kind shows as it is", () => {
+  expect(HELPER_LABELS).toMatchObject({ "gemini-cli": "Gemini CLI", codex: "Codex", "claude-code": "Claude Code", tidy: "Tidy" });
+  const [row] = board([{ type: "job.state", id: "j", kind: "other", title: "t", state: "queued" }]);
+  expect(row!.helperLabel).toBe("other");
+});
+
+test("elapsed time ticks while working and stops when the job ends", () => {
+  expect(elapsed({}, 5000)).toBe("");
+  expect(elapsed({ startedAt: 1000 }, 1000)).toBe("0s");
+  expect(elapsed({ startedAt: 1000 }, 13_400)).toBe("12s");
+  expect(elapsed({ startedAt: 0 }, 185_000)).toBe("3m 05s");
+  expect(elapsed({ startedAt: 0 }, 3_725_000)).toBe("1h 02m");
+  expect(elapsed({ startedAt: 1000, endedAt: 61_000 }, 999_999)).toBe("1m 00s");
+});
+
+test("a failed card keeps the fix as its one line, and the whole error to expand", () => {
+  const [row] = board([{ type: "job.state", id: "j", kind: "codex", title: "t", state: "failed", message: "Codex is not signed in. Run codex login.", summary: "Codex is not signed in.", output: "Codex is not signed in. Run codex login." }]);
+  expect(row).toMatchObject({ status: "failed", summary: "Codex is not signed in.", output: "Codex is not signed in. Run codex login." });
 });
 
 test("a job in its own worktree shows the worktree's branch and path", () => {

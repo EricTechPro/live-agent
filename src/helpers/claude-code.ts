@@ -16,7 +16,7 @@
 //   the Gemini key.
 // - Ready check: `claude auth status` exits 0 when signed in (no model call).
 import type { JobSpec } from "../core/jobs.ts";
-import { capSummary, childEnv, jobTitle, jsonLine, runCli, signInStatus, type HelperPaths } from "./cli-job.ts";
+import { capSummary, childEnv, shortTitle, jsonLine, runCli, signInStatus, type HelperPaths } from "./cli-job.ts";
 import type { HelperStatus } from "./index.ts";
 
 export const DEFAULT_CLAUDE_CODE_BIN = "claude";
@@ -39,7 +39,7 @@ export function claudeCodeStatus({ claudeCodeBin = DEFAULT_CLAUDE_CODE_BIN }: He
 export function claudeCodeJob({ task, cwd, cancelGraceMs = 3000, ...paths }: HelperPaths & { task: string; cwd: string }): JobSpec {
   return {
     kind: "claude-code",
-    title: jobTitle(task),
+    title: shortTitle(task),
     async run({ signal }) {
       const status = await claudeCodeStatus(paths);
       if (!status.ok) throw new Error(status.fix);
