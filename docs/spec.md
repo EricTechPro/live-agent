@@ -242,36 +242,35 @@ Must-have before Nov 27: 21, 22, 23, 25, 26, 27, 28, 29, 30, 31, 32. If time run
 
 ## Addendum: Jett v3: floating overlay (2026-11-15)
 
-Asked for by Eric after seeing v2 on 2026-11-15. Ticket 36. Where this addendum and the v2 addendum disagree, this one wins.
+Asked for by Eric after trying v2 on 2026-11-15. Tickets 36 and 37. Where this addendum and the v2 addendum disagree, this one wins.
 
 ### Why
 
-v2 was too big: a 960 x 600 window with three columns feels like a desktop app. Jett should feel like a small helper that floats over whatever you are doing, the way Roamies does (ideas only; Roamies is AGPL, never its code).
+v2 was too big: a 960 x 600 window with three columns feels like a desktop app, and it was unclear whether Jett was listening. Jett should feel like Roamies: a small orb floating over whatever you are doing, captions of what is said, drawings straight on the screen. Same experience, our own code (Roamies is AGPL: never its code, assets or text).
 
-### The window
+### The overlay window (ticket 36)
 
-- **Frameless, transparent, always on top.** No title bar, no window shadow, no background: only the orb and a few floating glass pieces are visible, and the desktop shows through everywhere else. macOS needs `macOSPrivateApi` (and the `macos-private-api` Cargo feature) for a transparent webview.
-- **Small.** Home is about 280 x 340. The control center grows the window to about 420 x 640 and shrinks it back when it closes. The setup wizard grows it to its own size and centres it while it runs.
-- **A handle you can grab.** A small grip pill at the top centre drags the window (`data-tauri-drag-region`). When the window grows or shrinks, the grip stays where it was (the top centre is the anchor), and the window is kept on screen.
-- **Remembers where you left it.** The position is saved when you drag it and restored on the next launch, if that spot is still on a screen. Otherwise Jett starts in the top-right corner of the main screen.
-- The window code that sizes, anchors and restores is pure (`app/src/overlay.ts`) with tests; the window only calls Tauri's size and position APIs.
+- **One full-screen transparent window** on the main screen: frameless, no shadow, no background, always on top, on every Space. macOS needs `macOSPrivateApi` (and the `macos-private-api` Cargo feature) for the transparent webview.
+- **Click-through everywhere except the interactive bits.** The window ignores the mouse (`set_ignore_cursor_events(true)`) and the clicks reach the apps under it. The window polls the cursor (a Rust command, about 20 times a second) and stops ignoring the mouse while the pointer is over the orb, its buttons, the popover, an approval card or the canvas X. The hit test is pure (`app/src/overlay.ts`) with tests. While the setup wizard shows, the window takes every click.
+- **At rest: just the orb and the captions.** The orb is small and floats where you put it: drag it by its grip, and it remembers the spot across launches (kept on screen). First launch: bottom right.
+- **Live captions** at the bottom centre of the screen: your words stream as you speak (the core's user `transcript` chunks from Gemini Live's input transcription), then Jett's reply the same way. Two short lines at most, yours and Jett's, styled differently, fading out a few seconds after the last word. A pure reducer (`app/src/captions.ts`) with tests.
+- **The canvas draws straight on the screen**: the sketch board is see-through and sits in the screen's upper middle; pen strokes get a dark halo under their glow so they read over any background. It clears on a new chat, and a small X on its corner clears it by hand.
+- **Everything else only when clicked**: a small menu button by the orb opens one compact glass popover (dark tint, blur, rounded, thin teal border) with one view at a time, picked by icon tabs: **Chat** (transcript, composer with the safety mode pill, notes used), **Jobs** (job cards), **Brain** (past chats, the file tree, the read-only reader). New chat, Setup and Show log are icon buttons in its tab row. Esc or its X closes it. A running-jobs badge on the orb opens it on Jobs.
+- **Approvals** show as a small glass card next to the orb, not inside the popover.
+- The mini orb (ticket 15) is gone: the orb is always mini now.
 
-### Home: just the orb
+### Calls like a phone call (ticket 37)
 
-- The orb, the speech bubble over it, a small state word under it, and the grip. A running-jobs badge sits on the orb while helpers work; clicking it opens the control center on Jobs.
-- Clicking the orb opens the control center.
-- The call controls (Start call / End call, Pause / Resume, Control center) are small icon buttons under the orb. They show on hover and keyboard focus, and stay while in a call or paused.
-- The old mini orb (ticket 15) is gone: home is the mini orb now.
-
-### Control center: one glass panel
-
-- Opens from the orb as one compact translucent glass panel (dark tint, backdrop blur, rounded corners, thin teal border), not three columns.
-- At its top: the grip, the orb small with its state word, the call controls and the close X. Esc closes it too.
-- One view at a time, picked with icon tabs (tooltips, arrow keys): **Chat** (transcript, composer with the safety mode pill, approval cards, notes used), **Canvas** (the sketch), **Jobs** (job cards), **Brain** (past chats and the brain file tree; a click opens the read-only reader in the same view).
-- New chat, Setup and Show log are small icon buttons in the tab row.
-- Something drawn opens the control center on Canvas; an approval waiting opens it on Chat. A job starting never switches the view.
-- The canvas board is see-through (the desktop shows faintly behind it); pen strokes get a dark halo under their glow so they stay readable over any background.
+- **Not in a call: one button, Start call.** One click and it is live. Clicking the orb does the same.
+- **In a call: exactly two buttons, Mute (mic-slash when muted) and a red Hang up.** Mute stops the mic track in the window; the core keeps running. The user never sees a "pause". The core's pause stays for the API but the window no longer uses it.
+- **State at a glance, in plain words**: "Tap to talk", "Connecting…", "Listening…" (the orb's ring pulses with your voice level), "Thinking…", "Speaking…", "Muted" (orb dimmed, mic-slash badge), "Call ended". Each state has its own orb colour and motion. The mapping is a pure function (`app/src/call-state.ts`) with tests.
+- **Keys**: Space starts a call, and in a call mutes and unmutes. Cmd+. hangs up, and Esc does too when nothing else is open (the popover and the reader close first). Tooltips show the keys.
+- **Language**: Jett always answers in the language the user spoke (rule in the system prompt). The window's state words follow the user's last spoken language (English and Chinese).
 
 ### Testing
 
-Pure reducers and geometry with tests (`app/src/panel.ts` for the views, `app/src/layers.ts`, `app/src/overlay.ts`). Screenshots in a headless browser over a busy background. A hand check in the real app for transparency, dragging, resizing and click-through.
+Pure code with tests: `app/src/overlay.ts` (orb and popover placement, hit test), `app/src/call-state.ts`, `app/src/captions.ts`, `app/src/panel.ts`, the language rule in the system prompt. Screenshots in a headless browser over a busy background. A hand check in the real app for transparency, click-through, dragging and voice.
+
+### Why the app went to "Paused" by itself (v2)
+
+The core pauses only when the window posts `/pause` (nothing in the core pauses on its own). In v2, Space toggled pause whenever focus was not in a text field or button, and on macOS WebKit a clicked button never takes focus (starting a call also disables the button for a moment), so focus stays on the page. So a Space press after the call started (for example to talk, push-to-talk style) paused Jett. v3 has no pause in the window: Space is Start call or Mute, and Muted shows only when you chose it.
