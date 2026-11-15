@@ -147,3 +147,89 @@ export function pttStep(p: Ptt, held: boolean, now: number): { ptt: Ptt; act?: "
   if (p.talking && p.upAt !== undefined && now - p.upAt >= TAIL_MS) return { ptt: pttIdle, act: "release" };
   return { ptt: p };
 }
+
+// ---- v3 polish (ticket 38) -----------------------------------------------------------
+/** A press that moves further than this (CSS px) is a drag; less is a click. */
+export const DRAG_PX = 4;
+
+/** Did the pointer move far enough since the press to count as a drag? */
+export function isDrag(from: Point, now: Point, threshold = DRAG_PX): boolean {
+  return Math.hypot(now.x - from.x, now.y - from.y) > threshold;
+}
+
+/** Two clicks on the orb within this many ms are a double-click (minimise). */
+export const DOUBLE_MS = 280;
+
+export function isDoubleClick(prevAt: number | undefined, now: number): boolean {
+  return prevAt !== undefined && now - prevAt < DOUBLE_MS;
+}
+
+/** The minimised dot keeps this gap to the screen edge. */
+export const DOT_INSET = 4;
+/** Dropped closer than this to an edge, the dot snaps flush to it. */
+export const SNAP_PX = 24;
+
+/** Where a dropped dot settles: where it was dropped, kept on screen, snapped to an edge within SNAP_PX. */
+export function dropDot(at: Point, size: Size, view: Size): Point {
+  const maxX = Math.max(DOT_INSET, view.width - size.width - DOT_INSET);
+  const maxY = Math.max(DOT_INSET, view.height - size.height - DOT_INSET);
+  let x = clamp(at.x, DOT_INSET, maxX);
+  let y = clamp(at.y, DOT_INSET, maxY);
+  if (x - DOT_INSET < SNAP_PX) x = DOT_INSET;
+  else if (maxX - x < SNAP_PX) x = maxX;
+  if (y - DOT_INSET < SNAP_PX) y = DOT_INSET;
+  else if (maxY - y < SNAP_PX) y = maxY;
+  return { x: Math.round(x), y: Math.round(y) };
+}
+
+/** Minimising with no saved dot spot: the dot goes to the screen edge nearest the orb, level with the orb's centre. */
+export function dotFor(orb: Rect, size: Size, view: Size): Point {
+  const cx = orb.x + orb.width / 2;
+  const cy = orb.y + orb.height / 2;
+  const edges = [
+    { d: cx, at: { x: 0, y: cy - size.height / 2 } },
+    { d: view.width - cx, at: { x: view.width, y: cy - size.height / 2 } },
+    { d: cy, at: { x: cx - size.width / 2, y: 0 } },
+    { d: view.height - cy, at: { x: cx - size.width / 2, y: view.height } },
+  ];
+  const nearest = edges.reduce((a, b) => (b.d < a.d ? b : a));
+  return dropDot(nearest.at, size, view);
+}
+
+/** Padding around the orb in which the cursor counts as hovering it (shows the menu and minus buttons). */
+export const HOVER_PAD = 24;
+
+/**
+ * Is the cursor over the orb, or near it? Driven by the overlay poll's cursor, not DOM
+ * hover: while another app is in front WebKit sends no mouse-over events.
+ */
+export function hoverOrb(point: Point | undefined, orb: Rect, pad = HOVER_PAD): boolean {
+  return point !== undefined && hit(point, [orb], pad);
+}
+
+// ---- push to talk and the call: letting go always wins ---------------------------------
+type Phase = "off" | "joining" | "live" | "ended";
+
+export interface PttCall {
+  /** This hold opened the mic, so letting go closes it again. */
+  mutesAfter: boolean;
+  /** Let go before the call connected: mute as soon as it is live. */
+  muteOnLive: boolean;
+}
+export const pttCallIdle: PttCall = { mutesAfter: false, muteOnLive: false };
+
+/** Ctrl+Option went down (held long enough). `act`: start a call, or unmute the one there is. */
+export function pttPress(s: PttCall, call: Phase, muted: boolean): { state: PttCall; act?: "start" | "unmute" } {
+  if (call === "off" || call === "ended") return { state: { mutesAfter: true, muteOnLive: false }, act: "start" };
+  // Still connecting: it closes on release only if push to talk started it.
+  if (call === "joining") return { state: { mutesAfter: s.mutesAfter || s.muteOnLive, muteOnLive: false } };
+  return muted ? { state: { mutesAfter: true, muteOnLive: false }, act: "unmute" } : { state: { mutesAfter: false, muteOnLive: false } };
+}
+
+/** Ctrl+Option let go (after the tail). Live: mute now. Still connecting: mute once live. */
+export function pttRelease(s: PttCall, call: Phase): { state: PttCall; act?: "mute" } {
+  if (!s.mutesAfter) return { state: pttCallIdle };
+  if (call === "live") return { state: pttCallIdle, act: "mute" };
+  if (call === "joining") return { state: { mutesAfter: false, muteOnLive: true } };
+  return { state: pttCallIdle };
+}

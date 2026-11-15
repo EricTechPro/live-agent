@@ -80,6 +80,15 @@ export function callView({ orb, call, muted, lang = "en" }: CallInputs): CallVie
   return view(call === "ended" ? "ended" : "idle", ["start"]);
 }
 
+/** Push to talk counts as learned after this many uses; the hint goes away (ticket 38). */
+export const PTT_HINT_USES = 2;
+const PTT_HINT: Record<Lang, string> = { en: "or hold ⌃⌥", zh: "或按住 ⌃⌥" };
+
+/** The faint second line under "Tap to talk": only at rest, until push to talk has been used twice. */
+export function talkHint(look: CallLook, lang: Lang, pttUses: number): string | undefined {
+  return look === "idle" && pttUses < PTT_HINT_USES ? PTT_HINT[lang] : undefined;
+}
+
 /** Space: start a call, or in one, mute / unmute. */
 export function spaceAction(call: CallPhase, muted: boolean): "start" | "mute" | "unmute" | undefined {
   if (call === "live") return muted ? "unmute" : "mute";
