@@ -4,10 +4,14 @@
 
 **Blocked by:** 02 Read-file tool behind the safety gate, 09 Desktop window: orb, transcript, talk out loud
 
-**Status:** wontfix (parked until after the Nov 27 talk; set back to ready-for-agent to build)
+**Status:** ready-for-agent
 
 **Priority:** after-talk
 
 - [ ] "Draw how this works" produces a diagram shown in the window
 - [ ] The voice keeps talking while the diagram renders
 - [ ] The diagram tool call shows on the event stream
+
+## Comments
+
+2026-11-14: unparked by Eric ("finish all the tickets").

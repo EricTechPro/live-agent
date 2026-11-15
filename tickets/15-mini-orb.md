@@ -4,7 +4,7 @@
 
 **Blocked by:** 10 Job board, bottom bar, mode switching
 
-**Status:** wontfix (parked until after the Nov 27 talk; set back to ready-for-agent to build)
+**Status:** ready-for-agent
 
 **Priority:** after-talk
 
@@ -12,3 +12,7 @@
 - [ ] The orb shows the running job count live
 - [ ] Clicking the orb restores the full window
 - [ ] Voice keeps working in mini mode
+
+## Comments
+
+2026-11-14: unparked by Eric ("finish all the tickets").

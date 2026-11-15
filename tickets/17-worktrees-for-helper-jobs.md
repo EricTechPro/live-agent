@@ -4,7 +4,7 @@
 
 **Blocked by:** 06 Helper jobs with Gemini CLI
 
-**Status:** wontfix (parked until after the Nov 27 talk; set back to ready-for-agent to build)
+**Status:** ready-for-agent
 
 **Priority:** after-talk
 
@@ -12,3 +12,7 @@
 - [ ] With worktrees off, behaviour is unchanged
 - [ ] The job shows its worktree path
 - [ ] A non-git project gives a clear message instead of failing silently
+
+## Comments
+
+2026-11-14: unparked by Eric ("finish all the tickets").

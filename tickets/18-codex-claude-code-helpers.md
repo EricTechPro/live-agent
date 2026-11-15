@@ -4,7 +4,7 @@
 
 **Blocked by:** 06 Helper jobs with Gemini CLI
 
-**Status:** wontfix (parked until after the Nov 27 talk; set back to ready-for-agent to build)
+**Status:** ready-for-agent
 
 **Priority:** after-talk
 
@@ -12,3 +12,7 @@
 - [ ] Turning on Claude Code in the config lets the agent start Claude Code jobs
 - [ ] A missing or signed-out CLI gives a clear fix
 - [ ] The user can say which helper to use, and the default is the first one turned on
+
+## Comments
+
+2026-11-14: unparked by Eric ("finish all the tickets").
