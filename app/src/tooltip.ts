@@ -31,6 +31,8 @@ export function mountTooltips(root: HTMLElement = document.body) {
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   function show(el: HTMLElement) {
+    // A button whose menu is open (the mode pill) needs no tip over its menu.
+    if (el.getAttribute("aria-haspopup") && el.getAttribute("aria-expanded") === "true") return;
     anchor = el;
     const label = el.dataset.tip ?? "";
     const key = el.dataset.key;

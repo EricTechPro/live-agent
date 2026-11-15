@@ -1,11 +1,8 @@
-// The job board (right) and the bottom bar (notes used + safety mode). Ticket 10.
-// Renders only: core events in (through the pure reducers), commands out
-// (cancel, set mode). The mode on screen comes only from the core's
-// `mode.changed`, so the dropdown and Shift+Tab can never disagree.
+// The job board (right) and the status line (notes used). Ticket 10; the safety mode moved to the composer pill (mode-pill.ts, ticket 27).
+// Renders only: core events in (through the pure reducers), the cancel command out.
 import type { CoreClient } from "./core-client.ts";
-import { addBarEvent, emptyBar, isModeCycleKey, type Bar } from "./bottom-bar.ts";
+import { addBarEvent, emptyBar, type Bar } from "./bottom-bar.ts";
 import { addJobEvent, emptyBoard, type JobBoard } from "./job-board.ts";
-import type { SafetyMode } from "../../src/core/safety.ts";
 
 const STATUS_LABELS = { waiting: "Waiting", working: "Working", done: "Done", failed: "Failed", cancelled: "Cancelled" };
 // Each job's LED: blinking while it works, lit when done, red when it failed, dark otherwise.
@@ -85,18 +82,7 @@ export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: H
 
   // ---- bottom bar ----
   const notesEl = el("span", { className: "bar-notes" });
-  const select = el("select", { className: "bar-mode", id: "mode", disabled: true });
-  select.setAttribute("aria-label", "Safety mode (Shift+Tab cycles)");
-  select.onchange = () => {
-    const wanted = select.value as SafetyMode;
-    // Snap back to what the core says until its mode.changed arrives.
-    if (bar.mode) select.value = bar.mode;
-    core.setMode(wanted).catch(() => {});
-  };
-  barEl.append(
-    notesEl,
-    el("label", { className: "bar-mode-wrap", title: "Shift+Tab cycles" }, el("span", { textContent: "Safety" }), el("span", { className: "pf sel" }, select)),
-  );
+  barEl.append(notesEl);
 
   function renderBar() {
     notesEl.replaceChildren(
@@ -108,13 +94,8 @@ export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: H
               ? [el("span", { className: "bar-more", textContent: `+${bar.notes.length - NOTE_CHIPS}`, title: bar.notes.slice(NOTE_CHIPS).join("\n") })]
               : []),
           ]
-        : [el("span", { className: "bar-label", textContent: "No notes used" })]),
+        : []),
     );
-    if (bar.mode) {
-      select.disabled = false;
-      select.value = bar.mode;
-      barEl.dataset.mode = bar.mode;
-    }
   }
 
   core.onEvent((event) => {
@@ -124,21 +105,6 @@ export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: H
     const nextBar = addBarEvent(bar, event);
     if (nextBoard !== board) (board = nextBoard), renderBoard();
     if (nextBar !== bar) (bar = nextBar), renderBar();
-  });
-
-  // First draw: the core says which modes exist (with their labels) and which
-  // one is on. A mode.changed that beat this reply wins.
-  core.getMode().then(({ mode, modes }) => {
-    select.replaceChildren(...modes.map(({ id, label }) => el("option", { value: id, textContent: label })));
-    if (bar.mode) select.value = bar.mode;
-    else (bar = addBarEvent(bar, { type: "mode.changed", mode })), renderBar();
-  }, () => {});
-
-  // In-window shortcut, not a global one: only while this window has focus.
-  window.addEventListener("keydown", (e) => {
-    if (!isModeCycleKey(e)) return;
-    e.preventDefault();
-    core.setMode("cycle").catch(() => {});
   });
 
   renderBoard();

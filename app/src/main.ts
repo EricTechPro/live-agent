@@ -2,6 +2,7 @@
 // No agent logic here; the core decides everything (see docs/spec.md, App shell).
 import { Room, RoomEvent, Track, type Participant } from "livekit-client";
 import { mountBoardAndBar } from "./board-view.ts";
+import { mountModePill } from "./mode-pill.ts";
 import { bubbleLine } from "./bubble.ts";
 import { connectCore, getSetup, onCoreDown, revealLog, waitForCore, type CoreClient } from "./core-client.ts";
 import { mountDiagram } from "./diagram-view.ts";
@@ -233,6 +234,7 @@ async function boot() {
     if (event.type === "chat.started") say("New chat!");
   });
   mountBoardAndBar(core, $("jobs"), $("bar"), { button: $<HTMLButtonElement>("jobs-toggle"), count: $("jobs-count") });
+  mountModePill(core, $<HTMLButtonElement>("mode-pill"), $<HTMLUListElement>("mode-menu"));
   say("Hi! I'm Jett.");
   mountMini(core, $<HTMLButtonElement>("mini"), orbEl, $("mini-count"));
   mountDiagram(core, $("diagram"));

@@ -57,10 +57,15 @@
           <div id="chat-slot" class="chat-slot"></div>
           <section id="diagram" class="pf diagram" hidden aria-label="Diagram"></section>
           <ol id="transcript" class="transcript" aria-label="Transcript" aria-live="polite"></ol>
+          <div class="composer-wrap">
+          <!-- The safety mode menu sits outside the composer's pixel frame, which would clip it. -->
+          <ul id="mode-menu" class="pf mode-menu" hidden></ul>
           <form id="type" class="pf composer type">
+            <button id="mode-pill" class="pill" type="button" disabled></button>
             <input id="type-input" type="text" placeholder="Type to Jett…" aria-label="Message Jett" autocomplete="off" disabled />
             <button id="send" class="ib send" type="submit" disabled aria-label="Send" data-tip="Send" data-key="Enter" data-icon="send"></button>
           </form>
+          </div>
           <footer id="bar" class="bar" aria-label="Status"></footer>
         </section>
         <aside id="panel" class="panel" aria-label="Panel"></aside>

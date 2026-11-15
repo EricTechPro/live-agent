@@ -118,8 +118,8 @@ body {
 .transcript .model { align-self: flex-start; color: var(--led); --frame: #24675f; --fill: #061b1c; }
 .transcript .note { align-self: center; color: var(--ink-3); font-size: 11px; max-width: 100%; text-align: center; }
 
-/* The composer: one framed box holding the input and the send arrow (and, from ticket 27, the mode pill). */
-.composer { --k: 3px; --frame: var(--edge-hi); --fill: #061719; flex: none; display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 12px; }
+/* The composer: one framed box holding the safety mode pill, the input and the send arrow. */
+.composer { --k: 3px; --frame: var(--edge-hi); --fill: #061719; display: flex; align-items: center; gap: 8px; padding: 6px; }
 .composer:focus-within { --frame: var(--led); }
 .composer input { flex: 1; min-width: 0; padding: 8px 0; border: 0; background: transparent; color: var(--ink); font: 500 13px/1.25 var(--mono); font-stretch: 87.5%; }
 .composer input::placeholder { color: var(--ink-3); }
@@ -127,6 +127,30 @@ body {
 .send { width: 32px; height: 32px; background: var(--led); color: var(--led-ink); }
 .send:hover { background: var(--led-hi); color: var(--led-ink); }
 .send:disabled { background: #1c3634; color: #6f8f8a; }
+
+/* The safety mode pill (ticket 27): left of the input, like ChatGPT's composer picker. Bypass is red. */
+.composer-wrap { position: relative; flex: none; }
+.pill {
+  appearance: none; border: 0; cursor: pointer; flex: none; display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 8px 6px 10px; background: #0c2b2c; color: var(--ink-2); outline: 1px solid var(--edge-hi);
+  font: 700 11px/1.2 var(--mono); font-stretch: 87.5%; letter-spacing: .02em; white-space: nowrap;
+}
+.pill:hover, .pill[aria-expanded="true"] { color: var(--ink); outline-color: var(--edge-hot); }
+.pill:focus-visible { outline: 2px solid var(--ink); }
+.pill:disabled { cursor: default; color: #6f8f8a; }
+.pill[data-mode="bypass"] { color: var(--bad); outline-color: #7a3b33; background: #2a1411; }
+.pill-chev svg { display: block; }
+.mode-menu {
+  position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 30; min-width: 180px;
+  list-style: none; margin: 0; padding: 6px; --fill: #0a2224; --frame: var(--edge-hi);
+}
+.mode-menu:focus { outline: none; }
+.mode-menu:focus-visible { --frame: var(--ink); }
+.mode-menu li { display: flex; align-items: center; gap: 10px; padding: 7px 10px; cursor: pointer; color: var(--ink-2); font: 600 12px/1.2 var(--mono); }
+.mode-menu li.active { background: #12393a; color: var(--ink); }
+.mode-menu li[aria-selected="true"] { color: var(--led); }
+.mode-menu li[data-mode="bypass"][aria-selected="true"] { color: var(--bad); }
+.mode-menu .led { width: 6px; height: 6px; }
 
 /* ---- job board: a drawer on the right, open when a job starts or from the Jobs chip ---- */
 .jobs {
@@ -164,7 +188,7 @@ body {
 .diagram-error { margin: 0; color: var(--bad); }
 .diagram-source { margin: 0; font-size: 11px; color: var(--ink-3); white-space: pre-wrap; user-select: text; }
 
-/* ---- status line under the composer (ticket 10): notes used, and the safety select ---- */
+/* ---- status line under the composer (ticket 10): the notes the last answer used ---- */
 .bar {
   flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 2px 2px 8px; min-height: 30px; font-size: 11px;
@@ -173,10 +197,6 @@ body {
 .bar-label { color: var(--ink-3); }
 .bar-note { color: var(--led); background: #061719; outline: 1px solid var(--edge-hi); padding: 1px 6px; font: 500 11px/1.4 var(--mono); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bar-more { color: var(--ink-3); }
-.bar-mode-wrap { display: flex; gap: 8px; align-items: center; color: var(--ink-3); flex: none; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
-.bar-mode-wrap .sel { min-width: 132px; }
-.bar-mode-wrap .sel select { padding-block: 4px; }
-.bar[data-mode="bypass"] .sel { --frame: var(--bad); }
 
 /* ---- mini orb (ticket 15) ----
    The window shrinks to ~132 px, frameless and on top (Rust `set_mini`). Only the
