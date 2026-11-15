@@ -31,6 +31,7 @@ import { errorMessage } from "../errors.ts";
 import type { HelperPaths } from "../helpers/cli-job.ts";
 import { saveChatNote, SUMMARY_REQUEST, summaryCollector, type ChatLine, type SummaryCollector } from "./chat-end.ts";
 import type { AgentEvent } from "./events.ts";
+import { joinText } from "./join-text.ts";
 import { createJobs, type Jobs } from "./jobs.ts";
 import type { Model, ModelEvent } from "./model.ts";
 import { loadTools } from "./registry.ts";
@@ -302,7 +303,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         emit({ type: "interrupted" });
         break;
       case "text":
-        openVoiceTurn().reply += event.text;
+        { const t = openVoiceTurn(); t.reply = joinText(t.reply, event.text); }
         emit({ type: "transcript", role: "model", text: event.text });
         break;
       case "tool.call":

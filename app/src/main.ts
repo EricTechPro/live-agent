@@ -2,6 +2,7 @@
 // No agent logic here; the core decides everything (see docs/spec.md, App shell).
 import { Room, RoomEvent, Track, type Participant } from "livekit-client";
 import { mountBoardAndBar } from "./board-view.ts";
+import { bubbleLine } from "./bubble.ts";
 import { connectCore, getSetup, onCoreDown, revealLog, waitForCore, type CoreClient } from "./core-client.ts";
 import { mountDiagram } from "./diagram-view.ts";
 import { nextLayer, startLayer, type Layer, type LayerAction } from "./layers.ts";
@@ -78,11 +79,6 @@ function say(text: string) {
     sayEl.textContent = text.slice(0, ++n);
     if (n >= text.length) clearInterval(typer);
   }, 24);
-}
-/** A reply as a bubble line: its first line, cut to a few words. */
-function bubbleLine(reply: string): string {
-  const first = reply.trim().split("\n")[0] ?? "";
-  return first.length <= 40 ? first : `${first.slice(0, 38).replace(/\s+\S*$/, "")}…`;
 }
 
 let orb: Orb = orbStart;

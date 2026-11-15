@@ -40,7 +40,7 @@ body {
   --frame: var(--led); --fill: #04191b;
   margin: 0 0 12px; max-width: 320px; min-height: 30px; padding: 6px 12px 7px; text-align: center;
   color: #d6fff6; font: 900 14px/1.25 var(--dots); letter-spacing: .03em; text-transform: uppercase;
-  text-shadow: 0 0 6px rgba(120,255,226,.6); overflow-wrap: break-word;
+  text-shadow: 0 0 6px rgba(120,255,226,.6); overflow-wrap: break-word; text-wrap: balance;
 }
 .orb-stage .tail { width: 10px; height: 6px; margin: -12px 0 10px; background: var(--led);
   clip-path: polygon(0 0,100% 0,100% 2px,80% 2px,80% 4px,60% 4px,60% 6px,40% 6px,40% 4px,20% 4px,20% 2px,0 2px); }

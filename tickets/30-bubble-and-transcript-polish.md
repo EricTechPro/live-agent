@@ -6,14 +6,16 @@
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Priority:** must-have
 
-- [ ] Two model segments "Sending that to Claude Code." and "May I start it?" show as "Sending that to Claude Code. May I start it?" in the transcript (reducer test)
-- [ ] The `turn.done` reply has the same space (event stream test)
-- [ ] Chunks inside one word or one sentence are still joined with no extra space
-- [ ] The bubble shows the latest sentence in full, up to two lines, cut at a word only when longer
+- [x] Two model segments "Sending that to Claude Code." and "May I start it?" show as "Sending that to Claude Code. May I start it?" in the transcript (reducer test)
+- [x] The `turn.done` reply has the same space (event stream test)
+- [x] Chunks inside one word or one sentence are still joined with no extra space
+- [x] The bubble shows the latest sentence in full, up to two lines, cut at a word only when longer
 - [ ] Hand check in the real app: a helper request shows a clean bubble and transcript
 
 ## Comments
+
+- 2026-11-15: built. One join rule in `src/core/join-text.ts` (a sentence end followed by a capital letter gets a space), used by the transcript reducer and the turn's reply (`src/core/agent.ts`, one line). The bubble's line is `app/src/bubble.ts`: the latest sentence, up to about two lines (64 characters), cut at a word. Tests in `test/bubble-and-text-join.test.ts`. The hand check in the real app is left for a person.
