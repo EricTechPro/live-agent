@@ -107,7 +107,7 @@ tidy job and the Gemini CLI helper. It takes about two minutes.
    <img src="docs/images/key-guide/04-create-key-dialog.png" width="640" alt="The Create API key dialog: key name, project picker, Create key button">
 
 5. **Copy the key.** Click the key in the list, then press **Copy**. It is a long string that
-   starts with `AIza`.
+   starts with `AQ.` (new auth keys, the default since May 2026) or `AIza` (older keys). Both work.
 
    <img src="docs/images/key-guide/05-copy-key.png" width="640" alt="The key details with the Copy button">
 
@@ -123,7 +123,7 @@ tidy job and the Gemini CLI helper. It takes about two minutes.
 **Got a new key?** Open the key file and put the key after `GEMINI_API_KEY=`:
 
 ```sh
-open -e ~/Desktop/live-agent/.env      # GEMINI_API_KEY=AIza...
+open -e ~/Desktop/live-agent/.env      # GEMINI_API_KEY=AQ.... (or AIza...)
 ```
 
 Then quit and reopen the app. Check it with the [doctor](#doctor): `✓ Gemini key: key works`.

@@ -34,15 +34,16 @@ describe("core log", () => {
     log.hide(launch);
     const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.c2lnbmF0dXJlLXZhbHVl";
     const googleKey = "AIzaSyD-not-a-real-key-but-looks-like-one";
+    const authKey = "AQ.Ab8RN6Kq-not-a-real-auth-key.but_looks_like_one";
     const ephemeral = "auth_tokens/9f8e7d6c5b4a39281706";
     log.write(`starting with key ${key}`);
     log.write(JSON.stringify({ type: "ready", url: "http://127.0.0.1:5000", launchToken: launch }));
     log.write(`live-agent: voice check page: http://127.0.0.1:5000/check#${launch}`);
-    log.write(`livekit token ${jwt} and ${googleKey}`);
+    log.write(`livekit token ${jwt} and ${googleKey} and ${authKey}`);
     log.write(`gemini session with ${ephemeral}`);
     log.write(`GET /events?token=${launch}`);
     const text = read(home);
-    for (const secret of [key, launch, jwt, googleKey, ephemeral]) expect(text).not.toContain(secret);
+    for (const secret of [key, launch, jwt, googleKey, authKey, ephemeral]) expect(text).not.toContain(secret);
     // The rest of each message is still there to read.
     expect(text).toContain("starting with key");
     expect(text).toContain("voice check page");

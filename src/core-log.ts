@@ -26,7 +26,8 @@ const MAX_BYTES = 256 * 1024;
 // plain hex: git commit ids are hex too. The launch token is hidden exactly (log.hide).
 const TOKEN_SHAPES: RegExp[] = [
   /eyJ[\w-]{6,}\.[\w-]+\.[\w-]+/g, // JWTs (LiveKit room tokens)
-  /AIza[\w-]{20,}/g, // Google API keys
+  /AIza[\w-]{20,}/g, // Google API keys (standard)
+  /\bAQ\.[\w.-]{20,}/g, // Google auth keys (AI Studio, since May 2026)
   /auth_tokens\/[\w-]+/g, // Gemini ephemeral tokens
   /((?:token|key|secret|authorization)["']?\s*[:=]\s*["']?(?:Bearer\s+)?)[^\s"'&,}]{8,}/gi, // token=..., "key":"..."
 ];

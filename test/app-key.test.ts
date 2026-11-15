@@ -71,6 +71,14 @@ describe("no key yet, as the window sees it", () => {
     expect(await (await get("/key")).json()).toEqual({ needed: true });
   });
 
+  test("an auth key (AQ.…, what AI Studio makes now) passes the shape check and goes to the live check", async () => {
+    const res = await post("/key", { key: "AQ.Ab8RN6Kq_fake-auth-key.for-the-test_0123456789" });
+    expect(res.status).toBe(400);
+    // The fake gate answered, so the shape check let it through.
+    expect(await res.json()).toEqual({ error: "That key does not work. Make a new one." });
+    expect(saved).toEqual([]);
+  });
+
   test("an empty or malformed paste is refused before any check", async () => {
     for (const key of ["", "   ", "two words", "line\nbreak=1"]) {
       const res = await post("/key", { key });

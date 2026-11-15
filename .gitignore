@@ -25,3 +25,6 @@ target/
 # editor
 .idea/
 .vscode/
+
+# runtime logs (the installed app writes <home>/logs)
+logs/

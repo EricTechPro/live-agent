@@ -99,9 +99,11 @@ const refused = (err: unknown) => json({ error: errorMessage(err) }, 409);
 const readBody = async (req: Request): Promise<Record<string, unknown>> =>
   ((await req.json().catch(() => ({}))) ?? {}) as Record<string, unknown>;
 
-// What a pasted Gemini key may look like: one word of letters, digits, - and _.
-// Checked first, so a stray paste can never add a line to .env.
-const KEY_SHAPE = /^[A-Za-z0-9_-]{20,200}$/;
+// What a pasted Gemini key may look like: one word of letters, digits, -, _ and .
+// Covers older standard keys ("AIza...") and the auth keys AI Studio makes since
+// May 2026 ("AQ...."). Only a cheap shape check: the live call in keyGate.check
+// decides. Checked first, so a stray paste can never add a line to .env.
+const KEY_SHAPE = /^[A-Za-z0-9._-]{20,400}$/;
 
 type Chat = { session: AgentSession; tokens: TokenService };
 type Route = (chat: Chat, req: Request) => Response | Promise<Response>;
@@ -154,7 +156,7 @@ export async function startApp(options: AppOptions): Promise<App> {
       try {
         const { key: pasted } = await readBody(req);
         const key = typeof pasted === "string" ? pasted.trim() : "";
-        if (!KEY_SHAPE.test(key)) return json({ error: "That does not look like a Gemini key. Copy it again from AI Studio." }, 400);
+        if (!KEY_SHAPE.test(key)) return json({ error: "That does not look like a Gemini key (it starts with AQ. or AIza, one word, no spaces). Copy it again from AI Studio." }, 400);
         const problem = await keyGate.check(key);
         if (problem) return json({ error: problem }, 400);
         await keyGate.save(key);
