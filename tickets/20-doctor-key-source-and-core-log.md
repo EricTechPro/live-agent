@@ -13,3 +13,9 @@
 - [x] Opened from Finder, the core writes its messages to a log file in the live-agent folder
 - [x] The log never contains the key or any token
 - [x] The log file stays small (old lines are dropped)
+
+## Comments
+
+2026-11-14: how the boxes were checked.
+- Doctor and the key: `test/get-sh.test.ts` runs doctor from the live-agent folder, so a `.env` where `get.sh` ran is never read, and an empty key file fails with the fix. The compiled core is built with `--no-compile-autoload-dotenv` (`app/scripts/build-core.sh`), so the binary never loads a `.env` from the folder it starts in.
+- The log: `test/core-log.test.ts` covers the file in `<home>/logs/core.log`, the core started like the app writing to it, no key or token in it (the launch token is hidden exactly, git commit ids stay readable), and the size cap.
