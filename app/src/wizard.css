@@ -9,10 +9,9 @@
 #wizard { position: fixed; inset: 0; z-index: 50; overflow-y: auto; margin: 0; }
 #wizard[hidden] { display: none; }
 #wizard {
-  background:
-    radial-gradient(520px 420px at 22% 55%, rgba(40,170,150,.15), transparent 70%),
-    radial-gradient(circle, rgba(80,210,190,.09) .9px, transparent 1.3px) 0 0 / 8px 8px,
-    var(--bg);
+  /* v3 (ticket 36): the window is a transparent overlay, so the wizard dims the desktop behind its card. */
+  background: rgba(2, 8, 10, .55);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
   color: var(--ink);
   font: 400 12px/1.55 var(--mono); font-stretch: 87.5%;
   -webkit-font-smoothing: antialiased;

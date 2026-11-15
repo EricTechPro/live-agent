@@ -12,94 +12,114 @@
   </head>
   <body>
     <!--
-      Two layers (ticket 22). Home: the big orb, the call controls and one way into the
-      control center. Control center: left sidebar, middle chat (the orb small at its top),
-      right panel. The orb and its controls (#dock) are one block that main.ts moves
-      between #home-slot and #chat-slot, so the call and the orb never restart.
+      Jett v3 (tickets 36, 37): one full-screen transparent window over the desktop. It lets
+      clicks through except over the elements marked data-hit (main.ts polls the cursor and
+      asks overlay.ts). At rest: the orb (#dock) and the captions. The sketch draws straight
+      on the screen (#stage). Chats, jobs and the brain live in one glass popover, opened
+      from the menu button by the orb.
     -->
-    <main class="shell" id="shell" data-layer="home">
-      <header class="topbar" data-tauri-drag-region>
-        <span class="spacer" data-tauri-drag-region></span>
-        <div class="top-actions">
-          <button id="new-chat" class="pf ib center-only" type="button" disabled aria-label="New chat" data-tip="New chat" data-icon="newChat"></button>
-          <button id="setup" class="pf ib center-only" type="button" disabled aria-label="Setup" data-tip="Setup" data-icon="gear"></button>
-          <button id="show-log" class="pf ib center-only" type="button" aria-label="Show log" data-tip="Show log in Finder" data-icon="log"></button>
-          <button id="mini" class="pf ib" type="button" disabled aria-label="Mini orb" data-tip="Mini orb" data-icon="mini"></button>
-          <button id="jobs-toggle" class="pf ib jobs-toggle" type="button" aria-controls="panel" aria-expanded="false" aria-label="Jobs" data-tip="Jobs"><span class="icon-slot" data-icon="jobs"></span><b id="jobs-count" class="badge" data-count="0" aria-hidden="true">0</b></button>
-          <button id="open-center" class="pf ib home-only" type="button" aria-controls="center" aria-label="Open control center" data-tip="Control center" data-icon="center"></button>
-          <button id="close-center" class="pf ib center-only" type="button" aria-controls="center" aria-label="Close control center" data-tip="Close" data-key="Esc" data-side="left" data-icon="close"></button>
-        </div>
-      </header>
-      <section id="home" class="home" aria-label="Home">
-        <div id="home-slot" class="home-slot">
-          <div id="dock" class="dock">
-            <div class="orb-stage" data-tauri-drag-region>
-              <p id="say" class="pf say" aria-live="polite">Hi!</p>
-              <span class="tail" aria-hidden="true"></span>
-              <div id="orb" class="orb" data-state="connecting" role="img" aria-label="Agent state: connecting"><canvas id="orb-canvas" width="352" height="352" aria-hidden="true"></canvas></div>
-              <span id="mini-count" class="mini-count" aria-label="Jobs running">0</span>
-              <p id="orb-label" class="orb-label" aria-live="polite">Starting…</p>
-            </div>
-            <div class="controls">
-              <button id="pause" class="pf ib call pause" type="button" disabled aria-pressed="false" aria-label="Pause" data-tip="Pause" data-key="Space" data-icon="pause" data-size="24"></button>
-              <button id="talk" class="pf ib call talk" type="button" disabled aria-label="Start call" data-tip="Start call" data-icon="mic" data-size="24"></button>
-            </div>
-          </div>
-        </div>
+    <main class="overlay" id="overlay" data-layer="home">
+      <!-- The sketch canvas on the screen (tickets 32 to 35; sketch-view.ts adds the board). -->
+      <section id="stage" class="stage" aria-label="Drawing">
+        <header class="stage-head">
+          <span class="stage-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="stage-title">jett · sketch</span>
+          <button id="clear-canvas" class="ib stage-x" type="button" data-hit aria-label="Hide drawing" data-tip="Hide drawing" data-icon="close" data-size="12"></button>
+        </header>
+        <p class="canvas-empty" hidden></p>
       </section>
-      <section id="center" class="center" aria-label="Control center" hidden>
-        <aside id="sidebar" class="sidebar" aria-label="Chats and brain">
-          <h2 class="side-title" id="chats-title">Chats</h2>
-          <!-- Past chats (ticket 24): the chat-end notes, newest first. Click one to read it; it does not resume the call. -->
-          <ul id="chat-list" class="chat-list" aria-labelledby="chats-title"></ul>
-          <p id="chats-empty" class="side-empty">Past chats show here.</p>
-          <h2 class="side-title" id="brain-title">Brain</h2>
-          <!-- The brain file tree (ticket 23): the three parts, folders collapsible. Click a note to read it. -->
-          <ul id="brain-tree" class="brain-tree" role="tree" aria-labelledby="brain-title"></ul>
-          <p id="brain-empty" class="side-empty">Your notes show here.</p>
-        </aside>
-        <section class="chat" aria-label="Chat">
-          <div id="chat-slot" class="chat-slot"></div>
+
+      <!-- The cues beside the orb (ticket 37): equaliser or working pill, Jett's speech bubble. -->
+      <div id="cues" class="cues" data-side="left">
+        <div id="cue-pill" class="cue-pill" hidden>
+          <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+          <span class="spin" aria-hidden="true"></span>
+          <span id="cue-pill-text" class="cue-text"></span>
+        </div>
+        <div id="bubble" class="bubble" data-hit hidden>
+          <p id="bubble-text" class="bubble-text"></p>
+          <button id="bubble-more" class="ib bubble-more" type="button" aria-expanded="false" aria-label="Show the whole reply" data-tip="More" data-icon="chevron" data-size="10" hidden></button>
+        </div>
+      </div>
+
+      <!-- Live captions (ticket 37): the bottom caption bar, while a drawing is on screen. -->
+      <div id="captions" class="captions" aria-live="polite" hidden>
+        <p id="cap-user" class="cap user" hidden></p>
+        <p id="cap-model" class="cap model" hidden></p>
+      </div>
+
+      <!-- The orb: grip to drag it, the menu button, the orb itself, its state words, the call buttons. -->
+      <div id="dock" class="dock" data-hit data-look="starting">
+        <div class="dock-top">
+          <button id="grip" class="grip" type="button" aria-label="Move Jett (arrow keys)" data-tip="Drag to move"><span aria-hidden="true"></span></button>
+          <button id="open-center" class="ib glass-ib menu-btn" type="button" aria-controls="popover" aria-expanded="false" aria-label="Chats, jobs and brain" data-tip="Chats, jobs, brain" data-icon="center" data-size="14"></button>
+        </div>
+        <div class="orb-wrap">
+          <button id="orb" class="orb" type="button" aria-label="Start call" data-state="connecting"><canvas id="orb-canvas" width="352" height="352" aria-hidden="true"></canvas></button>
+          <span id="muted-badge" class="muted-badge" data-icon="micOff" data-size="14" aria-hidden="true" hidden></span>
+          <button id="jobs-toggle" class="jobs-badge" type="button" aria-controls="popover" aria-label="Jobs" data-tip="Jobs"><span data-icon="jobs" data-size="12"></span><b id="jobs-count" class="badge" data-count="0" aria-hidden="true">0</b></button>
+        </div>
+        <p id="orb-label" class="orb-label" aria-live="polite">Starting…</p>
+        <div class="controls">
+          <button id="talk" class="ib call talk" type="button" disabled aria-label="Start call" data-tip="Start call" data-key="Space" data-icon="mic" data-size="20"></button>
+          <button id="mute" class="ib call mute" type="button" hidden aria-pressed="false" aria-label="Mute" data-tip="Mute" data-key="Space" data-icon="mic" data-size="20"></button>
+          <button id="hangup" class="ib call hangup" type="button" hidden aria-label="Hang up" data-tip="Hang up" data-key="⌘." data-icon="hangup" data-size="20"></button>
+        </div>
+      </div>
+
+      <!-- Approve / deny cards (ticket 28), next to the orb. -->
+      <ul id="approvals" class="approvals" data-hit aria-label="Waiting for your yes" aria-live="polite" hidden></ul>
+
+      <!-- The popover (ticket 36): one view at a time, icon tabs. -->
+      <section id="popover" class="popover" data-hit aria-label="Jett" hidden>
+        <header class="pop-head">
+          <div class="tabs" role="tablist" aria-label="Views">
+            <button id="tab-chat" class="ib tab" role="tab" type="button" aria-controls="panel-chat" aria-selected="true" aria-label="Chat" data-tip="Chat" data-icon="chat" data-size="16"></button>
+            <button id="tab-jobs" class="ib tab" role="tab" type="button" aria-controls="panel-jobs" aria-selected="false" tabindex="-1" aria-label="Jobs" data-tip="Jobs"><span class="icon-slot" data-icon="jobs" data-size="16"></span><b id="tab-jobs-count" class="badge" data-count="0" aria-hidden="true">0</b></button>
+            <button id="tab-brain" class="ib tab" role="tab" type="button" aria-controls="panel-brain" aria-selected="false" tabindex="-1" aria-label="Brain" data-tip="Chats and notes" data-icon="brain" data-size="16"></button>
+          </div>
+          <span class="spacer"></span>
+          <button id="follow" class="ib" type="button" aria-pressed="false" aria-label="Follow my pointer" data-tip="Follow my pointer" data-icon="mini" data-size="16"></button>
+          <button id="new-chat" class="ib" type="button" disabled aria-label="New chat" data-tip="New chat" data-icon="newChat" data-size="16"></button>
+          <button id="setup" class="ib" type="button" disabled aria-label="Setup" data-tip="Setup" data-icon="gear" data-size="16"></button>
+          <button id="show-log" class="ib" type="button" aria-label="Show log" data-tip="Show log in Finder" data-icon="log" data-size="16"></button>
+          <button id="close-center" class="ib" type="button" aria-controls="popover" aria-label="Close" data-tip="Close" data-key="Esc" data-side="left" data-icon="close" data-size="14"></button>
+        </header>
+        <section id="panel-chat" class="view" role="tabpanel" aria-labelledby="tab-chat">
           <ol id="transcript" class="transcript" aria-label="Transcript" aria-live="polite"></ol>
-          <!-- A brain note, read only (ticket 23). It covers the transcript; X (or Escape) goes back to the chat. -->
-          <section id="reader" class="pf reader" aria-labelledby="reader-name" hidden>
+          <div class="composer-wrap">
+            <ul id="mode-menu" class="pf mode-menu" hidden></ul>
+            <form id="type" class="composer type">
+              <button id="mode-pill" class="pill" type="button" disabled></button>
+              <input id="type-input" type="text" placeholder="Type to Jett…" aria-label="Message Jett" autocomplete="off" disabled />
+              <button id="send" class="ib send" type="submit" disabled aria-label="Send" data-tip="Send" data-key="Enter" data-icon="send" data-size="16"></button>
+            </form>
+          </div>
+          <footer id="bar" class="bar" aria-label="Status"></footer>
+        </section>
+        <section id="panel-jobs" class="view" role="tabpanel" aria-labelledby="tab-jobs" hidden>
+          <div id="jobs" class="jobs" aria-label="Job board"></div>
+        </section>
+        <section id="panel-brain" class="view" role="tabpanel" aria-labelledby="tab-brain" hidden>
+          <div id="brain-lists" class="brain-lists">
+            <h2 class="side-title" id="chats-title">Past chats</h2>
+            <ul id="chat-list" class="chat-list" aria-labelledby="chats-title"></ul>
+            <p id="chats-empty" class="side-empty">Past chats show here.</p>
+            <h2 class="side-title" id="brain-title">Notes</h2>
+            <ul id="brain-tree" class="brain-tree" role="tree" aria-labelledby="brain-title"></ul>
+            <p id="brain-empty" class="side-empty">Your notes show here.</p>
+          </div>
+          <!-- A note or past chat, read only (tickets 23, 24). X (or Escape) goes back to the lists. -->
+          <section id="reader" class="reader" aria-labelledby="reader-name" hidden>
             <header class="reader-head">
               <span class="reader-icon" data-icon="file" aria-hidden="true"></span>
               <h2 id="reader-name" class="reader-name"></h2>
               <span id="reader-path" class="reader-path"></span>
-              <button id="close-reader" class="ib" type="button" aria-label="Close note" data-tip="Back to chat" data-key="Esc" data-side="left" data-icon="close"></button>
+              <button id="close-reader" class="ib" type="button" aria-label="Close note" data-tip="Back" data-key="Esc" data-side="left" data-icon="close" data-size="14"></button>
             </header>
             <pre id="reader-text" class="reader-text" tabindex="0"></pre>
           </section>
-          <div class="composer-wrap">
-          <!-- The safety mode menu sits outside the composer's pixel frame, which would clip it. -->
-          <ul id="mode-menu" class="pf mode-menu" hidden></ul>
-          <!-- Approve / deny cards for calls waiting on a yes (ticket 28). -->
-          <ul id="approvals" class="approvals" aria-label="Waiting for your yes" aria-live="polite" hidden></ul>
-          <form id="type" class="pf composer type">
-            <button id="mode-pill" class="pill" type="button" disabled></button>
-            <input id="type-input" type="text" placeholder="Type to Jett…" aria-label="Message Jett" autocomplete="off" disabled />
-            <button id="send" class="ib send" type="submit" disabled aria-label="Send" data-tip="Send" data-key="Enter" data-icon="send"></button>
-          </form>
-          </div>
-          <footer id="bar" class="bar" aria-label="Status"></footer>
         </section>
-        <aside id="panel" class="panel" aria-label="Canvas and jobs">
-          <div class="panel-head">
-            <div class="tabs" role="tablist" aria-label="Canvas and jobs">
-              <button id="tab-canvas" class="tab" role="tab" type="button" aria-controls="panel-canvas" aria-selected="true">Canvas</button>
-              <button id="tab-jobs" class="tab" role="tab" type="button" aria-controls="panel-jobs" aria-selected="false" tabindex="-1">Jobs<b id="tab-jobs-count" class="badge tab-badge" data-count="0" aria-hidden="true">0</b></button>
-            </div>
-            <button id="close-panel" class="ib panel-close" type="button" aria-controls="panel" aria-label="Close panel" data-tip="Close panel" data-icon="close" data-size="14"></button>
-          </div>
-          <!-- Canvas: the sketch canvas (tickets 32 to 35, sketch-view.ts adds it); Mermaid diagrams are cards on it. -->
-          <section id="panel-canvas" class="tabpanel" role="tabpanel" aria-labelledby="tab-canvas">
-            <p class="canvas-empty">Jett draws here.</p>
-          </section>
-          <section id="panel-jobs" class="tabpanel" role="tabpanel" aria-labelledby="tab-jobs" hidden>
-            <div id="jobs" class="jobs" aria-label="Job board"></div>
-          </section>
-        </aside>
       </section>
     </main>
     <!--

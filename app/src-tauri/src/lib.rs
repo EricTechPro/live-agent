@@ -155,58 +155,143 @@ fn stop_core(core: &Core) {
     let _ = child.kill();
 }
 
-// ---- mini orb (ticket 15) -------------------------------------------------
+// ---- the overlay window (tickets 36, 37) -----------------------------------
 //
-// Mini mode shrinks THIS window into a small borderless always-on-top orb; it
-// does not open a second window. Why: the LiveKit room, the agent's audio
-// element and the core's event stream all live in this one webview. A second
-// window would be a second page with no room (it would need its own copy of
-// every state), and closing or hiding this one could pause its audio. Resizing
-// keeps the page as it is, so voice keeps running; the window only swaps CSS.
+// Jett is one full-screen transparent window over the main screen (tauri.conf.json:
+// transparent, no decorations, no shadow, always on top, on every Space). Clicks pass
+// through it except over the orb, its buttons and the glass pieces: the page polls
+// `overlay_poll` about 20 times a second, hit-tests the cursor (app/src/overlay.ts) and
+// calls `set_click_through`. Why polling: while the window ignores the mouse, the page
+// gets no mouse events at all, so it can't notice the pointer arriving over the orb.
+// The window starts click-through, so a page that fails to load never blocks the desktop.
+//
+// The same poll reports whether Ctrl+Option is held: push to talk, like a dictation
+// app (hold to talk, let go to send). Why the modifier flags and not a global shortcut:
+// a shortcut needs a key, and "Ctrl+Option alone" has none. Reading the flags needs no
+// permission. Ctrl+Option+S (a real global shortcut) shows or hides Jett.
+// No Dock icon (macOS accessory app): a menu-bar icon opens the panel or quits.
 
-/// The orb window's size (logical px) and its gap from the screen's top-right corner.
-const MINI_SIZE: f64 = 132.0;
-const MINI_MARGIN: f64 = 24.0;
+/// Cover the main screen's work area (under the menu bar, above the Dock).
+fn cover_main_screen(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    if let Some(monitor) = window.primary_monitor()? {
+        let area = monitor.work_area();
+        window.set_position(area.position)?;
+        window.set_size(area.size)?;
+    }
+    window.set_ignore_cursor_events(true)
+}
 
-/// Where the full window was, so clicking the orb puts it back.
-#[derive(Default)]
-struct Mini(Mutex<Option<(tauri::PhysicalPosition<i32>, tauri::PhysicalSize<u32>)>>);
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OverlayPoll {
+    /// The cursor inside the window in CSS (logical) pixels, or None when it is outside.
+    point: Option<(f64, f64)>,
+    /// Ctrl+Option held (and no Cmd or Shift): push to talk.
+    talk_keys: bool,
+}
+
+fn cursor_in(window: &tauri::WebviewWindow) -> Option<(f64, f64)> {
+    let cursor = window.cursor_position().ok()?;
+    let at = window.inner_position().ok()?;
+    let size = window.inner_size().ok()?;
+    let scale = window.scale_factor().ok()?;
+    let (x, y) = (cursor.x - at.x as f64, cursor.y - at.y as f64);
+    if x < 0.0 || y < 0.0 || x >= size.width as f64 || y >= size.height as f64 {
+        return None;
+    }
+    Some((x / scale, y / scale))
+}
+
+#[cfg(target_os = "macos")]
+#[link(name = "CoreGraphics", kind = "framework")]
+extern "C" {
+    /// The modifier keys held right now. 0 = kCGEventSourceStateCombinedSessionState.
+    fn CGEventSourceFlagsState(state_id: i32) -> u64;
+}
+
+#[cfg(target_os = "macos")]
+fn talk_keys_held() -> bool {
+    const SHIFT: u64 = 0x2_0000;
+    const CONTROL: u64 = 0x4_0000;
+    const OPTION: u64 = 0x8_0000;
+    const COMMAND: u64 = 0x10_0000;
+    let flags = unsafe { CGEventSourceFlagsState(0) };
+    flags & CONTROL != 0 && flags & OPTION != 0 && flags & (SHIFT | COMMAND) == 0
+}
+
+#[cfg(not(target_os = "macos"))]
+fn talk_keys_held() -> bool {
+    false
+}
 
 #[tauri::command]
-fn set_mini(window: tauri::WebviewWindow, mini: tauri::State<'_, Mini>, on: bool) -> Result<(), String> {
-    use tauri::{LogicalPosition, LogicalSize, Size};
-    let e = |err: tauri::Error| err.to_string();
-    let mut saved = mini.0.lock().unwrap();
-    if on {
-        if saved.is_none() {
-            *saved = Some((window.outer_position().map_err(e)?, window.inner_size().map_err(e)?));
-        }
-        window.set_min_size(None::<Size>).map_err(e)?;
-        window.set_decorations(false).map_err(e)?;
-        window.set_resizable(false).map_err(e)?;
-        window.set_size(LogicalSize::new(MINI_SIZE, MINI_SIZE)).map_err(e)?;
-        if let Some(monitor) = window.current_monitor().map_err(e)? {
-            let scale = monitor.scale_factor();
-            let area = monitor.work_area();
-            let x = (area.position.x as f64 + area.size.width as f64) / scale - MINI_SIZE - MINI_MARGIN;
-            let y = area.position.y as f64 / scale + MINI_MARGIN;
-            window.set_position(LogicalPosition::new(x, y)).map_err(e)?;
-        }
-        window.set_always_on_top(true).map_err(e)?;
+fn overlay_poll(window: tauri::WebviewWindow) -> OverlayPoll {
+    OverlayPoll { point: cursor_in(&window), talk_keys: talk_keys_held() }
+}
+
+/// Click-through on (clicks reach the apps below) or off (the window takes the mouse).
+#[tauri::command]
+fn set_click_through(window: tauri::WebviewWindow, on: bool) -> Result<(), String> {
+    window.set_ignore_cursor_events(on).map_err(|e| e.to_string())
+}
+
+/// Ctrl+Option+S and the menu-bar item: hide Jett, or bring it back.
+fn toggle_overlay(app: &tauri::AppHandle) {
+    let Some(window) = app.get_webview_window("main") else { return };
+    if window.is_visible().unwrap_or(true) {
+        let _ = window.hide();
     } else {
-        window.set_always_on_top(false).map_err(e)?;
-        window.set_decorations(true).map_err(e)?;
-        window.set_resizable(true).map_err(e)?;
-        window.set_min_size(Some(LogicalSize::new(640.0, 420.0))).map_err(e)?;
-        if let Some((pos, size)) = saved.take() {
-            // Known gap: on macOS the restored window is one title bar (~32 px) taller
-            // than before. Tauri reports outer == inner size here, so it can't be measured.
-            window.set_size(size).map_err(e)?;
-            window.set_position(pos).map_err(e)?;
-        }
-        window.set_focus().map_err(e)?;
+        let _ = window.show();
     }
+}
+
+/// The menu-bar icon: a click opens the panel; its menu shows / hides Jett or quits.
+fn add_tray(app: &tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem};
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+    let open = MenuItem::with_id(app, "open", "Open Jett", true, None::<&str>)?;
+    let toggle = MenuItem::with_id(app, "toggle", "Show / hide (Ctrl+Option+S)", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit Jett", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&open, &toggle, &quit_item])?;
+    let mut tray = TrayIconBuilder::with_id("jett").tooltip("Jett").menu(&menu).show_menu_on_left_click(false);
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+    tray.on_menu_event(|app, event| match event.id.as_ref() {
+        "open" => open_panel(app),
+        "toggle" => toggle_overlay(app),
+        "quit" => quit(app),
+        _ => {}
+    })
+    .on_tray_icon_event(|tray, event| {
+        if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+            open_panel(tray.app_handle());
+        }
+    })
+    .build(app)?;
     Ok(())
+}
+
+/// Quit from the menu bar (an accessory app has no Cmd+Q menu): hide at once, let the
+/// core finish the chat in the background, then exit. Same as the ExitRequested path.
+fn quit(app: &tauri::AppHandle) {
+    for window in app.webview_windows().values() {
+        let _ = window.hide();
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        stop_core(&app.state::<Core>());
+        app.exit(0);
+    });
+}
+
+/// Show Jett and ask the page to open its panel (main.ts listens for `open-panel`).
+fn open_panel(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+    let _ = app.emit("open-panel", ());
 }
 
 #[cfg(unix)]
@@ -219,10 +304,37 @@ extern "C" {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    use tauri_plugin_global_shortcut::{Code, Modifiers, ShortcutState};
+                    if event.state == ShortcutState::Pressed && shortcut.matches(Modifiers::CONTROL | Modifiers::ALT, Code::KeyS) {
+                        toggle_overlay(app);
+                    }
+                })
+                .build(),
+        )
         .manage(Core { status: Mutex::new(CoreStatus::Starting), child: Mutex::new(None) })
-        .manage(Mini::default())
-        .invoke_handler(tauri::generate_handler![core_status, open_key_page, reveal_log, set_mini])
+        .invoke_handler(tauri::generate_handler![core_status, open_key_page, reveal_log, overlay_poll, set_click_through])
         .setup(|app| {
+            // No Dock icon: Jett lives in the menu bar and floats over everything.
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            if let Err(err) = add_tray(app) {
+                eprintln!("live-agent: no menu-bar icon: {err}");
+            }
+            {
+                use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+                let show_hide = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyS);
+                if let Err(err) = app.global_shortcut().register(show_hide) {
+                    eprintln!("live-agent: Ctrl+Option+S is taken: {err}");
+                }
+            }
+            if let Some(window) = app.get_webview_window("main") {
+                if let Err(err) = cover_main_screen(&window) {
+                    eprintln!("live-agent: could not place the overlay window: {err}");
+                }
+            }
             if let Err(reason) = start_core(app.handle()) {
                 *app.state::<Core>().status.lock().unwrap() = CoreStatus::Down { reason };
             }

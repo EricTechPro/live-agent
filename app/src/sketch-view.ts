@@ -22,6 +22,8 @@ interface Drawn {
 }
 
 const ERASE_MS = 420;
+/** The dark halo under every stroke and letter, so the drawing reads over any desktop. */
+const HALO = "#020c0e";
 const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const font = (size: number) => `500 ${size}px "Martian Mono", ui-monospace, monospace`;
 
@@ -235,6 +237,15 @@ export function mountSketch(core: CoreClient, host: HTMLElement) {
     const minWidth = 1.3 / fit.scale;
     c.lineCap = "round";
     c.lineJoin = "round";
+    // A dark halo under the stroke (ticket 36): the board is see-through now, so the ink
+    // must read over a white page as well as a dark one.
+    c.strokeStyle = HALO;
+    c.globalAlpha = 0.5;
+    c.lineWidth = Math.max(part.width, minWidth) * 2.8;
+    c.beginPath();
+    c.moveTo(pts[0]!.x, pts[0]!.y);
+    for (const pt of pts) c.lineTo(pt.x, pt.y);
+    c.stroke();
     c.strokeStyle = color;
 
     // Soft glow: the whole stroke once, wide and faint.
@@ -270,6 +281,13 @@ export function mountSketch(core: CoreClient, host: HTMLElement) {
     c.beginPath();
     c.rect(left - 4, part.y - h / 2, (width + 8) * t, h);
     c.clip();
+    // The same dark halo as the strokes, as an outline round the letters.
+    c.strokeStyle = HALO;
+    c.globalAlpha = 0.6;
+    c.lineWidth = 4 / fit.scale;
+    c.lineJoin = "round";
+    c.strokeText(part.text, left, part.y);
+    c.globalAlpha = 1;
     c.fillStyle = color;
     c.shadowColor = color;
     c.shadowBlur = 6 * dpr;

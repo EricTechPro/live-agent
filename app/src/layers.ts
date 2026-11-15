@@ -1,10 +1,10 @@
-// Which layer the window shows (ticket 22). Pure, like panel.ts.
-// - home: the big orb and the call controls, almost nothing else. You just talk.
-// - center: the control center (sidebar, chat, right panel), opened from home and
-//   closed with its X or Escape. The call never notices: only the view changes.
+// Is the popover open (tickets 22, 36)? Pure, like panel.ts.
+// - home: the overlay at rest, just the orb and the captions. You just talk.
+// - center: the glass popover by the orb (chats, jobs, brain), opened from its menu
+//   button and closed with its X or Escape. The call never notices: only the view changes.
 export type Layer = "home" | "center";
 
-/** open / close: the buttons. escape: the Escape key. show: something wants to be seen (a diagram, the Jobs button). */
+/** open / close: the buttons. escape: the Escape key. show: something wants to be seen (the jobs badge). */
 export type LayerAction = "open" | "close" | "escape" | "show";
 
 export const startLayer: Layer = "home";

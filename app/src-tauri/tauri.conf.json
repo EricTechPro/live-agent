@@ -14,13 +14,18 @@
       {
         "label": "main",
         "title": "Jett",
-        "width": 960,
-        "height": 600,
-        "minWidth": 640,
-        "minHeight": 420,
-        "center": true
+        "width": 1280,
+        "height": 800,
+        "transparent": true,
+        "decorations": false,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "visibleOnAllWorkspaces": true,
+        "skipTaskbar": true,
+        "resizable": false
       }
     ],
+    "macOSPrivateApi": true,
     "security": {
       "csp": {
         "default-src": "'self'",

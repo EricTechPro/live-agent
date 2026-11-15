@@ -1,42 +1,25 @@
-// The control center's right panel (ticket 25): Canvas and Jobs tabs. Pure, like
-// transcript.ts. Something drawn opens the Canvas tab; a job starting never steals
-// the tab (the Jobs tab shows a running count badge instead).
-import type { AgentEvent } from "../../src/core/events.ts";
-
-export type Tab = "canvas" | "jobs";
-export const TABS: readonly Tab[] = ["canvas", "jobs"];
+// The popover's views (tickets 25 and 36): one compact glass popover by the orb, one view
+// at a time, picked with icon tabs. Pure, like transcript.ts. Nothing the core says
+// switches the view: drawings go straight on the screen, approval cards sit by the orb,
+// and a job starting only bumps the running count badges.
+export type Tab = "chat" | "jobs" | "brain";
+export const TABS: readonly Tab[] = ["chat", "jobs", "brain"];
 
 export interface Panel {
-  open: boolean;
   tab: Tab;
 }
 
-export const startPanel: Panel = { open: true, tab: "canvas" };
+export const startPanel: Panel = { tab: "chat" };
 
 export type PanelAction =
   /** A tab was clicked, or picked with the arrow keys. */
   | { type: "panel.select"; tab: Tab }
-  /** The panel's X. */
-  | { type: "panel.close" }
-  /** The top bar's Jobs icon: opens the panel on Jobs; on Jobs already, closes it. */
+  /** The orb's running-jobs badge. */
   | { type: "panel.jobs-button" };
 
-/** Events that put something on the canvas: the sketch canvas's `canvas.*` (tickets 31 to 35). */
-export function drawsOnCanvas(event: { type: string }) {
-  return event.type.startsWith("canvas.");
-}
-
-export function nextPanel(panel: Panel, input: PanelAction | AgentEvent): Panel {
-  switch (input.type) {
-    case "panel.select":
-      return { open: true, tab: input.tab };
-    case "panel.close":
-      return panel.open ? { ...panel, open: false } : panel;
-    case "panel.jobs-button":
-      return panel.open && panel.tab === "jobs" ? { ...panel, open: false } : { open: true, tab: "jobs" };
-    default:
-      return drawsOnCanvas(input) && !(panel.open && panel.tab === "canvas") ? { open: true, tab: "canvas" } : panel;
-  }
+export function nextPanel(panel: Panel, action: PanelAction): Panel {
+  const tab = action.type === "panel.select" ? action.tab : "jobs";
+  return panel.tab === tab ? panel : { tab };
 }
 
 /** Arrow keys (and Home / End) on the tab list: the tab to move to, or undefined for any other key. */

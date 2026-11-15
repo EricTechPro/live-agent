@@ -29,6 +29,10 @@ const OFF = 0.04; // an unlit LED, drawn dark like the logo
 export interface LedOrbOptions {
   /** Read every frame: the mood to show when no timed mood (`set` with secs) is running. */
   follow?: () => Mood;
+  /** Read every frame: the lit LEDs' colour as "r,g,b" (ticket 37: each call state has its own). Default teal. */
+  tint?: () => string;
+  /** Read every frame: the user's mic level, 0..1. While listening the orb swells and its ring brightens with it. */
+  level?: () => number;
 }
 
 export function mountLedOrb(canvas: HTMLCanvasElement, options: LedOrbOptions = {}): WizardOrb {
@@ -138,8 +142,11 @@ export function mountLedOrb(canvas: HTMLCanvasElement, options: LedOrbOptions = 
     const gap = Math.max(1, size * 0.12);
     g.clearRect(0, 0, W, W);
     g.globalAlpha = mood === "off" ? 0.45 : 1;
+    const rgb = options.tint?.() ?? "120,255,226";
+    const lvl = mood === "listen" ? Math.min(1, Math.max(0, options.level?.() ?? 0)) : 0;
     const k =
-      1 + (mood === "speak" ? 0.09 * Math.abs(Math.sin(t * 9)) : mood === "listen" ? 0.05 * Math.sin(t * 6) : 0.025 * Math.sin(t * 2));
+      1 +
+      (mood === "speak" ? 0.09 * Math.abs(Math.sin(t * 9)) : mood === "listen" ? 0.03 * Math.sin(t * 6) + 0.16 * lvl : 0.025 * Math.sin(t * 2));
     const hop = mood === "hype" ? Math.max(0, Math.sin(Math.min(1, (t - (moodUntil - 0.6)) / 0.6) * Math.PI)) * 3 : 0;
     p = still ? 1 : Math.min(1, (t - switchAt) / 0.45);
     for (let y = 0; y < N; y++) {
@@ -148,7 +155,7 @@ export function mountLedOrb(canvas: HTMLCanvasElement, options: LedOrbOptions = 
         const a = cell(((x - r0) * us) / k, ((y - r0) * us + hop) / k, s);
         if (!a) continue;
         g.fillStyle =
-          a === OFF ? "#14302f" : a >= 2 ? "rgba(232,255,250,1)" : `rgba(120,255,226,${a === 1 ? 0.82 + 0.18 * Math.sin(t * 2 + s * 9) : a})`;
+          a === OFF ? "#14302f" : a >= 2 ? "rgba(232,255,250,1)" : `rgba(${rgb},${a === 1 ? 0.82 + 0.18 * Math.sin(t * 2 + s * 9) : Math.min(1, a + lvl * 0.4)})`;
         g.fillRect(x * size + gap, y * size + gap, size - gap * 2, size - gap * 2);
       }
     }

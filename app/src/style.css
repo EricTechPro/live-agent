@@ -1,221 +1,248 @@
-/* The main Jett view, in the Pixel look of the setup wizard. Tokens and the shared parts
-   (.pf pixel frame, .led, .btn, .chip, .field, .sel) live in pixel.css; this file is the
-   layout. Ids and classes the code uses (#orb[data-state], .talk, .setup, .transcript li.user/
-   .model/.note, .job[data-status], body.mini) keep their meaning.
-   Two layers (ticket 22): .shell[data-layer="home"] shows the big orb, [data-layer="center"]
-   the control center. The #dock (bubble, orb, call controls) moves between them. */
+/* Jett v3 (tickets 36, 37): a full-screen transparent overlay. Nothing paints the page:
+   only the orb, the captions, the drawing and the glass pieces show, and the desktop
+   shows through everywhere else. Tokens and shared parts (.pf, .led, .btn, …) live in
+   pixel.css; the setup wizard has its own wizard.css. */
 
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; }
+html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
 body {
-  background:
-    radial-gradient(620px 460px at 50% 38%, rgba(40,170,150,.12), transparent 70%),
-    radial-gradient(circle, rgba(80,210,190,.07) .9px, transparent 1.3px) 0 0 / 8px 8px,
-    var(--bg);
   color: var(--ink);
   font: 400 12px/1.55 var(--mono); font-stretch: 87.5%;
   -webkit-font-smoothing: antialiased;
 }
 [hidden] { display: none !important; }
 
-.shell { display: flex; flex-direction: column; height: 100vh; }
-
-/* ---- top bar: quiet actions on the right, the rest drags the window ---- */
-.topbar { flex: none; display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; }
-.topbar .spacer { flex: 1; align-self: stretch; }
-.top-actions { display: flex; gap: 6px; align-items: center; }
-.shell[data-layer="home"] .center-only, .shell[data-layer="center"] .home-only { display: none; }
-
-/* ---- icon buttons (ticket 26): a pixel frame around a pixel icon, a tip on hover and focus ---- */
-.ib {
-  --frame: transparent; --fill: transparent;
-  appearance: none; border: 0; padding: 0; width: 34px; height: 34px; flex: none; cursor: pointer;
-  display: inline-grid; place-items: center; color: var(--ink-2);
+:root {
+  --glass: rgba(6, 22, 24, .86);
+  --glass-hi: rgba(10, 34, 36, .92);
+  --glass-edge: rgba(120, 255, 226, .28);
+  --glass-blur: blur(18px) saturate(1.3);
+  --glass-shadow: 0 10px 34px rgba(0, 0, 0, .38), 0 0 0 1px rgba(0, 0, 0, .25);
 }
-.ib:hover { --frame: var(--edge-hi); --fill: #0a2224; color: var(--ink); }
-.ib:disabled { color: #4f7470; cursor: default; --frame: transparent; --fill: transparent; }
-/* A visible frame needs a fill, or the frame colour shows through as a solid block. */
-.ib.pf:not(.call):focus-visible { --fill: #0a2224; }
+
+.overlay { position: fixed; inset: 0; pointer-events: none; }
+/* Only these take the mouse (the window lets clicks through everywhere else, main.ts). */
+[data-hit], .tip { pointer-events: auto; }
+
+/* ---- icon buttons (ticket 26) ---- */
+.ib {
+  appearance: none; border: 0; padding: 0; width: 30px; height: 30px; flex: none; cursor: pointer; border-radius: 9px;
+  display: inline-grid; place-items: center; color: var(--ink-2); background: transparent; position: relative;
+  transition: background-color .15s var(--ease), color .15s var(--ease);
+}
+.ib:hover { background: rgba(120, 255, 226, .1); color: var(--ink); }
+.ib:disabled { color: #4f7470; cursor: default; background: transparent; }
+.ib:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
 .ib .icon, .ib .icon-slot { display: block; pointer-events: none; }
-/* Focus: the frame turns white (pixel.css .pf:focus-visible); bare icon buttons get an outline. */
-.ib:not(.pf):focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-.jobs-toggle { position: relative; }
-.jobs-toggle[aria-expanded="true"] { --frame: var(--led); --fill: #0a2a28; color: var(--led); }
+.glass-ib { background: var(--glass); border: 1px solid var(--glass-edge); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); }
+.glass-ib:hover { background: var(--glass-hi); }
 .badge {
-  position: absolute; top: 2px; right: 1px; min-width: 14px; height: 14px; padding: 0 3px;
-  background: var(--led); color: var(--led-ink); font: 800 9px/14px var(--mono); text-align: center; pointer-events: none;
+  position: absolute; top: -3px; right: -4px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px;
+  background: var(--led); color: var(--led-ink); font: 800 9px/15px var(--mono); text-align: center; pointer-events: none;
 }
 .badge[data-count="0"] { display: none; }
-.jobs-toggle[data-failed="true"] .badge { display: block; background: var(--bad); color: #2a0b06; }
+[data-failed="true"] > .badge { display: block; background: var(--bad); color: #2a0b06; }
 
 /* The one floating tooltip (tooltip.ts): label plus the shortcut key, if any. */
 .tip {
   position: fixed; z-index: 100; pointer-events: none; display: flex; gap: 8px; align-items: center;
-  padding: 5px 8px; background: #0c2b2c; color: var(--ink); outline: 2px solid var(--edge-hi);
-  font: 600 11px/1.2 var(--mono); white-space: nowrap;
+  padding: 5px 9px; border-radius: 8px; background: rgba(8, 30, 32, .92); color: var(--ink); border: 1px solid var(--glass-edge);
+  font: 600 11px/1.2 var(--mono); white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,.35);
 }
-.tip kbd { font: 700 10px/1 var(--mono); color: var(--ink-3); padding: 2px 4px; outline: 1px solid var(--edge-hi); }
+.tip kbd { font: 700 10px/1 var(--mono); color: var(--ink-3); padding: 2px 4px; border-radius: 4px; border: 1px solid var(--glass-edge); }
 
-/* ---- the dock: bubble over the LED orb, state word, call controls ---- */
-.dock { display: flex; flex-direction: column; align-items: center; gap: 18px; }
-.orb-stage { display: flex; flex-direction: column; align-items: center; }
-.orb-stage .say {
-  --frame: var(--led); --fill: #04191b;
-  margin: 0 0 12px; max-width: 320px; min-height: 30px; padding: 6px 12px 7px; text-align: center;
-  color: #d6fff6; font: 900 14px/1.25 var(--dots); letter-spacing: .03em; text-transform: uppercase;
-  text-shadow: 0 0 6px rgba(120,255,226,.6); overflow-wrap: break-word; text-wrap: balance;
+/* ---- the orb dock: grip + menu, orb, state words, call buttons ---- */
+.dock { position: absolute; left: 0; top: 0; width: 148px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 0 6px; }
+.dock-top { position: relative; width: 100%; height: 26px; display: flex; justify-content: center; align-items: center; }
+/* The grip: a pill you grab to move Jett. Shows on hover, always there for the keyboard. */
+.grip {
+  appearance: none; border: 0; padding: 0; width: 56px; height: 20px; border-radius: 10px; cursor: grab;
+  background: transparent; display: grid; place-items: center; touch-action: none;
 }
-.orb-stage .tail { width: 10px; height: 6px; margin: -12px 0 10px; background: var(--led);
-  clip-path: polygon(0 0,100% 0,100% 2px,80% 2px,80% 4px,60% 4px,60% 6px,40% 6px,40% 4px,20% 4px,20% 2px,0 2px); }
-.orb { width: 104px; height: 104px; transition: width .25s var(--ease), height .25s var(--ease); }
+.grip span { width: 34px; height: 5px; border-radius: 3px; background: rgba(200, 255, 244, .38); box-shadow: 0 0 0 1px rgba(0,0,0,.25); transition: background-color .15s var(--ease), width .15s var(--ease); }
+.grip:hover span, .dock.dragging .grip span { background: var(--led); width: 42px; }
+.dock.dragging .grip { cursor: grabbing; }
+.grip:focus-visible { outline: 2px solid var(--ink); }
+.menu-btn { position: absolute; right: 6px; top: 0; width: 26px; height: 26px; border-radius: 8px; opacity: .0; }
+.dock:hover .menu-btn, .menu-btn:focus-visible, .menu-btn[aria-expanded="true"], .overlay[data-layer="center"] .menu-btn { opacity: 1; }
+
+.orb-wrap { position: relative; }
+.orb {
+  appearance: none; border: 0; padding: 6px; width: 112px; height: 112px; border-radius: 50%; cursor: pointer; display: block;
+  /* A soft dark disc so the LEDs read over a white page as well as a dark one. */
+  background: radial-gradient(circle, rgba(4, 16, 18, .62) 0 58%, rgba(4, 16, 18, .25) 66%, transparent 71%);
+  transition: transform .2s var(--ease), opacity .3s var(--ease), filter .3s var(--ease);
+}
+.orb:hover:not(:disabled) { transform: scale(1.04); }
+.orb:disabled { cursor: default; }
+.orb:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .orb canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+.dock[data-look="muted"] .orb canvas, .dock[data-look="ended"] .orb canvas { opacity: .62; filter: grayscale(1); }
+/* Each look glows its own colour around the orb. */
+.dock { --look: 120, 255, 226; }
+.dock[data-look="thinking"] { --look: 196, 160, 255; }
+.dock[data-look="speaking"] { --look: 140, 206, 255; }
+.dock[data-look="muted"], .dock[data-look="ended"], .dock[data-look="starting"] { --look: 206, 218, 216; }
+.dock[data-look="offline"] { --look: 255, 150, 130; }
+.orb::after { content: ""; position: absolute; inset: 10px; border-radius: 50%; pointer-events: none; box-shadow: 0 0 26px 2px rgba(var(--look), .22); transition: box-shadow .3s var(--ease); }
+.dock[data-look="listening"] .orb::after, .dock[data-look="speaking"] .orb::after { box-shadow: 0 0 34px 6px rgba(var(--look), .34); }
+
+.muted-badge {
+  position: absolute; left: 6px; bottom: 8px; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  background: #2a1411; color: var(--bad); border: 1px solid rgba(255, 180, 168, .5); pointer-events: none;
+}
+.jobs-badge {
+  position: absolute; right: 0; top: 4px; appearance: none; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;
+  height: 22px; padding: 0 7px 0 6px; border-radius: 11px; border: 1px solid var(--glass-edge);
+  background: var(--glass); color: var(--led); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+}
+.jobs-badge .badge { position: static; background: none; color: var(--led); padding: 0; min-width: 0; font-size: 10px; }
+.jobs-badge:has(.badge[data-count="0"]):not([data-failed="true"]) { display: none; }
+.jobs-badge[data-failed="true"] { color: var(--bad); border-color: rgba(255, 180, 168, .5); }
+.jobs-badge[data-failed="true"] .badge { display: block; color: var(--bad); }
+.jobs-badge:focus-visible { outline: 2px solid var(--ink); }
+
+/* The state in plain words: a small glass pill, so it reads over any background. */
 .orb-label {
-  margin: 8px 0 0; color: var(--led); font: 900 12px/1.2 var(--dots); letter-spacing: .08em; text-transform: uppercase;
-  text-shadow: 0 0 6px rgba(120,255,226,.5);
+  margin: 0; padding: 3px 10px 4px; border-radius: 11px; background: rgba(4, 16, 18, .66);
+  color: rgb(var(--look)); font: 600 12px/1.25 var(--mono); font-stretch: 87.5%; white-space: nowrap;
+  text-shadow: 0 0 8px rgba(var(--look), .35);
 }
-.orb[data-state="connecting"] ~ .orb-label, .orb[data-state="offline"] ~ .orb-label, body.paused .orb-label { color: var(--ink-3); text-shadow: none; }
-.controls { display: flex; gap: 10px; align-items: center; }
+.controls { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+.call { width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--glass-edge); background: var(--glass); color: var(--ink);
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+.call:hover { background: var(--glass-hi); }
+.talk { background: var(--led); border-color: var(--led); color: var(--led-ink); }
+.talk:hover { background: var(--led-hi); color: var(--led-ink); }
+.talk:disabled { background: #1c3634; border-color: #1c3634; color: #6f8f8a; }
+.mute[aria-pressed="true"] { background: #f3f6f5; border-color: #f3f6f5; color: #18302d; }
+.hangup { background: #e5483a; border-color: #e5483a; color: #fff; }
+.hangup:hover { background: #f05a4c; color: #fff; }
 
-/* Call controls: Pause / Resume, and Start call (solid teal) that becomes End call (solid red). */
-.call { --k: 3px; width: 52px; height: 52px; --frame: var(--edge-hi); --fill: #0a2224; color: var(--ink); }
-.call:hover { --frame: var(--edge-hot); }
-.talk { width: 64px; height: 64px; --frame: var(--led); --fill: var(--led); color: var(--led-ink); }
-.talk:hover { --frame: var(--led-hi); --fill: var(--led-hi); color: var(--led-ink); }
-.talk.end { --frame: #ff7a66; --fill: #ff7a66; color: #2a0b06; }
-.talk.end:hover { --frame: var(--bad); --fill: var(--bad); color: #2a0b06; }
-.call:disabled { --frame: #1c3634; --fill: #1c3634; color: #6f8f8a; }
-.pause[aria-pressed="true"] { --frame: var(--led); color: var(--led); }
-
-/* ---- home: the big orb in the middle, nothing else ---- */
-.home { flex: 1; min-height: 0; display: grid; place-items: center; padding-bottom: 44px; }
-.home .orb { width: 232px; height: 232px; }
-.home .orb-label { font-size: 13px; }
-
-/* ---- control center: sidebar | chat | panel ---- */
-.center { flex: 1; min-height: 0; display: grid; grid-template-columns: 208px minmax(0, 1fr) 280px; border-top: 2px solid var(--edge); }
-.sidebar, .panel { min-height: 0; overflow: auto; background: rgba(7,26,28,.72); padding: 14px 12px; }
-.sidebar { border-right: 2px solid var(--edge); }
-.panel { border-left: 2px solid var(--edge); }
-.side-title { margin: 0 0 6px; font: 700 10px/1.2 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
-.side-empty { margin: 0 0 18px; color: var(--ink-3); font-size: 11px; }
-.center[data-panel="closed"] { grid-template-columns: 208px minmax(0, 1fr); }
-
-/* ---- past chats (ticket 24): newest first, title + relative date, a click reads the note ---- */
-.chat-list { list-style: none; margin: 0 -6px 18px; padding: 0; max-height: 38vh; overflow: auto; }
-.chat-list:empty { margin-bottom: 0; }
-.chat-item {
-  appearance: none; border: 0; background: none; cursor: pointer; width: 100%;
-  display: flex; align-items: center; gap: 6px; padding: 5px 6px;
-  color: var(--ink-2); font: 500 12px/1.3 var(--mono); font-stretch: 87.5%; text-align: left;
+/* ---- live captions (ticket 37): bottom centre, yours above Jett's ---- */
+.captions {
+  position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); width: min(720px, calc(100vw - 48px));
+  display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none;
 }
-.chat-item:hover { background: #0c2b2c; color: var(--ink); }
-.chat-item:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
-.chat-item .icon { flex: none; color: var(--ink-3); }
-.chat-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chat-when { flex: none; color: var(--ink-3); font-size: 10px; }
-.chat-row[aria-current="true"] .chat-item { background: #12393a; color: var(--led); }
-.chat-row[aria-current="true"] .chat-item .icon { color: var(--led); }
-
-/* ---- brain tree (ticket 23): the three parts, folders collapsible, a click reads a note ---- */
-.brain-tree { list-style: none; margin: 0 -6px 18px; padding: 0; }
-.brain-item {
-  appearance: none; border: 0; background: none; cursor: pointer; width: 100%;
-  display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px calc(6px + var(--depth, 0) * 12px);
-  color: var(--ink-2); font: 500 12px/1.3 var(--mono); font-stretch: 87.5%; text-align: left;
+.cap {
+  margin: 0; max-width: 100%; padding: 7px 14px 8px; border-radius: 14px;
+  background: rgba(4, 14, 16, .72); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  font: 500 16px/1.4 var(--mono); font-stretch: 87.5%; text-align: center; overflow-wrap: anywhere;
+  box-shadow: 0 6px 22px rgba(0,0,0,.3); animation: cap-in .25s var(--ease);
 }
-.brain-item:hover { background: #0c2b2c; color: var(--ink); }
-.brain-item:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
-.brain-item .icon { flex: none; color: var(--ink-3); }
-.brain-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.brain-chev { flex: none; width: 10px; display: grid; place-items: center; color: var(--ink-3); }
-.brain-row[aria-expanded="false"] .brain-chev .icon { transform: rotate(-90deg); }
-.brain-row.part .brain-item { color: var(--ink); font-weight: 700; }
-.brain-row.part .brain-item > .icon { color: var(--led); }
-.brain-count { flex: none; color: var(--ink-3); font-size: 10px; }
-.brain-row[aria-selected="true"] .brain-item { background: #12393a; color: var(--led); }
-.brain-row[aria-selected="true"] .brain-item .icon { color: var(--led); }
+.cap.user { color: #f1f5f4; border: 1px solid rgba(255, 255, 255, .16); font-size: 14px; }
+.cap.user::before { content: "You  "; color: rgba(241, 245, 244, .55); font-size: 11px; letter-spacing: .06em; white-space: pre; }
+.cap.model { color: var(--led); border: 1px solid var(--glass-edge); text-shadow: 0 0 10px rgba(120, 255, 226, .25); }
+@keyframes cap-in { from { opacity: 0; transform: translateY(4px); } }
 
-/* The note reader: covers the transcript, read only. */
-.reader { flex: 1; min-height: 0; display: flex; flex-direction: column; --frame: var(--edge-hi); --fill: #061719; }
-.reader-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border-bottom: 2px solid var(--edge); }
-.reader-icon { color: var(--led); display: grid; }
-.reader-head .ib { width: 28px; height: 28px; background: none; }
-.reader-head .ib:hover { background: #0c2b2c; }
-.reader-name { margin: 0; font: 700 13px/1.2 var(--mono); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.reader-path { flex: 1; min-width: 0; color: var(--ink-3); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.reader-text {
-  flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 14px 16px 18px;
-  white-space: pre-wrap; overflow-wrap: anywhere; user-select: text;
-  color: var(--ink-2); font: 400 13px/1.6 var(--mono); font-stretch: 87.5%;
+/* ---- the drawing, straight on the screen (tickets 32 to 36) ---- */
+/* A terminal-style glass card in the empty half of the screen (main.ts places it). */
+.stage {
+  position: absolute; left: 24px; top: 8vh;
+  width: min(760px, 52vw, calc(56vh * 5 / 3)); pointer-events: none;
+  border-radius: 14px; overflow: hidden;
+  background: rgba(3, 12, 14, .5); border: 1px solid rgba(120, 255, 226, .22);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, .35);
+  backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  animation: pop-in .25s var(--ease);
 }
-.reader-text:focus-visible { outline: 2px solid var(--ink); outline-offset: -4px; }
-@media (max-width: 860px) {
-  .center { grid-template-columns: minmax(0, 1fr) 260px; } .center[data-panel="closed"] { grid-template-columns: minmax(0, 1fr); }
-  .sidebar { display: none; }
+.stage:not([data-view="sketch"]), .stage[data-dismissed="true"] { display: none; }
+.stage-head { display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 6px 0 12px; background: rgba(0, 0, 0, .3); border-bottom: 1px solid rgba(120, 255, 226, .12); }
+.stage-dots { display: flex; gap: 5px; }
+.stage-dots i { width: 8px; height: 8px; border-radius: 50%; background: rgba(200, 255, 244, .22); }
+.stage-title { flex: 1; color: var(--ink-3); font: 600 11px/1 var(--mono); letter-spacing: .04em; }
+.stage-x { width: 22px; height: 22px; border-radius: 6px; color: var(--ink-3); }
+.stage .sketch { padding: 6px 8px 8px; }
+
+/* ---- the cues beside the orb (ticket 37) ---- */
+.cues { position: absolute; width: 380px; display: flex; flex-direction: column; gap: 8px; transform: translateY(-50%); pointer-events: none; }
+.cues[data-side="left"] { align-items: flex-end; translate: -100% 0; }
+.cues[data-side="right"] { align-items: flex-start; }
+.cue-pill {
+  display: inline-flex; align-items: center; gap: 8px; max-width: 300px; height: 30px; padding: 0 12px 0 10px; border-radius: 15px;
+  background: rgba(4, 16, 18, .78); border: 1px solid var(--glass-edge); color: var(--ink);
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); box-shadow: 0 6px 18px rgba(0,0,0,.3);
+  font: 500 12.5px/1.2 var(--mono); font-stretch: 87.5%;
 }
-@media (max-width: 700px) { .center, .center[data-panel="closed"] { grid-template-columns: minmax(0, 1fr); } .panel { display: none; } }
+.cue-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eq { display: none; align-items: center; gap: 2px; height: 16px; }
+.eq i { width: 3px; height: 16px; border-radius: 2px; background: var(--led); transform: scaleY(.25); transition: transform 60ms linear; }
+.spin { display: none; width: 13px; height: 13px; border-radius: 50%; border: 2px solid rgba(196, 160, 255, .3); border-top-color: rgb(196, 160, 255); animation: spin .8s linear infinite; }
+.cue-pill[data-kind="listen"] .eq { display: inline-flex; }
+.cue-pill[data-kind="work"] .spin { display: inline-block; }
+.cue-pill[data-kind="work"] { color: #e3d8ff; border-color: rgba(196, 160, 255, .4); }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-/* ---- right panel (ticket 25): Canvas and Jobs tabs, X to close ---- */
-.panel { display: flex; flex-direction: column; gap: 12px; padding-top: 8px; }
-.panel-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 2px solid var(--edge); }
-/* The panel's own X: small and bare in the tab row, so it never reads as a second
-   control-center X stacked under the top bar's framed one (whose tip goes left). */
-.panel-close { width: 26px; height: 26px; margin-right: 2px; background: none; color: var(--ink-3); }
-.panel-close:hover { background: #0c2b2c; color: var(--ink); }
-.tabs { display: flex; gap: 2px; }
-.tab {
-  margin-bottom: -2px;
-  appearance: none; border: 0; background: none; cursor: pointer; position: relative;
-  display: inline-flex; align-items: center; gap: 6px; padding: 8px 10px 7px;
-  color: var(--ink-3); font: 700 11px/1.2 var(--mono); font-stretch: 87.5%; letter-spacing: .08em; text-transform: uppercase;
-  border-bottom: 2px solid transparent;
+/* Jett's speech bubble, its tail pointing at the orb. Long replies fold behind a chevron. */
+.bubble {
+  position: relative; max-width: 380px; padding: 9px 12px 10px 14px; border-radius: 16px;
+  background: rgba(6, 24, 26, .86); border: 1px solid var(--glass-edge); color: var(--ink);
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); box-shadow: 0 8px 24px rgba(0,0,0,.32);
+  animation: cap-in .2s var(--ease);
 }
-.tab:hover { color: var(--ink); }
-.tab[aria-selected="true"] { color: var(--led); border-bottom-color: var(--led); }
-.tab:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
-.tab-badge { position: static; }
-.tab[data-failed="true"] .tab-badge { display: block; background: var(--bad); color: #2a0b06; }
-.tabpanel { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
-.canvas-empty { margin: auto; color: var(--ink-3); font: 900 13px/1.2 var(--dots); letter-spacing: .06em; text-transform: uppercase; }
+.bubble::after {
+  content: ""; position: absolute; top: calc(50% - 7px); width: 14px; height: 14px; rotate: 45deg;
+  background: inherit; border: inherit; border-radius: 3px;
+}
+.cues[data-side="left"] .bubble::after { right: -8px; border-left-color: transparent; border-bottom-color: transparent; }
+.cues[data-side="right"] .bubble::after { left: -8px; border-right-color: transparent; border-top-color: transparent; }
+.bubble-text {
+  margin: 0; font: 500 13.5px/1.45 var(--mono); font-stretch: 87.5%; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+}
+.bubble[data-open="true"] .bubble-text { -webkit-line-clamp: unset; max-height: 50vh; overflow: auto; }
+.bubble-more { float: right; width: 22px; height: 18px; margin: 2px -4px -4px 0; color: var(--ink-3); }
+.bubble[data-open="true"] .bubble-more .icon { transform: rotate(180deg); }
+.dock.ptt .orb { transform: scale(1.06); }
+#follow[aria-pressed="true"] { background: rgba(120, 255, 226, .16); color: var(--led); }
 
-.chat { min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 10px 16px 0; width: 100%; max-width: 760px; margin: 0 auto; }
-/* The orb sits small at the top of the chat: orb, state word and call controls in one row. */
-.chat-slot { flex: none; display: flex; justify-content: center; }
-.chat .dock { flex-direction: row; gap: 14px; }
-.chat .orb-stage { flex-direction: row; gap: 8px; }
-.chat .orb { width: 44px; height: 44px; }
-.chat .orb-label { margin: 0; min-width: 72px; }
-.chat .say, .chat .tail { display: none; }
+/* ---- the popover (ticket 36): one compact glass panel beside the orb ---- */
+.popover {
+  position: absolute; left: 0; top: 0; width: 380px; height: min(540px, calc(100vh - 32px));
+  display: flex; flex-direction: column; border-radius: 18px;
+  background: var(--glass); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow);
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  animation: pop-in .18s var(--ease);
+}
+@keyframes pop-in { from { opacity: 0; transform: scale(.97); } }
+.pop-head { flex: none; display: flex; align-items: center; gap: 2px; padding: 8px 8px 6px 10px; border-bottom: 1px solid rgba(120, 255, 226, .14); }
+.pop-head .spacer { flex: 1; }
+.tabs { display: flex; gap: 2px; padding: 2px; border-radius: 11px; background: rgba(0, 0, 0, .25); }
+.tab { width: 34px; height: 28px; color: var(--ink-3); }
+.tab[aria-selected="true"] { background: rgba(120, 255, 226, .16); color: var(--led); }
+.tab .badge { top: -4px; right: -4px; }
+.view { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 0; overflow: hidden; }
+#panel-jobs, #panel-brain { overflow: auto; padding-bottom: 12px; }
+.side-title { margin: 4px 0 6px; font: 700 10px/1.2 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+.side-empty { margin: 0 0 14px; color: var(--ink-3); font-size: 11px; }
 
-/* ---- transcript: pixel-framed chat rows. You on the right in ink-2, Jett on the left in teal ---- */
-.transcript { flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 2px 4px; list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.transcript li { white-space: pre-wrap; font-size: 13px; line-height: 1.5; max-width: 82%; }
-.transcript .user, .transcript .model { position: relative; isolation: isolate; padding: 7px 11px; }
-.transcript .user { align-self: flex-end; color: var(--ink-2); --frame: var(--edge-hi); --fill: #0a2224; }
-.transcript .model { align-self: flex-start; color: var(--led); --frame: #24675f; --fill: #061b1c; }
+/* ---- transcript (Chat view) ---- */
+.transcript { flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 2px; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.transcript li { white-space: pre-wrap; font-size: 12.5px; line-height: 1.5; max-width: 86%; }
+.transcript .user, .transcript .model { padding: 7px 11px; border-radius: 12px; }
+.transcript .user { align-self: flex-end; color: var(--ink); background: rgba(255, 255, 255, .08); border-bottom-right-radius: 4px; }
+.transcript .model { align-self: flex-start; color: var(--led); background: rgba(120, 255, 226, .08); border-bottom-left-radius: 4px; }
 .transcript .note { align-self: center; color: var(--ink-3); font-size: 11px; max-width: 100%; text-align: center; }
 
-/* The composer: one framed box holding the safety mode pill, the input and the send arrow. */
-.composer { --k: 3px; --frame: var(--edge-hi); --fill: #061719; display: flex; align-items: center; gap: 8px; padding: 6px; }
-.composer:focus-within { --frame: var(--led); }
-.composer input { flex: 1; min-width: 0; padding: 8px 0; border: 0; background: transparent; color: var(--ink); font: 500 13px/1.25 var(--mono); font-stretch: 87.5%; }
+/* The composer: the safety mode pill, the input and the send arrow (ticket 27). */
+.composer-wrap { position: relative; flex: none; }
+.composer { display: flex; align-items: center; gap: 8px; padding: 5px; border-radius: 12px; background: rgba(0, 0, 0, .3); border: 1px solid rgba(120, 255, 226, .18); }
+.composer:focus-within { border-color: var(--led); }
+.composer input { flex: 1; min-width: 0; padding: 7px 0; border: 0; background: transparent; color: var(--ink); font: 500 12.5px/1.25 var(--mono); font-stretch: 87.5%; }
 .composer input::placeholder { color: var(--ink-3); }
 .composer input:focus { outline: none; }
-.send { width: 32px; height: 32px; background: var(--led); color: var(--led-ink); }
+.send { width: 30px; height: 30px; background: var(--led); color: var(--led-ink); }
 .send:hover { background: var(--led-hi); color: var(--led-ink); }
 .send:disabled { background: #1c3634; color: #6f8f8a; }
-
-/* The safety mode pill (ticket 27): left of the input, like ChatGPT's composer picker. Bypass is red. */
-.composer-wrap { position: relative; flex: none; }
 .pill {
-  appearance: none; border: 0; cursor: pointer; flex: none; display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 8px 6px 10px; background: #0c2b2c; color: var(--ink-2); outline: 1px solid var(--edge-hi);
+  appearance: none; border: 0; cursor: pointer; flex: none; display: inline-flex; align-items: center; gap: 6px; border-radius: 8px;
+  padding: 6px 7px 6px 9px; background: rgba(120, 255, 226, .1); color: var(--ink-2);
   font: 700 11px/1.2 var(--mono); font-stretch: 87.5%; letter-spacing: .02em; white-space: nowrap;
 }
-.pill:hover, .pill[aria-expanded="true"] { color: var(--ink); outline-color: var(--edge-hot); }
+.pill:hover, .pill[aria-expanded="true"] { color: var(--ink); background: rgba(120, 255, 226, .18); }
 .pill:focus-visible { outline: 2px solid var(--ink); }
 .pill:disabled { cursor: default; color: #6f8f8a; }
-.pill[data-mode="bypass"] { color: var(--bad); outline-color: #7a3b33; background: #2a1411; }
+.pill[data-mode="bypass"] { color: var(--bad); background: rgba(255, 120, 100, .14); }
 .pill-chev svg { display: block; }
 .mode-menu {
   position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 30; min-width: 180px;
@@ -229,30 +256,81 @@ body {
 .mode-menu li[data-mode="bypass"][aria-selected="true"] { color: var(--bad); }
 .mode-menu .led { width: 6px; height: 6px; }
 
-/* Approve / deny cards (ticket 28): just above the composer, one per waiting call. */
-.approvals { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.approval { --frame: var(--led); --fill: #08262a; display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 12px; }
-.approval-text { flex: 1; min-width: 0; margin: 0; color: var(--ink); font-size: 12px; line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
-.approval-text b { color: var(--led); margin-right: 4px; }
-.answer.approve { --frame: var(--led); --fill: var(--led); color: var(--led-ink); }
-.answer.approve:hover { --frame: var(--led-hi); --fill: var(--led-hi); color: var(--led-ink); }
-.answer.deny { --frame: var(--edge-hi); --fill: #0a2224; color: var(--ink); }
-.answer.deny:hover { --frame: var(--bad); color: var(--bad); }
+/* ---- status line under the composer (ticket 10): the notes the last answer used ---- */
+.bar { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 2px 8px; min-height: 24px; font-size: 11px; }
+.bar:empty { min-height: 10px; padding: 0; }
+.bar-notes { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.bar-label { color: var(--ink-3); }
+.bar-note { color: var(--led); background: rgba(0,0,0,.25); border-radius: 6px; padding: 1px 6px; font: 500 11px/1.4 var(--mono); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-more { color: var(--ink-3); }
 
-/* ---- job board: the right panel's Jobs tab, an LED per job ---- */
+/* ---- approve / deny cards (ticket 28): small glass cards beside the orb ---- */
+.approvals { position: absolute; left: 0; top: 0; width: 300px; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.approval {
+  display: flex; align-items: center; gap: 6px; padding: 8px 8px 8px 12px; border-radius: 14px;
+  background: var(--glass-hi); border: 1px solid var(--led); box-shadow: var(--glass-shadow), 0 0 18px rgba(120, 255, 226, .18);
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+}
+.approval-text { flex: 1; min-width: 0; margin: 0; color: var(--ink); font-size: 12px; line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow-wrap: anywhere; }
+.approval-text b { color: var(--led); margin-right: 4px; }
+/* approvals-view.ts gives the answers the pixel frame class; the glass look drops it. */
+.answer { width: 32px; height: 32px; clip-path: none; isolation: auto; }
+.answer::before { display: none; }
+.answer.approve { background: var(--led); color: var(--led-ink); }
+.answer.approve:hover { background: var(--led-hi); color: var(--led-ink); }
+.answer.deny { background: rgba(255,255,255,.08); color: var(--ink); }
+.answer.deny:hover { color: var(--bad); background: rgba(255, 120, 100, .14); }
+
+/* ---- past chats (ticket 24) and the brain tree (ticket 23), in the Brain view ---- */
+.chat-list, .brain-tree { list-style: none; margin: 0 -6px 14px; padding: 0; }
+.chat-list:empty { margin-bottom: 0; }
+.chat-item, .brain-item {
+  appearance: none; border: 0; background: none; cursor: pointer; width: 100%; border-radius: 7px;
+  display: flex; align-items: center; gap: 6px; color: var(--ink-2); font: 500 12px/1.3 var(--mono); font-stretch: 87.5%; text-align: left;
+}
+.chat-item { padding: 5px 6px; }
+.brain-item { padding: 4px 6px 4px calc(6px + var(--depth, 0) * 12px); }
+.chat-item:hover, .brain-item:hover { background: rgba(120, 255, 226, .08); color: var(--ink); }
+.chat-item:focus-visible, .brain-item:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.chat-item .icon, .brain-item .icon { flex: none; color: var(--ink-3); }
+.chat-title, .brain-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-when, .brain-count { flex: none; color: var(--ink-3); font-size: 10px; }
+.chat-row[aria-current="true"] .chat-item, .brain-row[aria-selected="true"] .brain-item { background: rgba(120, 255, 226, .14); color: var(--led); }
+.chat-row[aria-current="true"] .chat-item .icon, .brain-row[aria-selected="true"] .brain-item .icon { color: var(--led); }
+.brain-chev { flex: none; width: 10px; display: grid; place-items: center; color: var(--ink-3); }
+.brain-row[aria-expanded="false"] .brain-chev .icon { transform: rotate(-90deg); }
+.brain-row.part .brain-item { color: var(--ink); font-weight: 700; }
+.brain-row.part .brain-item > .icon { color: var(--led); }
+
+/* The reader: a note or past chat, read only, in place of the lists. */
+.reader { flex: 1; min-height: 0; display: flex; flex-direction: column; border-radius: 12px; background: rgba(0, 0, 0, .28); border: 1px solid rgba(120, 255, 226, .16); }
+.reader-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 5px 5px 5px 10px; border-bottom: 1px solid rgba(120, 255, 226, .14); }
+.reader-icon { color: var(--led); display: grid; }
+.reader-head .ib { width: 26px; height: 26px; }
+.reader-name { margin: 0; font: 700 12.5px/1.2 var(--mono); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reader-path { flex: 1; min-width: 0; color: var(--ink-3); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reader-text {
+  flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 12px 14px 16px;
+  white-space: pre-wrap; overflow-wrap: anywhere; user-select: text;
+  color: var(--ink-2); font: 400 12.5px/1.6 var(--mono); font-stretch: 87.5%;
+}
+.reader-text:focus-visible { outline: 2px solid var(--ink); outline-offset: -4px; }
+#panel-brain:has(.reader:not([hidden])) { overflow: hidden; }
+
+/* ---- job cards (ticket 29), in the Jobs view ---- */
 .jobs { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 .job-empty { margin: 0; color: var(--ink-3); }
-.job-list { list-style: none; margin: 0; padding: 0 2px 0 0; display: flex; flex-direction: column; gap: 6px; overflow: auto; min-height: 0; }
-.job { --frame: var(--edge-hi); --fill: #061719; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; flex: none; }
+.job-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.job { --frame: rgba(120, 255, 226, .22); --fill: rgba(4, 18, 20, .82); padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; flex: none; }
 .job[data-status="working"] { --frame: var(--led); }
 .job[data-status="failed"] { --frame: var(--bad); }
 .job-head { display: flex; gap: 8px; align-items: center; min-height: 22px; }
-.job-helper { flex: none; display: grid; place-items: center; width: 22px; height: 22px; background: #0c2b2c; color: var(--led); outline: 1px solid var(--edge-hi); }
+.job-helper { flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: rgba(120, 255, 226, .1); color: var(--led); }
 .job-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; color: var(--ink); }
 .job-title::first-letter { text-transform: uppercase; }
 .job-status { display: inline-flex; align-items: center; gap: 5px; font: 700 10px/1.2 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); flex: none; }
 .job-status .led { width: 6px; height: 6px; }
-.job-meta { margin: 0 0 0 30px; display: flex; align-items: center; gap: 0; min-width: 0; font-size: 11px; color: var(--ink-3); white-space: nowrap; }
+.job-meta { margin: 0 0 0 30px; display: flex; align-items: center; min-width: 0; font-size: 11px; color: var(--ink-3); white-space: nowrap; }
 .job-meta > span { flex: none; }
 .job-meta > .job-folder { flex: 0 1 auto; }
 .job-meta > span + span::before { content: "·"; margin: 0 6px; color: var(--edge-hi); }
@@ -270,44 +348,16 @@ button.job-summary:focus-visible { outline: 2px solid var(--ink); outline-offset
 .job-chev .icon { display: block; transform: rotate(-90deg); }
 .job-summary[aria-expanded="true"] .job-chev .icon { transform: none; }
 .job-output {
-  margin: 4px 0 0; padding: 8px 10px; max-height: 240px; overflow: auto; background: #04121a; outline: 1px solid var(--edge);
+  margin: 4px 0 0; padding: 8px 10px; max-height: 220px; overflow: auto; background: rgba(0, 0, 0, .35); border-radius: 6px;
   white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; font: 400 11px/1.5 var(--mono); color: var(--ink-2);
 }
 .job-output:focus-visible { outline: 2px solid var(--ink); }
-.job[data-status="working"] .job-status { color: var(--led); }
-.job[data-status="done"] .job-status { color: var(--led); }
+.job[data-status="working"] .job-status, .job[data-status="done"] .job-status { color: var(--led); }
 .job[data-status="failed"] .job-status { color: var(--bad); }
-.job-cancel { width: 22px; height: 22px; color: var(--ink-3); background: none; }
+.job-cancel { width: 22px; height: 22px; color: var(--ink-3); }
 .job-cancel:hover { color: var(--bad); }
 
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 
-/* ---- status line under the composer (ticket 10): the notes the last answer used ---- */
-.bar {
-  flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 2px 2px 8px; min-height: 30px; font-size: 11px;
-}
-.bar-notes { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; min-width: 0; }
-.bar-label { color: var(--ink-3); }
-.bar-note { color: var(--led); background: #061719; outline: 1px solid var(--edge-hi); padding: 1px 6px; font: 500 11px/1.4 var(--mono); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bar-more { color: var(--ink-3); }
-
-/* ---- mini orb (ticket 15) ----
-   The window shrinks to ~132 px, frameless and on top (Rust `set_mini`). Only the
-   orb, its state word and the running-jobs count stay; click the orb to restore.
-   The orb stage fills the window wherever the dock is (home or the chat's top). */
-.mini-count { display: none; }
-body.mini .topbar, body.mini .sidebar, body.mini .reader, body.mini .panel, body.mini .transcript,
-body.mini .type, body.mini .jobs, body.mini .bar, body.mini .controls, body.mini .say, body.mini .tail { display: none !important; }
-body.mini .center { display: block; border: 0; }
-body.mini .orb-stage { position: fixed; inset: 0; flex-direction: column; justify-content: center; gap: 0; }
-body.mini .orb { width: 76px; height: 76px; cursor: pointer; }
-body.mini .orb-label { margin-top: 6px; font-size: 11px; pointer-events: none; min-width: 0; }
-body.mini .mini-count {
-  display: block; position: absolute; top: 12px; right: 14px; pointer-events: none;
-  min-width: 22px; padding: 0 6px; text-align: center;
-  font: 700 11px/20px var(--mono);
-  background: var(--panel); outline: 2px solid var(--edge); color: var(--ink-3);
-}
-body.mini .mini-count:not([data-count="0"]) { background: var(--led); outline-color: var(--led); color: var(--led-ink); }
-
-@media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; transition: none !important; } }
+/* The popover covers the cues; its Chat view shows the same words. */
+.overlay[data-layer="center"] .cues { display: none; }

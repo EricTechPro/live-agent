@@ -13,7 +13,7 @@ import { loadTools } from "../src/core/registry.ts";
 import { systemInstruction } from "../src/core/tone.ts";
 import { scriptedModel } from "../src/models/scripted.ts";
 import { addCanvasEvent, cardBox, diagramCards, emptyScene, fitBoard, inkFor } from "../app/src/sketch.ts";
-import { drawsOnCanvas } from "../app/src/panel.ts";
+import { drawsOnCanvas } from "../app/src/cues.ts";
 
 const tools = await loadTools();
 const root = resolve(import.meta.dir, "..");
@@ -131,7 +131,7 @@ test("the card's diagram sits inside the frame, below the title, scaled with the
   expect(untitled.top).toBeLessThan(box.top);
 });
 
-test("a canvas event still opens the Canvas tab (the old diagram event is gone)", () => {
+test("a canvas event shows the drawing on screen (the old diagram event is gone)", () => {
   expect(drawsOnCanvas({ type: "canvas.beat" })).toBe(true);
   expect(drawsOnCanvas({ type: "diagram" })).toBe(false);
 });

@@ -10,6 +10,7 @@
 //   POST /approvals/:id/approve|decline  the approve / deny card (ticket 28)
 //   GET  /setup, POST /setup/pick-folder|scan|save   the setup wizard (works before a key)
 //   POST /chat/new end this chat (note + tidy job) and start the next
+//   POST /reply/stop  Esc: stop the reply being spoken (ticket 37)
 //   GET  /brain/tree, /brain/file?path=   the sidebar's brain tree and the read-only file view (ticket 23)
 //   GET  /brain/chats  the sidebar's past chats (ticket 24)
 // Every call carries the per-launch token. Each command gets one small method
@@ -57,6 +58,8 @@ export interface CoreClient {
   newChat(): Promise<void>;
   /** Pause (true) or resume: Jett stops speaking and hearing; the chat stays. The core echoes a `paused` event. */
   pause(on: boolean): Promise<void>;
+  /** Esc (ticket 37): stop the reply being spoken; the call stays on. The core sends `interrupted`. */
+  stopReply(): Promise<void>;
   /** The brain's three parts as a file tree (ticket 23). */
   brainTree(): Promise<BrainTree>;
   /** One note's text, read only. Rejects with the core's plain reason (outside the brain, gone). */
@@ -154,10 +157,26 @@ export function revealLog(): Promise<void> {
   return invoke<void>("reveal_log");
 }
 
-/** Mini mode: Rust shrinks the window to the orb (true) or restores it (false). */
-export function setMiniWindow(on: boolean): Promise<void> {
-  return invoke<void>("set_mini", { on });
+/**
+ * One poll of the overlay (tickets 36, 37): the cursor inside the window in CSS pixels
+ * (null when it is outside), and whether Ctrl+Option is held (push to talk).
+ */
+export function overlayPoll(): Promise<{ point: [number, number] | null; talkKeys: boolean }> {
+  return invoke("overlay_poll");
 }
+
+/** The menu-bar icon asks to open the panel. */
+export function onOpenPanel(cb: () => void) {
+  return listen("open-panel", () => cb());
+}
+
+/** Click-through on (clicks reach the apps below) or off (the window takes the mouse). */
+export function setClickThrough(on: boolean): Promise<void> {
+  return invoke<void>("set_click_through", { on });
+}
+
+/** Running inside the Tauri app (not a plain browser preview). */
+export const inTauri = () => "__TAURI_INTERNALS__" in window;
 
 /** Called once if the core process dies after starting. */
 export function onCoreDown(cb: (reason: string) => void) {
@@ -217,6 +236,10 @@ export function connectCore(info: CoreInfo): CoreClient {
         body: JSON.stringify({ paused: on }),
       });
       if (!res.ok) throw new Error(`core /pause: ${res.status}`);
+    },
+    async stopReply() {
+      const res = await fetch(`${info.url}/reply/stop`, { method: "POST", headers: auth });
+      if (!res.ok) throw new Error(`core /reply/stop: ${res.status}`);
     },
     async answerCall(id, approve) {
       const res = await fetch(`${info.url}/approvals/${encodeURIComponent(id)}/${approve ? "approve" : "decline"}`, { method: "POST", headers: auth });
