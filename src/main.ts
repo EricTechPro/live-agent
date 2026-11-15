@@ -6,9 +6,9 @@
 //   {"type":"ready","url":"http://127.0.0.1:53121","launchToken":"..."}
 //
 // Everything else (logs, rtc-node's debug JSON) goes to stderr.
-// `doctor` as the first argument runs the doctor check instead (src/doctor),
-// `setup` the typed setup chat (src/setup). With no config file the window
-// starts the setup chat itself on first launch (POST /setup { ifNeeded }).
+// `doctor` as the first argument runs the doctor check instead (src/doctor).
+// Setup is the window's click-through wizard: it shows on first launch (no
+// config file, or no key) and from the Setup button (GET/POST /setup/*).
 // Stops LiveKit on SIGINT/SIGTERM, on normal exit, and (via the runner's
 // watchdog) even if this process is killed hard.
 import { startApp, disposeNative } from "./app.ts";
@@ -20,7 +20,6 @@ import { existsSync } from "node:fs";
 import { TOOLS_DIR } from "./core/registry.ts";
 import { bundledTools } from "./core/bundled-tools.ts";
 import { doctorMain } from "./doctor/index.ts";
-import { setupMain } from "./setup/chat.ts";
 import { saveGeminiKey, useHome } from "./home.ts";
 import { captureConsole, openCoreLog } from "./core-log.ts";
 import { geminiApiKey, verifyGeminiKey } from "./gemini-key.ts";
@@ -39,8 +38,11 @@ if (process.argv[2] === "--version") {
   console.log(`live-agent ${pkg.version}`);
   process.exit(0);
 }
-// `live-agent setup` (or `bun run setup`): the setup chat, typed in the terminal (ticket 12).
-if (process.argv[2] === "setup") process.exit(await setupMain());
+// `live-agent setup` was the typed setup chat; setup is the app window's wizard now.
+if (process.argv[2] === "setup") {
+  console.error("live-agent: setup lives in the app window now. Open live-agent and press Setup.");
+  process.exit(1);
+}
 
 // No key yet (first launch, installer run without a terminal): the core still
 // starts, and the window asks for the key (ticket 19, docs/adr/0002).

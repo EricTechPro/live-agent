@@ -76,6 +76,43 @@
       "type": "string",
       "minLength": 1,
       "default": "Puck"
+    },
+    "tone": {
+      "description": "How the agent talks. short: answer first, few plain words, one idea per line. casual: relaxed, like texting a friend. friendly: warm and upbeat. pro: polite and precise.",
+      "type": "string",
+      "enum": ["short", "casual", "friendly", "pro"],
+      "default": "short"
+    },
+    "brainFolders": {
+      "description": "The folder inside brainPath that plays each part of the brain. Lets an existing notes folder keep its own names (e.g. _inbox for raw). Missing folders are created by setup.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "raw": {
+          "description": "Where quick notes land (the agent writes chat notes and 'remember this' here).",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!\\.\\.?$)[^/\\\\]+$",
+          "patternMessage": "must be one folder name inside the brain (no slashes, not . or ..)",
+          "default": "raw"
+        },
+        "wiki": {
+          "description": "Tidy pages, one topic each. Answers come from here, and the tidy job writes only here.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!\\.\\.?$)[^/\\\\]+$",
+          "patternMessage": "must be one folder name inside the brain (no slashes, not . or ..)",
+          "default": "wiki"
+        },
+        "projects": {
+          "description": "One page per project. Answers come from here too.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!\\.\\.?$)[^/\\\\]+$",
+          "patternMessage": "must be one folder name inside the brain (no slashes, not . or ..)",
+          "default": "projects"
+        }
+      }
     }
   }
 }

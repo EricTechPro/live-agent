@@ -7,9 +7,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startApp, type App } from "../src/app.ts";
-import type { AgentEvent } from "../src/core/events.ts";
 import { scriptedModel } from "../src/models/scripted.ts";
-import saveSetup from "../tools/save-setup.ts";
 import { freeLiveKitPort } from "./free-port.ts";
 
 const GOOD = "AIzaGoodKeyForTheTest_123";
@@ -20,9 +18,9 @@ const saved: string[] = [];
 let app: App;
 beforeAll(async () => {
   app = await startApp({
-    model: scriptedModel([[{ type: "text", text: "Hi! Where do your notes live?" }]]),
+    model: scriptedModel([[{ type: "text", text: "Hi!" }]]),
     livekitPort: await freeLiveKitPort(),
-    tools: [saveSetup],
+    tools: [],
     configPath: join(dir, "live-agent.config.json"),
     // No geminiApiKey: the app waits for one.
     keyGate: {
@@ -52,7 +50,8 @@ describe("no key yet, as the window sees it", () => {
     const res = await post("/text", { text: "hello" });
     expect(res.status).toBe(503);
     expect(((await res.json()) as { error: string }).error).toContain("key");
-    expect((await get("/setup")).status).toBe(503);
+    // The setup wizard runs before the key is in: it can ask what is needed.
+    expect(await (await get("/setup")).json()).toMatchObject({ needed: true, keyNeeded: true });
   });
 
   test("without the launch token, no key goes in", async () => {
@@ -87,7 +86,7 @@ describe("no key yet, as the window sees it", () => {
     expect(saved).toEqual([]);
   });
 
-  test("a good key is saved, never sent back, and the setup chat starts without a restart", async () => {
+  test("a good key is saved, never sent back, and the chat starts without a restart", async () => {
     // Pasted keys often carry a stray space or newline.
     const res = await post("/key", { key: `  ${GOOD}\n` });
     const text = await res.text();
@@ -97,9 +96,9 @@ describe("no key yet, as the window sees it", () => {
     expect(saved).toEqual([GOOD]);
 
     expect(await (await get("/key")).json()).toEqual({ needed: false });
-    const started = (await (await post("/setup", { ifNeeded: true })).json()) as { events: AgentEvent[] };
-    expect(started.events[0]?.type).toBe("setup.started");
-    expect(JSON.stringify(started.events)).not.toContain(GOOD);
+    const setup = await (await get("/setup")).text();
+    expect(JSON.parse(setup)).toMatchObject({ keyNeeded: false });
+    expect(setup).not.toContain(GOOD);
   });
 
   test("once the chat runs, another key is refused (change it in .env)", async () => {

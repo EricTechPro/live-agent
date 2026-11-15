@@ -84,6 +84,7 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
         ...(connectOptions?.voice
           ? { speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: connectOptions.voice } } } }
           : {}),
+        ...(connectOptions?.systemInstruction ? { systemInstruction: connectOptions.systemInstruction } : {}),
         // Why: without it an audio session ends after 15 minutes.
         contextWindowCompression: { slidingWindow: {} },
         // Every tool is NON_BLOCKING: the model keeps talking while a tool

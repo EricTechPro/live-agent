@@ -20,7 +20,7 @@ import { createApprovals, type Approvals } from "./approvals.ts";
 import type { AgentEvent, EventOf } from "./events.ts";
 import type { JobInfo, Jobs } from "./jobs.ts";
 import type { ToolResponse } from "./model.ts";
-import { rule, type GateState, type SafetyMode, type SafetyOverrides } from "./safety.ts";
+import { rule, type SafetyMode, type SafetyOverrides } from "./safety.ts";
 import type { Tool, ToolContext } from "./tool.ts";
 import type { ToolCall, Turn } from "./turn.ts";
 
@@ -34,10 +34,10 @@ export interface ToolCallsDeps {
   turn(): Turn | null;
   /** Called when a tool finished: the turn may be over now. */
   turnMayEnd(): void;
-  /** What the gate needs right now: the mode, the config's overrides, the setup state. */
-  gate(): { mode: SafetyMode; overrides: SafetyOverrides; state: GateState };
-  /** The rest of what a running tool gets (folders, helper settings, setup). */
-  context(): Pick<ToolContext, "workDir" | "brainPath" | "helpers" | "setup">;
+  /** What the gate needs right now: the mode and the config's overrides. */
+  gate(): { mode: SafetyMode; overrides: SafetyOverrides };
+  /** The rest of what a running tool gets (folders, helper settings). */
+  context(): Pick<ToolContext, "workDir" | "brainPath" | "brainFolders" | "helpers">;
   /** True once the session is closing: job ends are not announced any more. */
   closing(): boolean;
 }
@@ -180,7 +180,7 @@ export function createToolCalls(deps: ToolCallsDeps): ToolCalls {
     onCall(call) {
       live.set(call.id, call);
       const tool = byName.get(call.name);
-      const { mode, overrides, state } = deps.gate();
+      const { mode, overrides } = deps.gate();
       deps.emit({ type: "tool.call", id: call.id, name: call.name, args: call.args, risk: tool?.risk });
 
       if (!tool) {
@@ -191,7 +191,7 @@ export function createToolCalls(deps: ToolCallsDeps): ToolCalls {
       }
 
       const input = { tool: call.name, args: call.args, risk: tool.risk, mode, overrides };
-      const { verdict, reason } = rule(input, tool.gate?.(state));
+      const { verdict, reason } = rule(input);
       deps.emit({ type: "safety.verdict", id: call.id, name: call.name, risk: tool.risk, mode, verdict, reason });
 
       switch (verdict) {

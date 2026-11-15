@@ -9,8 +9,7 @@
 //   | command    | ask    | ask        | allow  |
 //   | helper     | ask    | ask        | allow  |
 //
-// Per-tool overrides (from the config) win over everything. A tool can also
-// bring its own rule (`Tool.gate`, e.g. save_setup) that replaces the table.
+// Per-tool overrides (from the config) win over everything.
 import type { SafetyMode, Verdict } from "../config/index.ts";
 import type { RiskClass } from "./tool.ts";
 
@@ -64,18 +63,8 @@ export interface Ruling {
   reason: string;
 }
 
-/** What a tool's own rule can look at (see `Tool.gate`). */
-export interface GateState {
-  /** A setup chat the user started is running (until save_setup has saved). */
-  setupActive: boolean;
-}
-
-/**
- * The gate's ruling on one call. Order: a config override, then the tool's
- * own rule (if it has one and it says something), then the mode table.
- */
-export function rule(input: GateInput, toolRule?: Ruling): Ruling {
-  if (!input.overrides?.[input.tool] && toolRule) return toolRule;
+/** The gate's ruling on one call: a config override, else the mode table. */
+export function rule(input: GateInput): Ruling {
   const verdict = decide(input);
   return { verdict, reason: explain(input, verdict) };
 }

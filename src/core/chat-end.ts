@@ -11,7 +11,7 @@
 //
 // Not a tool call, so the safety gate is not asked: the spec saves this note
 // after every chat, in every mode, and it only ever adds a new file to raw/.
-import { saveRawNote } from "../brain/index.ts";
+import { saveRawNote, type BrainFolders } from "../brain/index.ts";
 import type { ModelEvent } from "./model.ts";
 import chatSummaryPrompt from "../../prompts/chat-summary.md" with { type: "text" };
 
@@ -62,7 +62,12 @@ export function transcriptText(chat: ChatLine[]): string {
   return chat.map((line) => `- ${line.role === "user" ? "You" : "Agent"}: ${line.text}`).join("\n");
 }
 
-/** Write the note into the brain's raw/ folder. Returns its path inside the brain. */
-export function saveChatNote(brainPath: string, chat: ChatLine[], summary: string): Promise<string> {
-  return saveRawNote(brainPath, { title: "Chat", text: summary || transcriptText(chat) });
+/** Write the note into the brain's raw folder. Returns its path inside the brain. */
+export function saveChatNote(
+  brainPath: string,
+  chat: ChatLine[],
+  summary: string,
+  folders?: BrainFolders,
+): Promise<string> {
+  return saveRawNote(brainPath, { title: "Chat", text: summary || transcriptText(chat) }, folders);
 }

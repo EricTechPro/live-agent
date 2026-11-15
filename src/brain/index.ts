@@ -9,9 +9,24 @@
 // editor and see exactly what the agent sees.
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
+import type { BrainFolders } from "../config/index.ts";
 
-/** The folders answers come from. `raw` is left out on purpose: it is untidy, unchecked input. */
-export const ANSWER_FOLDERS = ["wiki", "projects"] as const;
+export type { BrainFolders };
+
+/**
+ * The real folder names of the three parts. An existing notes folder can keep
+ * its own names (config `brainFolders`, mapped by the setup wizard), e.g.
+ * `{ raw: "_inbox", wiki: "03 Notes", projects: "Work" }`.
+ */
+export const DEFAULT_FOLDERS: BrainFolders = { raw: "raw", wiki: "wiki", projects: "projects" };
+
+/** The parts answers come from. `raw` is left out on purpose: it is untidy, unchecked input. */
+export const ANSWER_PARTS = ["wiki", "projects"] as const;
+
+/** The real folders answers come from, for this brain's mapping. */
+export function answerFolders(folders: BrainFolders = DEFAULT_FOLDERS): string[] {
+  return ANSWER_PARTS.map((part) => folders[part]);
+}
 
 export interface Note {
   /** Path inside the brain, always with forward slashes, e.g. `wiki/sourdough-starter.md`. */
@@ -24,10 +39,10 @@ export function brainRoot(brainPath: string, workDir = process.cwd()): string {
   return resolve(workDir, brainPath);
 }
 
-/** Every `.md` note under wiki/ and projects/. A missing folder is just empty. */
-export async function listNotes(root: string): Promise<Note[]> {
+/** Every `.md` note under the wiki and projects folders. A missing folder is just empty. */
+export async function listNotes(root: string, folders: BrainFolders = DEFAULT_FOLDERS): Promise<Note[]> {
   const notes: Note[] = [];
-  for (const folder of ANSWER_FOLDERS) {
+  for (const folder of answerFolders(folders)) {
     let files: string[];
     try {
       files = await readdir(join(root, folder), { recursive: true });
@@ -58,9 +73,14 @@ function words(text: string): string[] {
  * note's file name counting extra (a note named after the topic is the best bet).
  * Notes scoring under half the best score are dropped.
  */
-export async function searchBrain(root: string, query: string, limit = 3): Promise<Note[]> {
+export async function searchBrain(
+  root: string,
+  query: string,
+  limit = 3,
+  folders: BrainFolders = DEFAULT_FOLDERS,
+): Promise<Note[]> {
   const terms = [...new Set(words(query))];
-  const scored = (await listNotes(root)).map((note) => {
+  const scored = (await listNotes(root, folders)).map((note) => {
     const name = new Set(words(note.path));
     const body = new Set(words(note.content));
     let score = 0;
@@ -89,24 +109,25 @@ export interface RawNote {
 }
 
 /**
- * Write a new dated note into `raw/` and return its path inside the brain
- * (e.g. `raw/2026-11-13-chat.md`).
+ * Write a new dated note into the raw folder and return its path inside the brain
+ * (e.g. `raw/2026-11-13-chat.md`, or `_inbox/...` when raw is mapped to `_inbox`).
  *
  * Never overwrites: if the name is taken it tries `-2`, `-3`, ... The
  * exclusive-create flag makes that safe even if two notes land at once.
  */
-export async function saveRawNote(root: string, note: RawNote): Promise<string> {
+export async function saveRawNote(root: string, note: RawNote, folders: BrainFolders = DEFAULT_FOLDERS): Promise<string> {
   const date = note.date ?? new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   const day = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
   const slug = words(note.title).slice(0, 6).join("-") || "note";
   const content = `# ${note.title.trim() || "Note"}, ${date.getDate()} ${MONTHS[date.getMonth()]}\n\n${note.text.trim()}\n`;
-  await mkdir(join(root, "raw"), { recursive: true });
+  const raw = folders.raw;
+  await mkdir(join(root, raw), { recursive: true });
   for (let n = 1; ; n++) {
     const name = `${day}-${slug}${n === 1 ? "" : `-${n}`}.md`;
     try {
-      await writeFile(join(root, "raw", name), content, { flag: "wx" });
-      return `raw/${name}`;
+      await writeFile(join(root, raw, name), content, { flag: "wx" });
+      return `${raw}/${name}`;
     } catch (error) {
       if ((error as { code?: string }).code !== "EEXIST") throw error;
     }

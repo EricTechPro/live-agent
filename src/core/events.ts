@@ -61,12 +61,7 @@ export type AgentEvent =
    * the mode only from this event, so the dropdown and Shift+Tab never disagree.
    */
   | { type: "mode.changed"; mode: SafetyMode }
-  /**
-   * A setup chat began (ticket 12): the model is about to ask the setup questions.
-   * `firstRun`: there was no config file yet. The window shows a setup banner.
-   */
-  | { type: "setup.started"; configPath: string; firstRun: boolean }
-  /** The setup chat wrote the config file. Its settings are in use at once (a `mode.changed` comes first if the mode changed). */
+  /** The setup wizard wrote the config file. Its settings are in use at once (a `mode.changed` comes first if the mode changed). */
   | { type: "setup.saved"; configPath: string; config: Config }
   /**
    * A new chat began (New chat, or a quiet spell): the last one left its note

@@ -1,62 +1,138 @@
-// The setup chat as the window sees it (ticket 12): on boot the window asks the
-// core to start setup "if needed"; the core starts it only when there is no
-// config file. Real LiveKit, scripted model.
+// The setup wizard as the window sees it: GET /setup, the folder picker, the
+// folder scan and the typed save. Real LiveKit, scripted model, fake picker.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startApp, type App } from "../src/app.ts";
+import { defaultConfig } from "../src/config/index.ts";
 import type { AgentEvent } from "../src/core/events.ts";
 import { scriptedModel } from "../src/models/scripted.ts";
-import saveSetup from "../tools/save-setup.ts";
 import { freeLiveKitPort } from "./free-port.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "live-agent-app-setup-"));
 const configPath = join(dir, "live-agent.config.json");
+const notes = join(dir, "My Notes");
+mkdirSync(join(notes, "_Inbox"), { recursive: true });
+mkdirSync(join(notes, "03 Notes"));
+mkdirSync(join(notes, "assets"));
+writeFileSync(join(notes, "_Inbox", "a.md"), "secret words");
+writeFileSync(join(notes, "03 Notes", "b.md"), "x");
+writeFileSync(join(notes, "03 Notes", "c.md"), "x");
 
+let picked: string | null = notes;
 let app: App;
+const events: AgentEvent[] = [];
 beforeAll(async () => {
   app = await startApp({
-    model: scriptedModel([
-      [{ type: "text", text: "Hi! Where do your notes live?" }],
-      [{ type: "tool.call", id: "s1", name: "save_setup", args: { brainPath: "notes" } }],
-      [{ type: "text", text: "Saved." }],
-    ]),
+    model: scriptedModel([[{ type: "text", text: "Hi." }]]),
     livekitPort: await freeLiveKitPort(),
-    tools: [saveSetup],
+    tools: [],
     configPath,
+    pickFolder: async () => picked,
   });
+  // Listen on the event stream like the window does.
+  const res = await fetch(`${app.url}/events?token=${app.launchToken}`);
+  const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
+  void (async () => {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) return;
+      for (const line of value.split("\n")) if (line.startsWith("data: ")) events.push(JSON.parse(line.slice(6)));
+    }
+  })().catch(() => {});
 });
 afterAll(async () => {
   await app.stop();
   rmSync(dir, { recursive: true, force: true });
 });
 
-const post = (path: string, body: unknown) =>
-  fetch(`${app.url}${path}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${app.launchToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  }).then((res) => res.json() as Promise<{ events: AgentEvent[] }>);
+const auth = () => ({ Authorization: `Bearer ${app.launchToken}`, "Content-Type": "application/json" });
+const get = (path: string) => fetch(`${app.url}${path}`, { headers: auth() });
+const post = (path: string, body: unknown = {}) =>
+  fetch(`${app.url}${path}`, { method: "POST", headers: auth(), body: JSON.stringify(body) });
 
-describe("setup chat, as the window sees it", () => {
-  test("first launch: the window's if-needed start opens the setup chat, and answers write the config", async () => {
-    const status = await fetch(`${app.url}/setup`, { headers: { Authorization: `Bearer ${app.launchToken}` } });
-    expect(await status.json()).toEqual({ needed: true, configPath });
-
-    const started = await post("/setup", { ifNeeded: true });
-    expect(started.events[0]).toEqual({ type: "setup.started", configPath, firstRun: true });
-
-    const answered = await post("/text", { text: "my notes folder is notes" });
-    expect(answered.events.map((e) => e.type)).toContain("setup.saved");
-    expect(existsSync(configPath)).toBe(true);
+describe("setup wizard, as the window sees it", () => {
+  test("first launch: setup is needed, and the current config prefills the wizard", async () => {
+    expect(await (await get("/setup")).json()).toEqual({ needed: true, keyNeeded: false, configPath, current: defaultConfig() });
   });
 
-  test("once the config exists, the window's if-needed start does nothing", async () => {
-    expect((await post("/setup", { ifNeeded: true })).events).toEqual([]);
+  test("the folder picker hands back the path, or says it was cancelled", async () => {
+    expect(await (await post("/setup/pick-folder")).json()).toEqual({ path: notes });
+    picked = null;
+    expect(await (await post("/setup/pick-folder")).json()).toEqual({ cancelled: true });
+  });
+
+  test("the scan lists top-level folders with counts and maps them to parts, by name only", async () => {
+    const res = await post("/setup/scan", { path: notes });
+    const text = await res.text();
+    expect(res.status).toBe(200);
+    expect(JSON.parse(text)).toEqual({
+      tree: {
+        name: "My Notes",
+        path: notes,
+        folders: [
+          { name: "_Inbox", files: 1 },
+          { name: "03 Notes", files: 2 },
+          { name: "assets", files: 0 },
+        ],
+        notes: 3,
+        capped: false,
+      },
+      parts: {
+        raw: { folder: "_Inbox", found: true },
+        wiki: { folder: "03 Notes", found: true },
+        projects: { folder: "", found: false },
+      },
+    });
+    expect(text).not.toContain("secret words"); // names, never contents
+  });
+
+  test("scanning something that is not a folder is a plain 400", async () => {
+    const res = await post("/setup/scan", { path: join(dir, "nope") });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toContain("not a folder");
+  });
+
+  test("a save with a missing notes folder is refused and writes nothing", async () => {
+    const res = await post("/setup/save", { brainPath: join(dir, "gone") });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toContain("does not exist");
+    expect(existsSync(configPath)).toBe(false);
+  });
+
+  test("the typed save writes the config, creates the missing part, and the chat uses it at once", async () => {
+    const res = await post("/setup/save", {
+      voice: "Charon",
+      tone: "casual",
+      brainPath: notes,
+      brainFolders: { raw: "_Inbox", wiki: "03 Notes", projects: "projects" },
+      safetyMode: "ask-me",
+    });
+    expect(res.status).toBe(200);
+    const saved = JSON.parse(readFileSync(configPath, "utf8"));
+    expect(saved).toMatchObject({
+      brainPath: notes,
+      voice: "Charon",
+      tone: "casual",
+      safety: { mode: "ask-me" },
+      brainFolders: { raw: "_Inbox", wiki: "03 Notes", projects: "projects" },
+    });
+    expect(existsSync(join(notes, "projects"))).toBe(true);
+    expect(await (await get("/mode")).json()).toMatchObject({ mode: "ask-me" });
+    expect(await (await get("/setup")).json()).toMatchObject({ needed: false });
+
+    const deadline = Date.now() + 2000;
+    while (!events.some((e) => e.type === "chat.started") && Date.now() < deadline) await Bun.sleep(10);
+    expect(events.map((e) => e.type)).toEqual(expect.arrayContaining(["mode.changed", "setup.saved", "chat.started"]));
+  });
+
+  test("the old setup chat route is gone", async () => {
+    expect((await post("/setup", { ifNeeded: true })).status).toBe(404);
   });
 
   test("without the launch token, no setup", async () => {
-    expect((await fetch(`${app.url}/setup`, { method: "POST", body: "{}" })).status).toBe(401);
+    expect((await fetch(`${app.url}/setup/save`, { method: "POST", body: "{}" })).status).toBe(401);
+    expect((await fetch(`${app.url}/setup`)).status).toBe(401);
   });
 });

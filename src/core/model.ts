@@ -91,6 +91,8 @@ export interface ConnectOptions {
   tools: ToolDeclaration[];
   /** The prebuilt voice to speak with (config `voice`, e.g. "Puck"). */
   voice?: string;
+  /** Who the model is and how it talks (built from config `tone`, see src/core/tone.ts). */
+  systemInstruction?: string;
 }
 
 export interface Model {

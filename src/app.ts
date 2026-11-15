@@ -22,19 +22,30 @@
 //   GET  /mode     -> { mode, modes: [{ id, label }] }: the safety mode now, and the choices
 //   POST /mode     -> { mode } or { cycle: true } in, { mode } out; emits `mode.changed`
 //   POST /jobs/:id/cancel -> { cancelled } (404 for an unknown id)
-//   GET  /setup    -> { needed, configPath }: is this a first launch (no config file)?
-//   POST /setup    -> { ifNeeded? } in, { events } out: start the setup chat (ticket 12)
+//   The setup wizard (these work before a key too, so the wizard can run first):
+//   GET  /setup    -> { needed, keyNeeded, configPath, current }: no config file yet? no key yet?
+//                     `current` is the config now (defaults on a first launch), to prefill the wizard
+//   POST /setup/pick-folder -> { path } or { cancelled: true }: the native macOS folder picker
+//   POST /setup/scan -> { path } in, { tree, parts } out: the folder's top-level folders and file
+//                     counts (names only, never contents) and the brain parts they map to
+//   POST /setup/save -> the wizard's answers in (src/setup SetupAnswers), { config } out, or
+//                     400 { error }: writes the config, creates missing part folders, and the
+//                     running chat uses it at once (reconnecting for the new voice and tone)
 //   POST /chat/new -> { ok }: end this chat (note + tidy job) and start the next
 //
 // Why HTTP + SSE (not a WebSocket): the window only reads the stream, and
 // fetch/EventSource exist in every webview with no library.
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import { existsSync } from "node:fs";
 import { dispose } from "@livekit/rtc-node";
 import { startSession, type AgentSession, type SessionOptions } from "./core/agent.ts";
 import type { Model } from "./core/model.ts";
 import { MODE_LABELS, MODES, type SafetyMode } from "./core/safety.ts";
 import { errorMessage } from "./errors.ts";
-import { defaultConfigPath } from "./config/index.ts";
+import { ConfigError, defaultConfigPath } from "./config/index.ts";
+import { brainRoot } from "./brain/index.ts";
+import { currentConfig, saveSetup, type SetupAnswers } from "./setup/index.ts";
+import { detectParts, pickFolder as macPickFolder, scanFolder, type FolderPicker } from "./setup/folders.ts";
 import { joinVoiceRoom } from "./voice/livekit-bridge.ts";
 // `type: "text"` embeds the file in the compiled binary; bun-types calls *.html an HTMLBundle.
 import checkPage from "./voice/check-page.html" with { type: "text" };
@@ -59,6 +70,8 @@ export interface AppOptions extends Omit<SessionOptions, "model"> {
    * has stored. Without a gate the chat starts with no key (tests, scripted model).
    */
   keyGate?: KeyGate;
+  /** The wizard's folder picker. Default: the native macOS one (osascript); tests pass a fake. */
+  pickFolder?: FolderPicker;
 }
 
 export interface KeyGate {
@@ -109,7 +122,8 @@ type Chat = { session: AgentSession; tokens: TokenService };
 type Route = (chat: Chat, req: Request) => Response | Promise<Response>;
 
 export async function startApp(options: AppOptions): Promise<App> {
-  const { model, geminiApiKey, geminiModel, livekitPort, port, room: roomName, keyGate, ...sessionOptions } = options;
+  const { model, geminiApiKey, geminiModel, livekitPort, port, room: roomName, keyGate, pickFolder, ...sessionOptions } = options;
+  const configPath = sessionOptions.configPath ?? defaultConfigPath();
   const room = roomName ?? "live-agent";
   const livekit = await startLiveKit({ port: livekitPort });
   const cleanups: (() => Promise<unknown> | unknown)[] = [() => livekit.stop()];
@@ -205,18 +219,6 @@ export async function startApp(options: AppOptions): Promise<App> {
         return json({ mode: session.mode() });
       },
 
-      // The setup chat (ticket 12). The window POSTs { ifNeeded: true } on boot, so
-      // the core decides: setup starts only on a first launch (no config file).
-      // Its Setup button POSTs {} to run setup again.
-      "GET /setup"({ session }) {
-        return json({ needed: session.setup.needed(), configPath: sessionOptions.configPath ?? defaultConfigPath() });
-      },
-
-      async "POST /setup"({ session }, req) {
-        const { ifNeeded } = await readBody(req);
-        return session.setup.start({ ifNeeded: ifNeeded === true }).then((events) => json({ events }), refused);
-      },
-
       "GET /events"({ session }) {
         let off = () => {};
         let ping: ReturnType<typeof setInterval> | undefined;
@@ -232,6 +234,49 @@ export async function startApp(options: AppOptions): Promise<App> {
           },
         });
         return new Response(body, { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } });
+      },
+    };
+
+    // The setup wizard's routes. They need no chat: the wizard runs before the key
+    // is in, and saving is plain typed answers (no model, nothing to mishear).
+    const setupRoutes: Record<string, (req: Request) => Response | Promise<Response>> = {
+      "GET /setup"() {
+        try {
+          return json({ needed: !existsSync(configPath), keyNeeded: !chat, configPath, current: currentConfig(configPath) });
+        } catch (err) {
+          return json({ error: errorMessage(err) }, 500);
+        }
+      },
+
+      async "POST /setup/pick-folder"() {
+        try {
+          const path = await (pickFolder ?? macPickFolder)();
+          return json(path ? { path } : { cancelled: true });
+        } catch (err) {
+          return json({ error: `Could not open the folder picker: ${errorMessage(err)}` }, 500);
+        }
+      },
+
+      async "POST /setup/scan"(req) {
+        const { path } = await readBody(req);
+        if (typeof path !== "string" || !path.trim()) return json({ error: "send { path }" }, 400);
+        try {
+          const tree = await scanFolder(brainRoot(path.trim()));
+          return json({ tree, parts: detectParts(tree.folders) });
+        } catch {
+          return json({ error: `${path} is not a folder I can open.` }, 400);
+        }
+      },
+
+      async "POST /setup/save"(req) {
+        let saved;
+        try {
+          saved = saveSetup(configPath, (await readBody(req)) as SetupAnswers);
+        } catch (err) {
+          return json({ error: errorMessage(err) }, err instanceof ConfigError ? 400 : 500);
+        }
+        if (chat) await chat.session.setup.apply(saved.config).catch(() => {});
+        return json({ config: saved.config });
       },
     };
 
@@ -256,6 +301,8 @@ export async function startApp(options: AppOptions): Promise<App> {
       const name = `${req.method} ${url.pathname}`;
       if (name === "GET /key") return json({ needed: !chat });
       if (name === "POST /key") return takeKey(req);
+      const setupRoute = setupRoutes[name];
+      if (setupRoute) return setupRoute(req);
       const route = routes[name];
       const cancel = req.method === "POST" ? url.pathname.match(/^\/jobs\/([^/]+)\/cancel$/) : null;
       if (!route && !cancel) return json({ error: "not found" }, 404);

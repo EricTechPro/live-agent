@@ -13,10 +13,9 @@
 // Why a risk class on every tool: the safety gate decides by risk class and
 // mode (see src/core/safety.ts), so a new tool is safe by declaring one word.
 
-import type { Config } from "../config/index.ts";
+import type { BrainFolders } from "../config/index.ts";
 import type { HelperPaths } from "../helpers/cli-job.ts";
 import type { Jobs } from "./jobs.ts";
-import type { GateState, Ruling } from "./safety.ts";
 
 export type RiskClass = "read" | "edit" | "command" | "helper";
 
@@ -26,6 +25,8 @@ export interface ToolContext {
   workDir: string;
   /** The brain folder (config `brainPath`, resolved to an absolute path). */
   brainPath: string;
+  /** The real folder of each brain part (config `brainFolders`), e.g. raw = `_inbox`. */
+  brainFolders: BrainFolders;
   /** Report brain notes (paths inside the brain) this turn's answer used. The core emits `notes.used`. */
   useNotes(paths: string[]): void;
   /** Report a note this tool wrote into the brain (path inside the brain). The core emits `brain.write` right away. */
@@ -39,8 +40,6 @@ export interface ToolContext {
   jobs?: Pick<Jobs, "submit" | "cancel" | "list">;
   /** Helper settings: which helpers are on (config `helpers`) and where their CLIs are. */
   helpers?: HelperSettings;
-  /** The setup chat (ticket 12): where the config file lives, and "it was saved" (the core emits `setup.saved`). */
-  setup?: { configPath: string; saved(config: Config): void };
 }
 
 export interface HelperSettings extends HelperPaths {
@@ -62,12 +61,6 @@ export interface Tool<Args extends Record<string, any> = Record<string, any>> {
   risk: RiskClass;
   /** JSON Schema of the args object. */
   parameters: Record<string, unknown>;
-  /**
-   * Optional: the tool's own gate rule, used instead of the mode table (a
-   * config override still wins). Return undefined to fall back to the table.
-   * Most tools never need this; save_setup does.
-   */
-  gate?(state: GateState): Ruling | undefined;
   /** Do the work. Return plain JSON for the model; throw to report an error. */
   run(args: Args, context: ToolContext): Promise<unknown> | unknown;
 }

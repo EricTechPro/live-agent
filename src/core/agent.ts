@@ -29,7 +29,6 @@ import { tidyJob, type TidyModel } from "../brain/tidy.ts";
 import { defaultConfig, defaultConfigPath, type Config } from "../config/index.ts";
 import { errorMessage } from "../errors.ts";
 import type { HelperPaths } from "../helpers/cli-job.ts";
-import { currentConfig, setupKickoff } from "../setup/index.ts";
 import { saveChatNote, SUMMARY_REQUEST, summaryCollector, type ChatLine, type SummaryCollector } from "./chat-end.ts";
 import type { AgentEvent } from "./events.ts";
 import { createJobs, type Jobs } from "./jobs.ts";
@@ -38,6 +37,7 @@ import { loadTools } from "./registry.ts";
 import { nextMode, type SafetyMode, type SafetyOverrides } from "./safety.ts";
 import type { Tool } from "./tool.ts";
 import { createToolCalls } from "./tool-calls.ts";
+import { systemInstruction } from "./tone.ts";
 import { newTurn, turnIsOver, type Turn } from "./turn.ts";
 
 export interface SessionOptions {
@@ -57,9 +57,9 @@ export interface SessionOptions {
   tools?: Tool[];
   /** How long `close()` waits for the model's chat summary before using the plain transcript. Default 8000. */
   summaryTimeoutMs?: number;
-  /** The config file the setup chat reads and writes. Default: `defaultConfigPath()`. */
+  /** The config file the setup wizard writes. Default: `defaultConfigPath()`. */
   configPath?: string;
-  /** Save a chat-end note into the brain on `close()`. Default true; `live-agent setup` turns it off. */
+  /** Save a chat-end note into the brain on `close()`. Default true. */
   chatEndNote?: boolean;
   /** Where helper CLIs live (tests point these at fake scripts). */
   helpers?: HelperPaths;
@@ -101,17 +101,17 @@ export interface AgentSession {
   setMode(mode: SafetyMode): void;
   /** Shift+Tab: Ask me -> Auto edits -> Bypass -> Ask me. Returns the new mode. */
   cycleMode(): SafetyMode;
-  /** The setup chat (ticket 12). */
+  /** The setup wizard (the window's click-through setup). */
   setup: {
     /** True when there is no config file yet: this is the first launch. */
     needed(): boolean;
     /**
-     * Start a setup chat: the model greets and asks the setup questions, then
-     * saves the answers with `save_setup`. Resolves with that first turn's
-     * events, starting with `setup.started`. With `ifNeeded`, does nothing
-     * (resolves []) when a config file already exists.
+     * Use a config the wizard just saved, now: brain, folders, mode and helpers
+     * at once, and a fresh model connection so the new voice and tone are heard
+     * (unless a turn is in progress: then they apply from the next chat).
+     * Emits `setup.saved` (after `mode.changed` if the mode changed).
      */
-    start(options?: { ifNeeded?: boolean }): Promise<AgentEvent[]>;
+    apply(config: Config): Promise<void>;
   };
   /**
    * End this chat and start the next one in the same session (the window's
@@ -131,7 +131,7 @@ export interface AgentSession {
 
 export async function startSession(options: SessionOptions): Promise<AgentSession> {
   // ---- settings -----------------------------------------------------------
-  // `let`: a setup chat can save new answers, and they apply at once (applyConfig).
+  // `let`: the setup wizard can save new answers, and they apply at once (applyConfig).
   let config = options.config ?? defaultConfig();
   // `let`: the window can switch it while the app runs (setMode); the gate reads it per call.
   let mode = options.mode ?? config.safety.mode;
@@ -162,8 +162,6 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   const chat: ChatLine[] = [];
   // Set while the model writes the chat summary: its events go there, not to the chat.
   let summary: SummaryCollector | null = null;
-  // True from setup.start() until save_setup has written the file: the only time save_setup may run.
-  let setupActive = false;
   // Set while newChat() saves the old chat and reconnects: no turn may start then.
   let switching = false;
   // Set when close() begins: job ends are no longer announced and late model events are dropped.
@@ -184,24 +182,17 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     send: (response) => modelSession.sendToolResponse(response),
     turn: () => turn,
     turnMayEnd: finishTurnIfOver,
-    gate: () => ({ mode, overrides, state: { setupActive } }),
+    gate: () => ({ mode, overrides }),
     context: () => ({
       workDir,
       brainPath,
+      brainFolders: config.brainFolders,
       helpers: {
         ...options.helpers,
         geminiCli: config.helpers.geminiCli,
         codex: config.helpers.codex,
         claudeCode: config.helpers.claudeCode,
         worktrees: config.worktrees,
-      },
-      setup: {
-        configPath,
-        saved(saved) {
-          setupActive = false;
-          applyConfig(saved);
-          emit({ type: "setup.saved", configPath, config: saved });
-        },
       },
     }),
     closing: () => closed,
@@ -214,10 +205,9 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     emit({ type: "mode.changed", mode });
   }
 
-  // Use what the setup chat just saved, now. Everything setup asks about is
-  // read per call (brain, helper on/off) or can switch live (mode, max at once),
-  // so no restart is needed. The voice is set per connection: it changes on the
-  // next connection (a new chat or a restart).
+  // Use what the setup wizard just saved, now. Brain, folders and helper on/off
+  // are read per call, mode and max-at-once switch live, so no restart is needed.
+  // Voice and tone are set per connection: setup.apply reconnects for them.
   function applyConfig(next: Config) {
     config = next;
     brainPath = brainRoot(next.brainPath);
@@ -226,7 +216,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   }
 
   // ---- turns --------------------------------------------------------------
-  // Why one check: a new turn, setup and a new chat all need the model to themselves.
+  // Why one check: a new turn and a new chat both need the model to themselves.
   function busy(): Error | null {
     if (turn) return new Error("a turn is already in progress");
     if (switching) return new Error("a new chat is starting");
@@ -343,6 +333,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     return options.model.connect((event) => mine === connection && onModelEvent(event), {
       tools: tools.map(({ name, description, parameters }) => ({ name, description, parameters })),
       voice: config.voice,
+      systemInstruction: systemInstruction(config.tone),
     });
   }
   let modelSession = await connectModel();
@@ -373,7 +364,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     clearTimeout(idleTimer);
     try {
       if (!chat.length || options.chatEndNote === false) return null;
-      const path = await saveChatNote(brainPath, chat, await askForSummary());
+      const path = await saveChatNote(brainPath, chat, await askForSummary(), config.brainFolders);
       emit({ type: "brain.write", path, cause: "chat-end" });
       return path;
     } catch (err) {
@@ -386,7 +377,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
 
   // Ticket 07: a chat that left a note gets tidied into wiki pages, as a job on the board.
   function queueTidy(notePath: string | null) {
-    if (notePath && options.tidy) jobs.submit(tidyJob(brainPath, options.tidy));
+    if (notePath && options.tidy) jobs.submit(tidyJob(brainPath, options.tidy, config.brainFolders));
   }
 
   async function newChat() {
@@ -442,28 +433,11 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     },
     setup: {
       needed: () => !existsSync(configPath),
-      start({ ifNeeded = false } = {}) {
-        const firstRun = !existsSync(configPath);
-        if (ifNeeded && !firstRun) return Promise.resolve([]);
-        const error = busy();
-        if (error) return Promise.reject(error);
-        let kickoff: string;
-        try {
-          kickoff = setupKickoff(currentConfig(configPath), firstRun);
-        } catch (err) {
-          return Promise.reject(err);
-        }
-        setupActive = true;
-        return new Promise((done) => {
-          const setup = startTurn(done);
-          emit({ type: "setup.started", configPath, firstRun });
-          // Like any new turn, it declines calls still waiting for a yes.
-          approvals.closeTurn(true, "the user started setup");
-          // The kickoff is the core speaking to the model, not the user: no
-          // transcript line, and it stays out of the chat-end note.
-          setup.awaiting++;
-          modelSession.sendText(kickoff);
-        });
+      async apply(saved) {
+        applyConfig(saved);
+        emit({ type: "setup.saved", configPath, config: saved });
+        // A fresh connection, so the next words use the new voice and tone.
+        if (!busy() && !closed) await newChat();
       },
     },
     newChat,

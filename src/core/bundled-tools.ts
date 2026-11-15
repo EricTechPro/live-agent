@@ -10,8 +10,7 @@ import cancelJob from "../../tools/cancel-job.ts";
 import drawDiagram from "../../tools/draw-diagram.ts";
 import readFile from "../../tools/read-file.ts";
 import remember from "../../tools/remember.ts";
-import saveSetup from "../../tools/save-setup.ts";
 import searchBrain from "../../tools/search-brain.ts";
 import startHelper from "../../tools/start-helper.ts";
 
-export const bundledTools: Tool[] = [cancelJob, drawDiagram, readFile, remember, saveSetup, searchBrain, startHelper];
+export const bundledTools: Tool[] = [cancelJob, drawDiagram, readFile, remember, searchBrain, startHelper];

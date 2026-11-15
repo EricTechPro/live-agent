@@ -18,8 +18,8 @@ export default defineTool<{ query: string }>({
     },
     required: ["query"],
   },
-  async run({ query }, { brainPath, useNotes }) {
-    const notes = await searchBrain(brainPath, query);
+  async run({ query }, { brainPath, brainFolders, useNotes }) {
+    const notes = await searchBrain(brainPath, query, 3, brainFolders);
     // Tell the core which notes this answer rests on, so the app can show them.
     useNotes(notes.map((n) => n.path));
     return { notes };

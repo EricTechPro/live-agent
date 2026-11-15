@@ -23,6 +23,8 @@ describe("config file", () => {
       helpers: { geminiCli: true, codex: false, claudeCode: false, maxAtOnce: 1 },
       worktrees: false,
       voice: "Puck",
+      tone: "short",
+      brainFolders: { raw: "raw", wiki: "wiki", projects: "projects" },
     });
   });
 
@@ -41,6 +43,8 @@ describe("config file", () => {
       helpers: { geminiCli: true, codex: true, claudeCode: false, maxAtOnce: 1 },
       worktrees: false,
       voice: "Puck",
+      tone: "short",
+      brainFolders: { raw: "raw", wiki: "wiki", projects: "projects" },
     });
   });
 
@@ -77,12 +81,26 @@ describe("config file", () => {
     expect(undescribed).toEqual([]);
     // Every field the app reads is in the schema.
     expect(Object.keys(schema.properties)).toEqual(
-      expect.arrayContaining(["brainPath", "safety", "helpers", "worktrees", "voice"]),
+      expect.arrayContaining(["brainPath", "safety", "helpers", "worktrees", "voice", "tone", "brainFolders"]),
     );
     expect(Object.keys(schema.properties.safety.properties)).toEqual(["mode", "overrides"]);
     expect(Object.keys(schema.properties.helpers.properties)).toEqual([
       "geminiCli", "codex", "claudeCode", "maxAtOnce",
     ]);
+  });
+
+  test("tone and brainFolders are optional, checked, and an old config without them still loads", () => {
+    const old = writeConfig({ brainPath: "notes", voice: "Kore" });
+    expect(loadConfig(old)).toMatchObject({ tone: "short", brainFolders: { raw: "raw", wiki: "wiki", projects: "projects" } });
+
+    const mapped = writeConfig({ tone: "pro", brainFolders: { raw: "_inbox", wiki: "03 Notes" } });
+    expect(loadConfig(mapped)).toMatchObject({ tone: "pro", brainFolders: { raw: "_inbox", wiki: "03 Notes", projects: "projects" } });
+
+    expect(() => loadConfig(writeConfig({ tone: "rude" }))).toThrow("tone must be one of");
+    // A slot is one folder name inside the brain: never a path out of it.
+    expect(() => loadConfig(writeConfig({ brainFolders: { raw: "../outside" } }))).toThrow("brainFolders.raw must be one folder name");
+    expect(() => loadConfig(writeConfig({ brainFolders: { wiki: ".." } }))).toThrow("brainFolders.wiki must be one folder name");
+    expect(() => loadConfig(writeConfig({ brainFolders: { projects: "" } }))).toThrow("brainFolders.projects must not be empty");
   });
 
   test("a config that is not valid JSON names the file", () => {
