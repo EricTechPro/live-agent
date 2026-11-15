@@ -17,6 +17,7 @@
 // stream but are not sent to the model (`live`).
 import { errorMessage } from "../errors.ts";
 import { createApprovals, type Approvals } from "./approvals.ts";
+import type { Board } from "./board.ts";
 import type { AgentEvent, EventOf } from "./events.ts";
 import type { JobInfo, Jobs } from "./jobs.ts";
 import type { ToolResponse } from "./model.ts";
@@ -38,8 +39,8 @@ export interface ToolCallsDeps {
   gate(): { mode: SafetyMode; overrides: SafetyOverrides };
   /** The rest of what a running tool gets (folders, helper settings). */
   context(): Pick<ToolContext, "workDir" | "brainPath" | "brainFolders" | "helpers">;
-  /** Mark ids on the canvas now (ticket 31): `draw` keeps them unique. The session clears it on a new chat. */
-  canvas: Set<string>;
+  /** The chat's canvas (tickets 31, 33). The session clears it on a new chat. */
+  canvas: Board;
   /** True once the session is closing: job ends are not announced any more. */
   closing(): boolean;
 }
@@ -147,18 +148,10 @@ export function createToolCalls(deps: ToolCallsDeps): ToolCalls {
       showDiagram({ source, title }) {
         deps.emit({ type: "diagram", id: call.id, ...(title ? { title } : {}), source });
       },
-      drawBeats(beats) {
-        // Check every id first, so a bad call draws nothing at all.
-        const ids = beats.flatMap((b) => b.marks.map((m) => m.id));
-        const taken = ids.filter((id) => deps.canvas.has(id));
-        if (taken.length) {
-          throw new Error(
-            `Nothing was drawn. ${taken.join(", ")} ${taken.length > 1 ? "are" : "is"} already on the canvas: use new ids ` +
-              `(the canvas has ${[...deps.canvas].join(", ")}).`,
-          );
-        }
-        for (const id of ids) deps.canvas.add(id);
-        beats.forEach(({ say, marks }, beat) => deps.emit({ type: "canvas.beat", id: call.id, beat, say, marks }));
+      canvas: {
+        ids: () => deps.canvas.ids(),
+        draw: (beats) => deps.canvas.draw(call.id, beats),
+        change: (change) => deps.canvas.change(call.id, change),
       },
       jobs: {
         submit(spec) {

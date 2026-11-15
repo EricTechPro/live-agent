@@ -74,7 +74,7 @@ test("a good call emits canvas.beat events in order, after the tool call and the
   expect(out[1]!.marks.map((m) => m.kind)).toEqual(["text", "line", "circle", "underline", "check", "cross", "step"]);
   expect(call).toBeLessThan(allow);
   expect(allow).toBeLessThan(events.indexOf(out[0]!));
-  expect(events).toContainEqual(expect.objectContaining({ type: "tool.result", id: "d1", status: "ok", output: { drawn: 10, ids: ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10"] } }));
+  expect(events).toContainEqual(expect.objectContaining({ type: "tool.result", id: "d1", status: "ok", output: { drawn: 10, ids: ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10"], canvas: ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10"] } }));
   expect(events.at(-1)?.type).toBe("turn.done");
 });
 

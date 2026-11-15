@@ -73,10 +73,11 @@ export default defineTool<{ beats: unknown }>({
     },
     required: ["beats"],
   },
-  run({ beats }, { drawBeats }) {
+  run({ beats }, { canvas }) {
     const checked = parseBeats(beats);
-    drawBeats(checked);
+    canvas.draw(checked);
     const ids = checked.flatMap((b) => b.marks.map((m) => m.id));
-    return { drawn: ids.length, ids };
+    // Every id on the canvas, so later turns can say "make p2 red" (edit_canvas).
+    return { drawn: ids.length, ids, canvas: canvas.ids() };
   },
 });

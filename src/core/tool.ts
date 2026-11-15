@@ -15,6 +15,7 @@
 
 import type { BrainFolders } from "../config/index.ts";
 import type { HelperPaths } from "../helpers/cli-job.ts";
+import type { CanvasChange } from "./board.ts";
 import type { Beat } from "./canvas.ts";
 import type { Jobs } from "./jobs.ts";
 
@@ -35,10 +36,15 @@ export interface ToolContext {
   /** Show a diagram (Mermaid source) in the window. The core emits `diagram` right away. */
   showDiagram(diagram: { source: string; title?: string }): void;
   /**
-   * Draw checked beats on the canvas. The core emits one `canvas.beat` per beat.
-   * Throws (and emits nothing) if a mark id is already on the canvas.
+   * The chat's canvas (src/core/board.ts), tied to this call.
+   * draw: one `canvas.beat` per beat; throws (and emits nothing) if a mark id is already on it.
+   * change: `canvas.edit` per edit, then `canvas.erase`; throws (and changes nothing) on an unknown id.
    */
-  drawBeats(beats: Beat[]): void;
+  canvas: {
+    ids(): string[];
+    draw(beats: Beat[]): void;
+    change(change: CanvasChange): { edited: string[]; erased: string[] };
+  };
   /**
    * The orchestrator (src/core/jobs.ts). A job submitted from a tool call is
    * tied to that call: the core tells the model when the job ends.

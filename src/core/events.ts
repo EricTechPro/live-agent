@@ -7,7 +7,7 @@
 // Every event is plain JSON, so the core can later pipe it to the app as
 // JSON lines without a translation layer.
 import type { Config } from "../config/index.ts";
-import type { Mark } from "./canvas.ts";
+import type { Mark, MarkChange } from "./canvas.ts";
 import type { JobInfo } from "./jobs.ts";
 import type { SafetyMode, Verdict } from "./safety.ts";
 import type { RiskClass } from "./tool.ts";
@@ -83,6 +83,13 @@ export type AgentEvent =
    * Marks stay on the canvas until a new chat (`chat.started`).
    */
   | { type: "canvas.beat"; id: string; beat: number; say: string; marks: Mark[] }
+  /**
+   * A mark changed (ticket 33, `edit_canvas`; `id` is the call): `change` is what
+   * the model asked for, `mark` the whole mark after it (same mark id, already checked).
+   */
+  | { type: "canvas.edit"; id: string; change: MarkChange; mark: Mark }
+  /** Marks erased by id (ticket 33). `all`: the board was cleared, and `ids` was everything on it. */
+  | { type: "canvas.erase"; id: string; ids: string[]; all: boolean }
   /** The model finished its reply. `reply` is the whole reply, joined for you. */
   | { type: "turn.done"; reply: string }
   /** Something went wrong in the session. The session may still be usable. */

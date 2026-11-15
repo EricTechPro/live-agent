@@ -59,6 +59,24 @@ test("other events leave the scene untouched (same object)", () => {
   expect(addCanvasEvent(drawn, { type: "diagram", id: "d1", source: "flowchart LR\n a --> b" })).toBe(drawn);
 });
 
+test("canvas.edit swaps in the changed mark, keeping its place, beat and say line", () => {
+  const drawn = addCanvasEvent(emptyScene, beat(0, [box("p1"), box("p2", 400)], "Two boxes"));
+  const edited = addCanvasEvent(drawn, { type: "canvas.edit", id: "e1", change: { color: "red" }, mark: { ...box("p2", 400), color: "red" } });
+  expect(edited.marks.map((m) => m.mark.id)).toEqual(["p1", "p2"]);
+  expect(edited.marks[1]).toMatchObject({ mark: { color: "red" }, say: "Two boxes", beatKey: "c1:0" });
+});
+
+test("canvas.edit for an id the window does not have changes nothing", () => {
+  const drawn = addCanvasEvent(emptyScene, beat(0, [box("p1")]));
+  expect(addCanvasEvent(drawn, { type: "canvas.edit", id: "e1", change: {}, mark: box("p7") })).toBe(drawn);
+});
+
+test("canvas.erase removes the named marks; erase all empties the canvas", () => {
+  const drawn = addCanvasEvent(emptyScene, beat(0, [box("p1"), box("p2", 400), box("p3", 700)]));
+  expect(addCanvasEvent(drawn, { type: "canvas.erase", id: "e1", ids: ["p2"], all: false }).marks.map((m) => m.mark.id)).toEqual(["p1", "p3"]);
+  expect(addCanvasEvent(drawn, { type: "canvas.erase", id: "e1", ids: ["p1", "p2", "p3"], all: true }).marks).toEqual([]);
+});
+
 // ---- fitting the board -------------------------------------------------------
 
 test("the window's board is the core's board", () => {

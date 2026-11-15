@@ -69,9 +69,72 @@ export type Beat = z.infer<typeof beat>;
 export function parseBeats(input: unknown): Beat[] {
   const result = beats.safeParse(input);
   if (result.success) return result.data;
-  const problems = result.error.issues.map((issue) => {
-    const where = issue.path.map((p) => (typeof p === "number" ? `[${p}]` : `.${String(p)}`)).join("");
-    return where ? `beats${where}: ${issue.message}` : issue.message;
+  throw new Error(`Nothing was drawn. ${problems(result.error, "beats")}`);
+}
+
+/** One plain message naming every problem (path: what is wrong). */
+function problems(error: z.ZodError, root: string): string {
+  return error.issues
+    .map((issue) => {
+      const where = issue.path.map((p) => (typeof p === "number" ? `[${p}]` : `.${String(p)}`)).join("");
+      return where ? `${root}${where}: ${issue.message}` : issue.message;
+    })
+    .slice(0, 5)
+    .join("; ");
+}
+
+// ---- edits (ticket 33) ---------------------------------------------------------
+
+const edit = z
+  .object({ id, color, label: z.string().trim().min(1).max(80).optional(), x: X.optional(), y: Y.optional() })
+  .refine((e) => e.color !== undefined || e.label !== undefined || e.x !== undefined || e.y !== undefined, {
+    message: "nothing to change: give a color, label, x or y",
   });
-  throw new Error(`Nothing was drawn. ${problems.slice(0, 5).join("; ")}`);
+const editArgs = z
+  .object({ edits: z.array(edit).max(20).optional(), erase: z.array(z.string().trim()).max(50).optional() })
+  .refine((a) => (a.edits?.length ?? 0) + (a.erase?.length ?? 0) > 0, { message: "send edits or erase (or both)" });
+
+export type MarkEdit = z.infer<typeof edit>;
+export type MarkChange = Omit<MarkEdit, "id">;
+
+/** Check an `edit_canvas` call. `erase` holding "all" means every mark. Throws one plain message. */
+export function parseEdits(input: unknown): { edits: MarkEdit[]; erase: string[] | "all" } {
+  const result = editArgs.safeParse(input);
+  if (!result.success) throw new Error(`Nothing was changed. ${problems(result.error, "args")}`);
+  const erase = result.data.erase ?? [];
+  return { edits: result.data.edits ?? [], erase: erase.some((e) => e.toLowerCase() === "all") ? "all" : erase };
+}
+
+const onBoard = (p: { x: number; y: number }) => p.x >= 0 && p.y >= 0 && p.x <= BOARD.width && p.y <= BOARD.height;
+
+/**
+ * The mark with one change applied, checked again (it must still fit the board).
+ * A move puts the mark's anchor at x / y: a box's corner, a ring's centre, an
+ * arrow's or line's start (its end moves with it). `label` is the words of a
+ * text mark and the label of a box, arrow or step. Throws a plain message.
+ */
+export function applyEdit(m: Mark, change: MarkChange): Mark {
+  const next: Record<string, unknown> = { ...m };
+  if (change.color) next.color = change.color;
+  if (change.label !== undefined) {
+    if (m.kind === "text") next.text = change.label;
+    else if (m.kind === "box" || m.kind === "arrow" || m.kind === "step") next.label = change.label;
+    else throw new Error(`${m.id} is a ${m.kind}: it has no label`);
+  }
+  if (change.x !== undefined || change.y !== undefined) {
+    if (m.kind === "arrow" || m.kind === "line") {
+      const dx = (change.x ?? m.from.x) - m.from.x;
+      const dy = (change.y ?? m.from.y) - m.from.y;
+      const from = { x: m.from.x + dx, y: m.from.y + dy };
+      const to = { x: m.to.x + dx, y: m.to.y + dy };
+      if (!onBoard(from) || !onBoard(to)) throw new Error(`${m.id} goes off the board (${BOARD.width} x ${BOARD.height})`);
+      Object.assign(next, { from, to });
+    } else {
+      if (change.x !== undefined) next.x = change.x;
+      if (change.y !== undefined) next.y = change.y;
+    }
+  }
+  const result = mark.safeParse(next);
+  if (result.success) return result.data;
+  throw new Error(problems(result.error, m.id));
 }

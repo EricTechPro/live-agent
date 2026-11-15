@@ -1,4 +1,4 @@
-// The sketch canvas (ticket 32): paints the core's `canvas.beat` marks on the
+// The sketch canvas (tickets 32, 33): paints the core's `canvas.*` marks on the
 // Canvas tab with a pen that draws each stroke from 0 to 1, one mark after
 // another, and shows the beat's `say` line under the board while it draws.
 //
@@ -17,6 +17,7 @@ interface Drawn {
   say: string;
 }
 
+const ERASE_MS = 420;
 const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const font = (size: number) => `500 ${size}px "Martian Mono", ui-monospace, monospace`;
 
@@ -39,6 +40,8 @@ export function mountSketch(core: CoreClient, host: HTMLElement) {
 
   let scene: Scene = emptyScene;
   let drawn = new Map<string, Drawn>();
+  // Erased marks while they stroke out (ticket 33).
+  let fading = new Map<string, { ink: Ink; slot: Slot }>();
   let penFreeAt = 0;
   let fit = fitBoard(0, 0);
   let dpr = 1;
@@ -59,10 +62,11 @@ export function mountSketch(core: CoreClient, host: HTMLElement) {
   // ---- events ----
   core.onEvent((event) => {
     if (event.type === "diagram") host.dataset.view = "diagram";
-    if (event.type !== "chat.started" && event.type !== "canvas.beat") return;
+    if (event.type !== "chat.started" && !event.type.startsWith("canvas.")) return;
     scene = addCanvasEvent(scene, event);
     if (event.type === "chat.started") {
       drawn = new Map();
+      fading = new Map();
       cached = new Set();
       penFreeAt = 0;
       caption.textContent = "";
@@ -70,6 +74,33 @@ export function mountSketch(core: CoreClient, host: HTMLElement) {
       delete host.dataset.view;
       return;
     }
+    if (event.type === "canvas.edit") {
+      // The changed mark redraws at once with a quick pen; the old one goes from the cache.
+      const old = drawn.get(event.mark.id);
+      if (!old) return;
+      const ink = inkFor(event.mark);
+      const now = performance.now();
+      const [slot] = planMarks({ penFreeAt: 0, now, lengths: [ink.length], newBeat: false, reducedMotion: reducedMotion() });
+      drawn.set(event.mark.id, { ...old, ink, slot: slot! });
+      cached = new Set();
+      kick();
+      return;
+    }
+    if (event.type === "canvas.erase") {
+      // Erased marks stroke out backwards, then they are gone.
+      const now = performance.now();
+      const ms = reducedMotion() ? 0 : ERASE_MS;
+      for (const id of event.ids) {
+        const d = drawn.get(id);
+        if (!d) continue;
+        drawn.delete(id);
+        if (d.slot.start <= now) fading.set(id, { ink: d.ink, slot: { start: now, end: now + ms } });
+      }
+      cached = new Set();
+      kick();
+      return;
+    }
+    if (event.type !== "canvas.beat") return;
     host.dataset.view = "sketch";
     figure.hidden = false;
     const inks = event.marks.map(inkFor);
@@ -127,6 +158,18 @@ export function mountSketch(core: CoreClient, host: HTMLElement) {
       const tip = drawInk(ctx, d.ink, easePen(p));
       if (tip) drawTip(ctx, tip, d.ink.color);
       speaking = d.say;
+    }
+
+    // Erased marks: the pen runs backwards until the mark is gone.
+    for (const [id, f] of fading) {
+      const span = f.slot.end - f.slot.start;
+      const p = span > 0 ? (now - f.slot.start) / span : 1;
+      if (p >= 1) {
+        fading.delete(id);
+        continue;
+      }
+      busy = true;
+      drawInk(ctx, f.ink, 1 - easePen(p));
     }
 
     // The caption: the line being drawn; once the pen rests, the last line, dimmed.

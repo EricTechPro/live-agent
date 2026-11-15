@@ -4,14 +4,14 @@
 
 **Blocked by:** 32 Sketch canvas renderer with pen animation
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Priority:** after-talk
 
-- [ ] An edit on a known id emits `canvas.edit` with the change (scripted fake model test)
-- [ ] An erase emits `canvas.erase`; erase all clears the board
-- [ ] An unknown id fails the call with a message the model hears, and no event is emitted
-- [ ] The model can see the current mark ids (in the tool result) so it can refer to them
-- [ ] The window reducer applies edits and erases; a test covers both
+- [x] An edit on a known id emits `canvas.edit` with the change (scripted fake model test)
+- [x] An erase emits `canvas.erase`; erase all clears the board
+- [x] An unknown id fails the call with a message the model hears, and no event is emitted
+- [x] The model can see the current mark ids (in the tool result) so it can refer to them
+- [x] The window reducer applies edits and erases; a test covers both
 
 ## Comments

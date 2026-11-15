@@ -36,9 +36,25 @@ export interface Scene {
 
 export const emptyScene: Scene = { marks: [] };
 
-/** A beat adds its marks after the ones already drawn. A known id is replaced in place. `chat.started` clears. */
+/**
+ * A beat adds its marks after the ones already drawn; a known id is replaced in place.
+ * An edit swaps in the changed mark (same place, beat and line); an erase removes ids.
+ * `chat.started` clears.
+ */
 export function addCanvasEvent(scene: Scene, event: AgentEvent): Scene {
   if (event.type === "chat.started") return emptyScene;
+  if (event.type === "canvas.edit") {
+    const at = scene.marks.findIndex((m) => m.mark.id === event.mark.id);
+    if (at < 0) return scene;
+    const marks = [...scene.marks];
+    marks[at] = { ...marks[at]!, mark: event.mark };
+    return { marks };
+  }
+  if (event.type === "canvas.erase") {
+    if (event.all) return emptyScene;
+    const gone = new Set(event.ids);
+    return { marks: scene.marks.filter((m) => !gone.has(m.mark.id)) };
+  }
   if (event.type !== "canvas.beat") return scene;
   const beatKey = `${event.id}:${event.beat}`;
   const marks = [...scene.marks];
