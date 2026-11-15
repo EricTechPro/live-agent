@@ -176,6 +176,8 @@ fn set_mini(window: tauri::WebviewWindow, mini: tauri::State<'_, Mini>, on: bool
         window.set_resizable(true).map_err(e)?;
         window.set_min_size(Some(LogicalSize::new(640.0, 420.0))).map_err(e)?;
         if let Some((pos, size)) = saved.take() {
+            // Known gap: on macOS the restored window is one title bar (~32 px) taller
+            // than before. Tauri reports outer == inner size here, so it can't be measured.
             window.set_size(size).map_err(e)?;
             window.set_position(pos).map_err(e)?;
         }
