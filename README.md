@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="assets/logo.svg" width="112" alt="live-agent logo">
+<img src="assets/logo.svg" width="112" alt="Jett logo">
 
-<h1>live-agent</h1>
+<h1>Jett</h1>
 
-<p><strong>Talk to your own AI. It hears you, talks back in real time, knows your notes, and hands big jobs to helper agents.</strong></p>
+<p><strong>Live Agent Jett: talk to your own AI. It hears you, talks back in real time, knows your notes, and hands big jobs to helper agents.</strong></p>
 
 <p>Gemini Live · LiveKit on your own computer · one Gemini key · macOS (Apple Silicon)</p>
 
