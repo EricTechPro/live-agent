@@ -5,6 +5,7 @@ import { mountBoardAndBar } from "./board-view.ts";
 import { bubbleLine } from "./bubble.ts";
 import { connectCore, getSetup, onCoreDown, revealLog, waitForCore, type CoreClient } from "./core-client.ts";
 import { mountDiagram } from "./diagram-view.ts";
+import { mountTooltips, paintIcons, setIcon } from "./tooltip.ts";
 import { nextLayer, startLayer, type Layer, type LayerAction } from "./layers.ts";
 import { mountLedOrb, type Mood } from "./led-orb.ts";
 import { mountMini } from "./mini.ts";
@@ -13,6 +14,9 @@ import { addToTranscript, emptyTranscript, type Transcript } from "./transcript.
 import { runWizard } from "./wizard.ts";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+// Icon buttons (ticket 26): pixel icons from icons.ts, one shared tooltip.
+paintIcons();
+const tips = mountTooltips();
 const orbEl = $("orb");
 const orbLabel = $("orb-label");
 const talkBtn = $<HTMLButtonElement>("talk");
@@ -172,8 +176,11 @@ let paused = false;
 function showPaused(on: boolean) {
   paused = on;
   document.body.classList.toggle("paused", on);
-  pauseBtn.textContent = on ? "Resume" : "Pause";
+  // A toggle: its name stays "Pause" and aria-pressed says it is on; the icon and tip show Resume.
+  setIcon(pauseBtn, on ? "play" : "pause");
+  pauseBtn.dataset.tip = on ? "Resume" : "Pause";
   pauseBtn.setAttribute("aria-pressed", String(on));
+  tips.refresh(pauseBtn);
   orbLabel.textContent = labelFor(orb.state);
   say(on ? "Paused." : "I'm back.");
   // The mic itself goes quiet too, so nothing leaves the Mac while paused.
@@ -183,8 +190,13 @@ function showPaused(on: boolean) {
 function setTalking(on: boolean) {
   if (orb.state === "listening") orbLabel.textContent = labelFor(orb.state);
   talkBtn.disabled = false;
-  talkBtn.textContent = on ? "Stop talking" : "Start talking";
-  talkBtn.setAttribute("aria-pressed", String(on));
+  // One button, two actions: Start call (mic) and, in a call, End call (red hang-up).
+  const label = on ? "End call" : "Start call";
+  setIcon(talkBtn, on ? "hangup" : "mic");
+  talkBtn.setAttribute("aria-label", label);
+  talkBtn.dataset.tip = label;
+  talkBtn.classList.toggle("end", on);
+  tips.refresh(talkBtn);
 }
 
 // ---- boot -----------------------------------------------------------------

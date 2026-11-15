@@ -46,8 +46,11 @@ export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: H
     empty.hidden = board.length > 0;
     if (toggle) {
       const running = board.filter((j) => j.status === "working" || j.status === "waiting").length;
+      // The Jobs icon's badge: the running count, hidden at 0, red when one failed.
       toggle.count.textContent = String(running);
-      toggle.button.querySelector(".led")!.className = running ? "led busy" : board.some((j) => j.status === "failed") ? "led bad" : "led";
+      toggle.count.dataset.count = String(running);
+      toggle.button.dataset.failed = String(!running && board.some((j) => j.status === "failed"));
+      toggle.button.setAttribute("aria-label", running ? `Jobs, ${running} running` : "Jobs");
     }
     list.replaceChildren(
       ...board.map((job) => {

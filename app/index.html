@@ -20,13 +20,13 @@
       <header class="topbar" data-tauri-drag-region>
         <span class="spacer" data-tauri-drag-region></span>
         <div class="top-actions">
-          <button id="new-chat" class="pf chip setup center-only" type="button" disabled title="Save this chat to your brain and start a fresh one">New chat</button>
-          <button id="setup" class="pf chip setup center-only" type="button" disabled title="Open setup again">Setup</button>
-          <button id="show-log" class="pf chip setup center-only" type="button" title="Show the core's log file in Finder">Show log</button>
-          <button id="mini" class="pf chip setup" type="button" disabled title="Shrink to a small floating orb">Mini</button>
-          <button id="jobs-toggle" class="pf chip setup jobs-toggle" type="button" aria-controls="jobs" aria-expanded="false" title="Show or hide the job board"><span class="led"></span>Jobs <b id="jobs-count">0</b></button>
-          <button id="open-center" class="pf chip setup home-only" type="button" aria-controls="center" title="Open the control center">Control center</button>
-          <button id="close-center" class="pf chip setup center-only" type="button" aria-controls="center" title="Close the control center (Esc)">Close</button>
+          <button id="new-chat" class="pf ib center-only" type="button" disabled aria-label="New chat" data-tip="New chat" data-icon="newChat"></button>
+          <button id="setup" class="pf ib center-only" type="button" disabled aria-label="Setup" data-tip="Setup" data-icon="gear"></button>
+          <button id="show-log" class="pf ib center-only" type="button" aria-label="Show log" data-tip="Show log in Finder" data-icon="log"></button>
+          <button id="mini" class="pf ib" type="button" disabled aria-label="Mini orb" data-tip="Mini orb" data-icon="mini"></button>
+          <button id="jobs-toggle" class="pf ib jobs-toggle" type="button" aria-controls="jobs" aria-expanded="false" aria-label="Jobs" data-tip="Jobs"><span class="icon-slot" data-icon="jobs"></span><b id="jobs-count" class="badge" data-count="0" aria-hidden="true">0</b></button>
+          <button id="open-center" class="pf ib home-only" type="button" aria-controls="center" aria-label="Open control center" data-tip="Control center" data-icon="center"></button>
+          <button id="close-center" class="pf ib center-only" type="button" aria-controls="center" aria-label="Close control center" data-tip="Close" data-key="Esc" data-icon="close"></button>
         </div>
       </header>
       <section id="home" class="home" aria-label="Home">
@@ -40,8 +40,8 @@
               <p id="orb-label" class="orb-label" aria-live="polite">Starting…</p>
             </div>
             <div class="controls">
-              <button id="talk" class="pf btn go talk" type="button" disabled>Start talking</button>
-              <button id="pause" class="pf btn ghost pause" type="button" disabled aria-pressed="false" title="Pause: Jett stops speaking and listening (Space)">Pause</button>
+              <button id="pause" class="pf ib call pause" type="button" disabled aria-pressed="false" aria-label="Pause" data-tip="Pause" data-key="Space" data-icon="pause" data-size="24"></button>
+              <button id="talk" class="pf ib call talk" type="button" disabled aria-label="Start call" data-tip="Start call" data-icon="mic" data-size="24"></button>
             </div>
           </div>
         </div>
@@ -57,9 +57,9 @@
           <div id="chat-slot" class="chat-slot"></div>
           <section id="diagram" class="pf diagram" hidden aria-label="Diagram"></section>
           <ol id="transcript" class="transcript" aria-label="Transcript" aria-live="polite"></ol>
-          <form id="type" class="type">
-            <span class="pf field"><input id="type-input" type="text" placeholder="Or type to Jett…" autocomplete="off" disabled /></span>
-            <button id="send" class="pf btn go send" type="submit" disabled>Send</button>
+          <form id="type" class="pf composer type">
+            <input id="type-input" type="text" placeholder="Type to Jett…" aria-label="Message Jett" autocomplete="off" disabled />
+            <button id="send" class="ib send" type="submit" disabled aria-label="Send" data-tip="Send" data-key="Enter" data-icon="send"></button>
           </form>
           <footer id="bar" class="bar" aria-label="Status"></footer>
         </section>
