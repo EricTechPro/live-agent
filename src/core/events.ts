@@ -73,6 +73,11 @@ export type AgentEvent =
    * and tidy job, and the model starts fresh. The window clears the transcript.
    */
   | { type: "chat.started" }
+  /**
+   * A diagram to show (ticket 16): Mermaid `source` from the `draw_diagram` tool
+   * (`id` is its call). The window draws it in a panel; bad source shows as an error there.
+   */
+  | { type: "diagram"; id: string; title?: string; source: string }
   /** The model finished its reply. `reply` is the whole reply, joined for you. */
   | { type: "turn.done"; reply: string }
   /** Something went wrong in the session. The session may still be usable. */

@@ -30,6 +30,8 @@ export interface ToolContext {
   useNotes(paths: string[]): void;
   /** Report a note this tool wrote into the brain (path inside the brain). The core emits `brain.write` right away. */
   brainWrote(path: string): void;
+  /** Show a diagram (Mermaid source) in the window. The core emits `diagram` right away. */
+  showDiagram(diagram: { source: string; title?: string }): void;
   /**
    * The orchestrator (src/core/jobs.ts). A job submitted from a tool call is
    * tied to that call: the core tells the model when the job ends.
