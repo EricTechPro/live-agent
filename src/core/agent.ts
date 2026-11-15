@@ -261,6 +261,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     approvals.closeTurn(heard !== "");
     // Why once, at the end: the app shows "notes used" next to the finished answer.
     if (finished.notes.size) emit({ type: "notes.used", notes: [...finished.notes] });
+    canvas.turnDone();
     emit({ type: "turn.done", reply: finished.reply });
     turn = null;
     if (heard) chat.push({ role: "user", text: heard });
@@ -314,10 +315,12 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         // Drop the queued voice first: the user is already talking.
         playAudio({ type: "clear" });
         emit({ type: "interrupted" });
+        canvas.interrupted();
         break;
       case "text":
         { const t = openVoiceTurn(); t.reply = joinText(t.reply, event.text); }
         emit({ type: "transcript", role: "model", text: event.text });
+        canvas.heard(event.text);
         break;
       case "tool.call":
         toolCalls.onCall(event);

@@ -1,6 +1,8 @@
-// The sketch canvas (tickets 32, 33): paints the core's `canvas.*` marks on the
+// The sketch canvas (tickets 32 to 34): paints the core's `canvas.*` marks on the
 // Canvas tab with a pen that draws each stroke from 0 to 1, one mark after
 // another, and shows the beat's `say` line under the board while it draws.
+// The pen is paced to the voice by pen.ts: a beat's strokes start on its
+// `canvas.speak` and spread over the time its line takes to say.
 //
 // The state is sketch.ts (pure, tested); this file only paints it. Finished marks
 // go onto a cache canvas once, so each frame draws the cache plus the one mark the
@@ -9,6 +11,7 @@
 // The Mermaid `diagram` view (ticket 16) shares the tab: whichever came last shows.
 // Idea from Roamies (AGPL): idea only, our own code.
 import type { CoreClient } from "./core-client.ts";
+import { emptyPen, penAddBeat, penInterrupt, penSpeak, type Pen } from "./pen.ts";
 import { addCanvasEvent, emptyScene, fitBoard, inkFor, partialPoints, partsAt, planMarks, taper, type Ink, type Part, type Pt, type Scene, type Slot } from "./sketch.ts";
 
 interface Drawn {
@@ -42,7 +45,8 @@ export function mountSketch(core: CoreClient, host: HTMLElement) {
   let drawn = new Map<string, Drawn>();
   // Erased marks while they stroke out (ticket 33).
   let fading = new Map<string, { ink: Ink; slot: Slot }>();
-  let penFreeAt = 0;
+  // When each beat's marks draw, paced to the voice (ticket 34, pen.ts).
+  let pen: Pen = emptyPen;
   let fit = fitBoard(0, 0);
   let dpr = 1;
   let frame = 0;
@@ -68,7 +72,7 @@ export function mountSketch(core: CoreClient, host: HTMLElement) {
       drawn = new Map();
       fading = new Map();
       cached = new Set();
-      penFreeAt = 0;
+      pen = emptyPen;
       caption.textContent = "";
       figure.hidden = true;
       delete host.dataset.view;
@@ -100,21 +104,48 @@ export function mountSketch(core: CoreClient, host: HTMLElement) {
       kick();
       return;
     }
+    if (event.type === "canvas.speak") {
+      // The voice starts this beat's line: the pen goes now (and hurries if it is behind).
+      pen = penSpeak(pen, `${event.id}:${event.beat}`, performance.now(), reducedMotion());
+      syncSlots();
+      return;
+    }
     if (event.type !== "canvas.beat") return;
     host.dataset.view = "sketch";
     figure.hidden = false;
     const inks = event.marks.map(inkFor);
-    const now = performance.now();
-    const slots = planMarks({ penFreeAt, now, lengths: inks.map((i) => i.length), newBeat: true, reducedMotion: reducedMotion() });
     event.marks.forEach((mark, i) => {
       // A mark redrawn under a known id: start the cache over so the old one goes.
       if (drawn.has(mark.id)) cached = new Set();
-      drawn.set(mark.id, { ink: inks[i]!, slot: slots[i]!, say: event.say });
+      drawn.set(mark.id, { ink: inks[i]!, slot: { start: Infinity, end: Infinity }, say: event.say });
     });
-    penFreeAt = Math.max(penFreeAt, slots.at(-1)?.end ?? now);
+    const key = `${event.id}:${event.beat}`;
+    const beat = { key, say: event.say, ids: event.marks.map((m) => m.id), lengths: inks.map((i) => i.length) };
+    pen = penAddBeat(pen, beat, performance.now(), reducedMotion());
+    syncSlots();
     canvas.setAttribute("aria-label", `Sketch: ${[...new Set(scene.marks.map((m) => m.say))].join(" ")}`);
-    kick();
   });
+
+  // The user talked over Jett: the pen stops; beats not yet spoken stay undrawn.
+  // (The core erases those on its side too, with a `canvas.erase` right after.)
+  core.onEvent((event) => {
+    if (event.type !== "interrupted") return;
+    const stopped = penInterrupt(pen, performance.now());
+    pen = stopped.pen;
+    for (const id of stopped.dropped) drawn.delete(id);
+    if (stopped.dropped.length) scene = addCanvasEvent(scene, { type: "canvas.erase", id: "", ids: stopped.dropped, all: false });
+    syncSlots();
+  });
+
+  /** Copy the pen's timing onto the marks it knows. */
+  function syncSlots() {
+    for (const b of pen.beats)
+      b.ids.forEach((id, i) => {
+        const d = drawn.get(id);
+        if (d) d.slot = b.slots[i]!;
+      });
+    kick();
+  }
 
   function kick() {
     if (!frame) frame = requestAnimationFrame(paint);

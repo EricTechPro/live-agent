@@ -4,14 +4,16 @@
 
 **Blocked by:** 32 Sketch canvas renderer with pen animation
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Priority:** after-talk
 
-- [ ] The core emits a beat-start signal as each `say` line begins to be spoken (scripted fake model test with output transcript chunks)
-- [ ] The window starts a beat's strokes on its signal and finishes them about when the line ends
-- [ ] An interruption stops the pen; the beats not yet drawn stay undrawn
-- [ ] Text turns without audio still draw every beat
+- [x] The core emits a beat-start signal as each `say` line begins to be spoken (scripted fake model test with output transcript chunks)
+- [x] The window starts a beat's strokes on its signal and finishes them about when the line ends
+- [x] An interruption stops the pen; the beats not yet drawn stay undrawn
+- [x] Text turns without audio still draw every beat
 - [ ] Hand check in the real app: strokes land with the words
 
 ## Comments
+
+- 2026-11-15: The signal is `canvas.speak` from the output transcript (a line starts once its first three words are heard; skipped lines are signalled in order). The pen clock is text-based (`app/src/pen.ts`: caption length / 15 chars a second, `beatMs` takes the rate as the hook for real audio timing). Unsignalled beats wait 1.5 s after the beat before, then draw. The hand check is still open.

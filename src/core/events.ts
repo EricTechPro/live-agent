@@ -88,7 +88,16 @@ export type AgentEvent =
    * the model asked for, `mark` the whole mark after it (same mark id, already checked).
    */
   | { type: "canvas.edit"; id: string; change: MarkChange; mark: Mark }
-  /** Marks erased by id (ticket 33). `all`: the board was cleared, and `ids` was everything on it. */
+  /**
+   * The voice starts saying beat `beat` of draw call `id` (ticket 34): the model's
+   * transcript reached the start of that beat's `say` line. Sent at most once per
+   * beat, in order. A line never said (reworded, or a turn ended first) gets none.
+   */
+  | { type: "canvas.speak"; id: string; beat: number }
+  /**
+   * Marks erased by id (ticket 33). `all`: the board was cleared, and `ids` was everything on it.
+   * An interruption also erases the beats not yet spoken (ticket 34), so the canvas keeps only what was said.
+   */
   | { type: "canvas.erase"; id: string; ids: string[]; all: boolean }
   /** The model finished its reply. `reply` is the whole reply, joined for you. */
   | { type: "turn.done"; reply: string }
