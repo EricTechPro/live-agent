@@ -44,6 +44,8 @@ export interface ToolContext {
 export interface HelperSettings extends HelperPaths {
   /** Config `helpers.geminiCli`: is the Gemini CLI helper turned on? */
   geminiCli: boolean;
+  /** Config `worktrees`: does each helper job get its own git worktree? */
+  worktrees?: boolean;
 }
 
 export interface Tool<Args extends Record<string, any> = Record<string, any>> {

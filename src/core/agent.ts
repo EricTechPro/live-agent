@@ -188,7 +188,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     context: () => ({
       workDir,
       brainPath,
-      helpers: { ...options.helpers, geminiCli: config.helpers.geminiCli },
+      helpers: { ...options.helpers, geminiCli: config.helpers.geminiCli, worktrees: config.worktrees },
       setup: {
         configPath,
         saved(saved) {
