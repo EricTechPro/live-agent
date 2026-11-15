@@ -80,7 +80,10 @@ export async function joinVoiceRoom(options: VoiceRoomOptions): Promise<VoiceRoo
         const mine = generation;
         for (let i = 0; i < chunk.length; i += FRAME) {
           if (mine !== generation || closed) break;
-          const data = chunk.subarray(i, i + FRAME);
+          // slice, not subarray: AudioFrame hands native code `data.buffer` and
+          // ignores the view's offset, so a subarray would replay the chunk's
+          // first 20 ms for every frame (a buzzing, robotic voice).
+          const data = chunk.slice(i, i + FRAME);
           await voice.captureFrame(new AudioFrame(data, VOICE_RATE, 1, data.length));
         }
       }
