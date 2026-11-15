@@ -7,6 +7,7 @@ import { bubbleLine } from "./bubble.ts";
 import { connectCore, getSetup, onCoreDown, revealLog, waitForCore, type CoreClient } from "./core-client.ts";
 import { mountDiagram } from "./diagram-view.ts";
 import { mountTooltips, paintIcons, setIcon } from "./tooltip.ts";
+import { drawsOnCanvas, nextPanel, startPanel, tabForKey, TABS, type Panel, type Tab } from "./panel.ts";
 import { nextLayer, startLayer, type Layer, type LayerAction } from "./layers.ts";
 import { mountLedOrb, type Mood } from "./led-orb.ts";
 import { mountMini } from "./mini.ts";
@@ -48,6 +49,7 @@ function setLayer(action: LayerAction) {
   $(layer === "center" ? "chat-slot" : "home-slot").append(dock);
   // A button or Escape moves focus to the other layer's way back; "show" never steals it.
   if (action !== "show") (layer === "center" ? closeCenterBtn : openCenterBtn).focus();
+  renderPanel(); // the Jobs icon's aria-expanded depends on the layer too
 }
 openCenterBtn.onclick = () => setLayer("open");
 closeCenterBtn.onclick = () => setLayer("close");
@@ -55,6 +57,45 @@ window.addEventListener("keydown", (e) => {
   if (e.key !== "Escape" || e.defaultPrevented || !$("wizard").hidden || document.body.classList.contains("mini")) return;
   setLayer("escape");
 });
+
+// ---- right panel (ticket 25): Canvas and Jobs tabs ----------------------
+const jobsBtn = $<HTMLButtonElement>("jobs-toggle");
+const tabBtns: Record<Tab, HTMLButtonElement> = { canvas: $("tab-canvas"), jobs: $("tab-jobs") };
+let panel: Panel = startPanel;
+function feedPanel(input: Parameters<typeof nextPanel>[1], focusTab = false) {
+  const next = nextPanel(panel, input);
+  if (next !== panel) (panel = next), renderPanel();
+  if (focusTab) tabBtns[panel.tab].focus();
+}
+function renderPanel() {
+  $("center").dataset.panel = panel.open ? "open" : "closed";
+  $("panel").hidden = !panel.open;
+  for (const tab of TABS) {
+    const on = tab === panel.tab;
+    tabBtns[tab].setAttribute("aria-selected", String(on));
+    tabBtns[tab].tabIndex = on ? 0 : -1;
+    $(`panel-${tab}`).hidden = !on;
+  }
+  jobsBtn.setAttribute("aria-expanded", String(layer === "center" && panel.open && panel.tab === "jobs"));
+}
+for (const tab of TABS) tabBtns[tab].onclick = () => feedPanel({ type: "panel.select", tab });
+$("tab-canvas").parentElement!.addEventListener("keydown", (e) => {
+  const tab = tabForKey(panel.tab, e.key);
+  if (!tab) return;
+  e.preventDefault();
+  feedPanel({ type: "panel.select", tab }, true);
+});
+$("close-panel").onclick = () => {
+  feedPanel({ type: "panel.close" });
+  jobsBtn.focus();
+};
+// The top bar's Jobs icon: from home, open the control center on Jobs; inside it, toggle the Jobs tab.
+jobsBtn.onclick = () => {
+  if (layer === "home") feedPanel({ type: "panel.select", tab: "jobs" }), setLayer("show");
+  else feedPanel({ type: "panel.jobs-button" });
+  renderPanel();
+};
+renderPanel();
 
 const LABELS: Record<OrbState, string> = {
   connecting: "Starting…",
@@ -232,8 +273,16 @@ async function boot() {
     if (event.type === "paused") showPaused(event.paused);
     if (event.type === "turn.done" && event.reply.trim()) say(bubbleLine(event.reply));
     if (event.type === "chat.started") say("New chat!");
+    // Something drawn: show it, on the Canvas tab of the control center.
+    feedPanel(event);
+    if (drawsOnCanvas(event)) setLayer("show"), renderPanel();
   });
-  mountBoardAndBar(core, $("jobs"), $("bar"), { button: $<HTMLButtonElement>("jobs-toggle"), count: $("jobs-count") });
+  mountBoardAndBar(core, $("jobs"), $("bar"), {
+    buttons: [
+      { button: jobsBtn, count: $("jobs-count"), label: "Jobs" },
+      { button: tabBtns.jobs, count: $("tab-jobs-count"), label: "Jobs" },
+    ],
+  });
   mountModePill(core, $<HTMLButtonElement>("mode-pill"), $<HTMLUListElement>("mode-menu"));
   say("Hi! I'm Jett.");
   mountMini(core, $<HTMLButtonElement>("mini"), orbEl, $("mini-count"));

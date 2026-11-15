@@ -1,4 +1,4 @@
-// The job board (right) and the status line (notes used). Ticket 10; the safety mode moved to the composer pill (mode-pill.ts, ticket 27).
+// The job board (the right panel's Jobs tab, ticket 25) and the status line (notes used). Ticket 10; the safety mode moved to the composer pill (mode-pill.ts, ticket 27).
 // Renders only: core events in (through the pure reducers), the cancel command out.
 import type { CoreClient } from "./core-client.ts";
 import { addBarEvent, emptyBar, type Bar } from "./bottom-bar.ts";
@@ -17,37 +17,32 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string,
 // The bar shows at most this many notes as chips (file name; full path on hover), then "+N".
 const NOTE_CHIPS = 3;
 
-/** The job board drawer's toggle chip ("Jobs 0") and its count. */
-export interface JobsToggle {
-  button: HTMLButtonElement;
-  count: HTMLElement;
+/** Where the running count shows: the top bar's Jobs icon and the panel's Jobs tab (ticket 25), each with a badge. */
+export interface JobsBadges {
+  buttons: { button: HTMLElement; count: HTMLElement; label: string }[];
 }
 
-export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: HTMLElement, toggle?: JobsToggle) {
+export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: HTMLElement, toggle?: JobsBadges) {
   let board: JobBoard = emptyBoard;
   let bar: Bar = emptyBar;
 
-  // The board is a drawer: shut while empty, opened by the Jobs chip or when a job starts.
-  const setOpen = (open: boolean) => {
-    jobsEl.classList.toggle("open", open);
-    toggle?.button.setAttribute("aria-expanded", String(open));
-  };
-  if (toggle) toggle.button.onclick = () => setOpen(!jobsEl.classList.contains("open"));
-
-  // ---- job board ----
+  // ---- job board (the right panel's Jobs tab; a new job never switches to it) ----
   const list = el("ol", { className: "job-list" });
   const empty = el("p", { className: "job-empty", textContent: "No helper jobs yet." });
-  jobsEl.append(el("h2", { className: "jobs-title", textContent: "Jobs" }), empty, list);
+  jobsEl.append(empty, list);
 
   function renderBoard() {
     empty.hidden = board.length > 0;
     if (toggle) {
       const running = board.filter((j) => j.status === "working" || j.status === "waiting").length;
-      // The Jobs icon's badge: the running count, hidden at 0, red when one failed.
-      toggle.count.textContent = String(running);
-      toggle.count.dataset.count = String(running);
-      toggle.button.dataset.failed = String(!running && board.some((j) => j.status === "failed"));
-      toggle.button.setAttribute("aria-label", running ? `Jobs, ${running} running` : "Jobs");
+      const failed = !running && board.some((j) => j.status === "failed");
+      // Each badge: the running count, hidden at 0, red when one failed.
+      for (const { button, count, label } of toggle.buttons) {
+        count.textContent = String(running);
+        count.dataset.count = String(running);
+        button.dataset.failed = String(failed);
+        button.setAttribute("aria-label", running ? `${label}, ${running} running` : label);
+      }
     }
     list.replaceChildren(
       ...board.map((job) => {
@@ -100,8 +95,6 @@ export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: H
 
   core.onEvent((event) => {
     const nextBoard = addJobEvent(board, event);
-    // A job just started: show the drawer.
-    if (event.type === "job.state" && (event.state === "queued" || event.state === "running") && !board.some((j) => j.id === event.id)) setOpen(true);
     const nextBar = addBarEvent(bar, event);
     if (nextBoard !== board) (board = nextBoard), renderBoard();
     if (nextBar !== bar) (bar = nextBar), renderBar();

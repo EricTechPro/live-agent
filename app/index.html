@@ -24,7 +24,7 @@
           <button id="setup" class="pf ib center-only" type="button" disabled aria-label="Setup" data-tip="Setup" data-icon="gear"></button>
           <button id="show-log" class="pf ib center-only" type="button" aria-label="Show log" data-tip="Show log in Finder" data-icon="log"></button>
           <button id="mini" class="pf ib" type="button" disabled aria-label="Mini orb" data-tip="Mini orb" data-icon="mini"></button>
-          <button id="jobs-toggle" class="pf ib jobs-toggle" type="button" aria-controls="jobs" aria-expanded="false" aria-label="Jobs" data-tip="Jobs"><span class="icon-slot" data-icon="jobs"></span><b id="jobs-count" class="badge" data-count="0" aria-hidden="true">0</b></button>
+          <button id="jobs-toggle" class="pf ib jobs-toggle" type="button" aria-controls="panel" aria-expanded="false" aria-label="Jobs" data-tip="Jobs"><span class="icon-slot" data-icon="jobs"></span><b id="jobs-count" class="badge" data-count="0" aria-hidden="true">0</b></button>
           <button id="open-center" class="pf ib home-only" type="button" aria-controls="center" aria-label="Open control center" data-tip="Control center" data-icon="center"></button>
           <button id="close-center" class="pf ib center-only" type="button" aria-controls="center" aria-label="Close control center" data-tip="Close" data-key="Esc" data-icon="close"></button>
         </div>
@@ -55,7 +55,6 @@
         </aside>
         <section class="chat" aria-label="Chat">
           <div id="chat-slot" class="chat-slot"></div>
-          <section id="diagram" class="pf diagram" hidden aria-label="Diagram"></section>
           <ol id="transcript" class="transcript" aria-label="Transcript" aria-live="polite"></ol>
           <div class="composer-wrap">
           <!-- The safety mode menu sits outside the composer's pixel frame, which would clip it. -->
@@ -68,9 +67,24 @@
           </div>
           <footer id="bar" class="bar" aria-label="Status"></footer>
         </section>
-        <aside id="panel" class="panel" aria-label="Panel"></aside>
+        <aside id="panel" class="panel" aria-label="Canvas and jobs">
+          <div class="panel-head">
+            <div class="tabs" role="tablist" aria-label="Canvas and jobs">
+              <button id="tab-canvas" class="tab" role="tab" type="button" aria-controls="panel-canvas" aria-selected="true">Canvas</button>
+              <button id="tab-jobs" class="tab" role="tab" type="button" aria-controls="panel-jobs" aria-selected="false" tabindex="-1">Jobs<b id="tab-jobs-count" class="badge tab-badge" data-count="0" aria-hidden="true">0</b></button>
+            </div>
+            <button id="close-panel" class="pf ib" type="button" aria-controls="panel" aria-label="Close panel" data-tip="Close panel" data-icon="close"></button>
+          </div>
+          <!-- Canvas: today's diagram panel, until the sketch canvas (ticket 32) draws here. -->
+          <section id="panel-canvas" class="tabpanel" role="tabpanel" aria-labelledby="tab-canvas">
+            <section id="diagram" class="pf diagram" hidden aria-label="Diagram"></section>
+            <p class="canvas-empty">Jett draws here.</p>
+          </section>
+          <section id="panel-jobs" class="tabpanel" role="tabpanel" aria-labelledby="tab-jobs" hidden>
+            <div id="jobs" class="jobs" aria-label="Job board"></div>
+          </section>
+        </aside>
       </section>
-      <aside id="jobs" class="pf jobs" aria-label="Job board"></aside>
     </main>
     <!--
       The setup wizard (Jett setup): first launch (no config file, or no Gemini key) and the

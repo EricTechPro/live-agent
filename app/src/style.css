@@ -98,8 +98,31 @@ body {
 .panel { border-left: 2px solid var(--edge); }
 .side-title { margin: 0 0 6px; font: 700 10px/1.2 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
 .side-empty { margin: 0 0 18px; color: var(--ink-3); font-size: 11px; }
-@media (max-width: 860px) { .center { grid-template-columns: minmax(0, 1fr) 260px; } .sidebar { display: none; } }
-@media (max-width: 700px) { .center { grid-template-columns: minmax(0, 1fr); } .panel { display: none; } }
+.center[data-panel="closed"] { grid-template-columns: 208px minmax(0, 1fr); }
+@media (max-width: 860px) {
+  .center { grid-template-columns: minmax(0, 1fr) 260px; } .center[data-panel="closed"] { grid-template-columns: minmax(0, 1fr); }
+  .sidebar { display: none; }
+}
+@media (max-width: 700px) { .center, .center[data-panel="closed"] { grid-template-columns: minmax(0, 1fr); } .panel { display: none; } }
+
+/* ---- right panel (ticket 25): Canvas and Jobs tabs, X to close ---- */
+.panel { display: flex; flex-direction: column; gap: 12px; padding-top: 8px; }
+.panel-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tabs { display: flex; gap: 2px; }
+.tab {
+  appearance: none; border: 0; background: none; cursor: pointer; position: relative;
+  display: inline-flex; align-items: center; gap: 6px; padding: 8px 10px 7px;
+  color: var(--ink-3); font: 700 11px/1.2 var(--mono); font-stretch: 87.5%; letter-spacing: .08em; text-transform: uppercase;
+  border-bottom: 2px solid transparent;
+}
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { color: var(--led); border-bottom-color: var(--led); }
+.tab:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.tab-badge { position: static; }
+.tab[data-failed="true"] .tab-badge { display: block; background: var(--bad); color: #2a0b06; }
+.tabpanel { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+.canvas-empty { margin: auto; color: var(--ink-3); font: 900 13px/1.2 var(--dots); letter-spacing: .06em; text-transform: uppercase; }
+#diagram:not([hidden]) ~ .canvas-empty { display: none; }
 
 .chat { min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 10px 16px 0; width: 100%; max-width: 760px; margin: 0 auto; }
 /* The orb sits small at the top of the chat: orb, state word and call controls in one row. */
@@ -152,15 +175,8 @@ body {
 .mode-menu li[data-mode="bypass"][aria-selected="true"] { color: var(--bad); }
 .mode-menu .led { width: 6px; height: 6px; }
 
-/* ---- job board: a drawer on the right, open when a job starts or from the Jobs chip ---- */
-.jobs {
-  position: fixed; top: 52px; right: 12px; bottom: 12px; width: min(300px, calc(100vw - 24px)); z-index: 20;
-  transform: translateX(calc(100% + 24px)); transition: transform .2s var(--ease);
-}
-.jobs.open { transform: none; }
-/* ---- job board: a pixel-framed panel, an LED per job ---- */
-.jobs { --fill: var(--panel); display: flex; flex-direction: column; gap: 10px; padding: 14px; overflow: hidden; }
-.jobs-title { margin: 0; font: 900 18px/1.1 var(--dots); letter-spacing: .04em; text-shadow: 0 0 10px rgba(120,255,226,.3); }
+/* ---- job board: the right panel's Jobs tab, an LED per job ---- */
+.jobs { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 .job-empty { margin: 0; color: var(--ink-3); }
 .job-list { list-style: none; margin: 0; padding: 0 2px 0 0; display: flex; flex-direction: column; gap: 6px; overflow: auto; min-height: 0; }
 .job { --frame: var(--edge-hi); --fill: #061719; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; flex: none; }
@@ -177,11 +193,9 @@ body {
 .job-cancel { align-self: flex-start; }
 
 /* ---- diagram panel (ticket 16) ---- */
-.diagram { flex: none; max-height: 45%; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; }
+.diagram { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; }
 .diagram-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .diagram-title { margin: 0; font: 900 14px/1.2 var(--dots); letter-spacing: .04em; }
-.diagram-close { font: inherit; color: var(--ink-2); background: transparent; border: 0; cursor: pointer; font-size: 16px; line-height: 1; }
-.diagram-close:hover { color: var(--ink); }
 .diagram-body { overflow: auto; min-height: 0; background: #f4fffc; padding: 8px; }
 .diagram-body svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }
 .diagram-note { margin: 0; color: var(--ink-3); }
