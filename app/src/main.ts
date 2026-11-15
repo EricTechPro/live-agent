@@ -4,6 +4,7 @@ import { Room, RoomEvent, Track, type Participant } from "livekit-client";
 import { mountBoardAndBar } from "./board-view.ts";
 import { mountModePill } from "./mode-pill.ts";
 import { mountApprovals } from "./approvals-view.ts";
+import { mountBrainView } from "./brain-view.ts";
 import { bubbleLine } from "./bubble.ts";
 import { connectCore, getSetup, onCoreDown, revealLog, waitForCore, type CoreClient } from "./core-client.ts";
 import { mountDiagram } from "./diagram-view.ts";
@@ -286,6 +287,10 @@ async function boot() {
   });
   mountModePill(core, $<HTMLButtonElement>("mode-pill"), $<HTMLUListElement>("mode-menu"));
   mountApprovals(core, $("approvals"));
+  mountBrainView(core, {
+    tree: $<HTMLUListElement>("brain-tree"), empty: $("brain-empty"), reader: $("reader"), readerName: $("reader-name"),
+    readerPath: $("reader-path"), readerText: $("reader-text"), closeReader: $<HTMLButtonElement>("close-reader"), transcript: transcriptEl,
+  });
   say("Hi! I'm Jett.");
   mountMini(core, $<HTMLButtonElement>("mini"), orbEl, $("mini-count"));
   mountDiagram(core, $("diagram"));

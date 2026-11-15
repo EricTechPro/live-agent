@@ -50,12 +50,24 @@
         <aside id="sidebar" class="sidebar" aria-label="Chats and brain">
           <h2 class="side-title">Chats</h2>
           <p class="side-empty">Past chats show here.</p>
-          <h2 class="side-title">Brain</h2>
-          <p class="side-empty">Your notes show here.</p>
+          <h2 class="side-title" id="brain-title">Brain</h2>
+          <!-- The brain file tree (ticket 23): the three parts, folders collapsible. Click a note to read it. -->
+          <ul id="brain-tree" class="brain-tree" role="tree" aria-labelledby="brain-title"></ul>
+          <p id="brain-empty" class="side-empty">Your notes show here.</p>
         </aside>
         <section class="chat" aria-label="Chat">
           <div id="chat-slot" class="chat-slot"></div>
           <ol id="transcript" class="transcript" aria-label="Transcript" aria-live="polite"></ol>
+          <!-- A brain note, read only (ticket 23). It covers the transcript; X (or Escape) goes back to the chat. -->
+          <section id="reader" class="pf reader" aria-labelledby="reader-name" hidden>
+            <header class="reader-head">
+              <span class="reader-icon" data-icon="file" aria-hidden="true"></span>
+              <h2 id="reader-name" class="reader-name"></h2>
+              <span id="reader-path" class="reader-path"></span>
+              <button id="close-reader" class="ib" type="button" aria-label="Close note" data-tip="Back to chat" data-key="Esc" data-side="left" data-icon="close"></button>
+            </header>
+            <pre id="reader-text" class="reader-text" tabindex="0"></pre>
+          </section>
           <div class="composer-wrap">
           <!-- The safety mode menu sits outside the composer's pixel frame, which would clip it. -->
           <ul id="mode-menu" class="pf mode-menu" hidden></ul>
