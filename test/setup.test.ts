@@ -82,8 +82,9 @@ describe("setup chat", () => {
     await session.close();
   });
 
-  test("setup only offers the Gemini CLI helper (Codex and Claude Code are not built yet)", async () => {
+  test("setup offers all three helpers, with their current on or off", async () => {
     const configPath = freshPath();
+    writeFileSync(configPath, JSON.stringify({ helpers: { codex: true } }));
     let kickoff = "";
     const model = scriptedModel([
       (input: ModelInput) => {
@@ -94,10 +95,21 @@ describe("setup chat", () => {
     const session = await startSession({ model, configPath, tools: [saveSetup] });
     await session.setup.start();
 
-    expect(kickoff).toContain("Gemini CLI");
-    expect(kickoff).not.toMatch(/codex|claude/i);
+    expect(kickoff).toMatch(/Gemini CLI.*Current: on/);
+    expect(kickoff).toMatch(/Codex.*Current: on/);
+    expect(kickoff).toMatch(/Claude Code.*Current: off/);
     const helperArgs = (saveSetup.parameters as any).properties.helpers.properties;
-    expect(Object.keys(helperArgs)).toEqual(["geminiCli"]);
+    expect(Object.keys(helperArgs)).toEqual(["geminiCli", "codex", "claudeCode"]);
+    await session.close();
+  });
+
+  test("setup can turn Codex and Claude Code on", async () => {
+    const configPath = freshPath();
+    const model = scriptedModel([said("Which helpers?"), save({ helpers: { codex: true, claudeCode: true } }), said("Saved.")]);
+    const session = await startSession({ model, configPath, tools: [saveSetup] });
+    await session.setup.start();
+    await session.sendText("turn on codex and claude code");
+    expect(loadConfig(configPath).helpers).toEqual({ geminiCli: true, codex: true, claudeCode: true, maxAtOnce: 1 });
     await session.close();
   });
 

@@ -63,8 +63,9 @@ Then:
 
 1. **Allow the microphone** when macOS asks. The reason it shows: "live-agent listens to your
    voice so you can talk to it."
-2. **Answer the setup chat.** Four questions: brain folder, safety mode, the Gemini CLI
-   helper on or off, how many helpers at once. Say "keep it" to take the default. It saves
+2. **Answer the setup chat.** Four questions: brain folder, safety mode, which helpers to
+   turn on (Gemini CLI, Codex, Claude Code), how many helpers at once. Say "keep it" to take
+   the default. It saves
    `live-agent.config.json`, and the new settings are in use straight away.
 3. **Press Start talking** and say "What is my sourdough starter called?" It answers from
    the sample brain, and the bottom bar shows `Notes used wiki/sourdough-starter.md`.
@@ -153,8 +154,8 @@ This is the whole file with every default:
 | `safety.mode` | what runs without asking: `ask-me`, `auto-edits` or `bypass` (table below) | `auto-edits` |
 | `safety.overrides` | per-tool verdicts that win over the mode: `allow`, `ask` or `block` | `{}` |
 | `helpers.geminiCli` | allow the Gemini CLI helper | `true` |
-| `helpers.codex` | allow Codex as a helper (coming after the talk) | `false` |
-| `helpers.claudeCode` | allow Claude Code as a helper (coming after the talk) | `false` |
+| `helpers.codex` | allow Codex as a helper (needs your own Codex sign-in) | `false` |
+| `helpers.claudeCode` | allow Claude Code as a helper (needs your own Claude Code sign-in) | `false` |
 | `helpers.maxAtOnce` | most helper jobs running at once; extra jobs wait in the queue | `1` |
 | `worktrees` | give each helper job its own git worktree and branch, so it never touches your checkout ([Worktrees](#worktrees)) | `false` |
 | `voice` | Gemini Live voice name, e.g. `Puck`, `Kore`, `Charon` (not wired yet: today it always uses Gemini's default voice) | `Puck` |
@@ -200,7 +201,8 @@ Here "remember this" saves at once even in Ask me, and helpers can never start.
 
 ### Helpers
 
-`helpers.geminiCli` lets the agent start Gemini CLI jobs. `maxAtOnce` keeps your laptop
+`helpers.geminiCli`, `helpers.codex` and `helpers.claudeCode` let the agent start jobs with
+that helper; turning one on is what allows it. `maxAtOnce` keeps your laptop
 cool: with `1`, a second job waits until the first is done. See [Helper agents](#helper-agents).
 
 ## Your second brain
@@ -236,21 +238,36 @@ Keep your real brain out of any public repo; this repo only ships the made-up sa
 Gemini Live is the boss. It talks; helpers do the slow work.
 
 - **Start one by asking.** "Fix the off-by-one bug in ~/code/recipe-box." Gemini calls
-  `start_helper`, which starts **Gemini CLI** in that folder in the background and answers at
+  `start_helper`, which starts a helper in that folder in the background and answers at
   once with a job id. The voice keeps talking with you.
-- **It runs on your key.** The helper uses the same Gemini key as the voice, with its own
+- **Pick the helper.** Three helpers, each turned on in the config: **Gemini CLI**, **Codex**
+  and **Claude Code**. Say "use Claude Code to..." to pick one. If you don't say, the first one
+  turned on is used, in that order. Naming one that is turned off, not installed or not signed
+  in gets a plain fix instead of a job.
+- **Gemini CLI runs on your key.** It uses the same Gemini key as the voice, with its own
   private Gemini CLI settings folder, so your own `gemini` login and settings are never touched.
   (Google ended Gemini CLI's free "Login with Google" tier, so the key is the way in.)
   Install Gemini CLI once: `npm install -g @google/gemini-cli`.
+- **Codex and Claude Code run on your own sign-in** with OpenAI and Anthropic, and use your
+  plan or API credit. live-agent never signs in for you and never hands them your Gemini key.
+  - Codex: `npm install -g @openai/codex`, then `codex login` once. Runs
+    `codex exec --json --sandbox workspace-write`: it edits files and runs commands inside the
+    folder only. It uses the model in your `~/.codex/config.toml`; if your account can't use
+    that model, the job fails saying so.
+  - Claude Code: `npm install -g @anthropic-ai/claude-code`, then `claude auth login` once.
+    Runs `claude -p --output-format json --permission-mode bypassPermissions`
+    (nobody is there to answer its permission prompts) and does not save the run to your
+    session list.
 - **Max at once.** `helpers.maxAtOnce` jobs run at a time. More jobs wait as **Waiting**.
 - **Follow along.** The job board shows each job as Waiting, Working, Done, Failed or Cancelled.
   When a job ends, the agent says how it went.
 - **Cancel.** Press **Cancel** on the job, or say "stop job 1" (the `cancel_job` tool).
 - **Safety.** Helpers are the `helper` risk class: in Ask me and Auto edits the agent asks
-  first. A helper runs Gemini CLI in "yolo" mode inside the folder you name, so only point it
-  at code you are happy for it to change (git makes that easy to undo).
-
-Codex and Claude Code are in the config but come after the talk.
+  first. Once started, a helper does not ask again (Gemini CLI "yolo", Codex's workspace
+  sandbox, Claude Code's bypass mode), so only point it at code you are happy for it to change.
+  Turn on [worktrees](#worktrees) and it works on its own branch instead.
+- **Cancel stops everything it started.** Each helper runs in its own process group, and the
+  group is stopped on cancel, on quit, or if the core crashes.
 
 ### Worktrees
 
@@ -290,15 +307,17 @@ live-agent doctor
 ✓ Microphone: default input: Bose QC Headphones
 ✓ LiveKit: local server starts (port 52689)
 ✓ Gemini CLI: installed, uses your Gemini key
-✓ Codex: installed (turned off)
-✓ Claude Code: installed (turned off)
+✓ Codex: installed and signed in (turned off)
+! Claude Code: installed, not signed in (turned off)
+    Fix: Claude Code is not signed in. Run "claude auth login" once in a terminal.
 
-All checks pass.
+All required checks pass, 1 warning(s).
 ```
 
 The key, the microphone and LiveKit must pass. A helper CLI only fails when it is turned on in
-the config; otherwise a missing one is a warning with an install hint. A bad key points you
-back to [Get your Gemini key](#get-your-gemini-key).
+the config; otherwise a missing or signed-out one is a warning with the fix. Codex and Claude
+Code are asked with their own `codex login status` and `claude auth status` (no model call).
+A bad key points you back to [Get your Gemini key](#get-your-gemini-key).
 
 ## How it works inside
 

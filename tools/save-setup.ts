@@ -25,9 +25,13 @@ export default defineTool<SetupAnswers>({
       safetyMode: { type: "string", enum: ["ask-me", "auto-edits", "bypass"], description: "The safety mode." },
       helpers: {
         type: "object",
-        description: "Turn the Gemini CLI helper on (true) or off (false). Leave it out if the user did not say.",
+        description:
+          "Turn each helper on (true) or off (false): geminiCli = Gemini CLI, codex = Codex, claudeCode = Claude Code. " +
+          "Leave out any the user did not say.",
         properties: {
           geminiCli: { type: "boolean" },
+          codex: { type: "boolean" },
+          claudeCode: { type: "boolean" },
         },
       },
       maxAtOnce: { type: "integer", minimum: 1, description: "The most helpers running at the same time." },

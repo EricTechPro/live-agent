@@ -5,6 +5,8 @@ import { describe, expect, test } from "bun:test";
 import { defaultConfig } from "../src/config/index.ts";
 import { formatReport, runDoctor, type DoctorDeps } from "../src/doctor/index.ts";
 import { INSTALL_FIX, KEY_FIX } from "../src/helpers/gemini-cli.ts";
+import { CODEX_INSTALL_FIX, CODEX_SIGN_IN_FIX } from "../src/helpers/codex.ts";
+import { CLAUDE_CODE_INSTALL_FIX, CLAUDE_CODE_SIGN_IN_FIX } from "../src/helpers/claude-code.ts";
 
 const KEY_GUIDE = "README.md#get-your-gemini-key";
 
@@ -33,6 +35,8 @@ function healthy(over: Partial<DoctorDeps> = {}): Partial<DoctorDeps> {
     freePort: async () => 40000,
     startLiveKit: async () => ({ stop: async () => {} }),
     geminiCliStatus: () => ({ ok: true, installed: true, bin: "/usr/local/bin/gemini" }),
+    codexStatus: async () => ({ ok: true, installed: true, bin: "/usr/local/bin/codex" }),
+    claudeCodeStatus: async () => ({ ok: true, installed: true, bin: "/usr/local/bin/claude" }),
     which: (bin) => `/usr/local/bin/${bin}`,
     config: defaultConfig(),
     ...over,
@@ -176,18 +180,42 @@ describe("doctor", () => {
   });
 
   test("Codex and Claude Code missing are warnings while off, failures when on", async () => {
-    const which = (bin: string) => (bin === "codex" || bin === "claude" ? undefined : `/bin/${bin}`);
-    const off = await runDoctor(healthy({ which }));
-    expect(find(off, "Codex").status).toBe("warn");
-    expect(find(off, "Codex").fix).toContain("npm install -g");
-    expect(find(off, "Claude Code").status).toBe("warn");
+    const missing = async () => ({ ok: false, installed: false, fix: CODEX_INSTALL_FIX });
+    const missingClaude = async () => ({ ok: false, installed: false, fix: CLAUDE_CODE_INSTALL_FIX });
+    const off = await runDoctor(healthy({ codexStatus: missing, claudeCodeStatus: missingClaude }));
+    expect(find(off, "Codex")).toMatchObject({ status: "warn", detail: "not installed (turned off)", fix: CODEX_INSTALL_FIX });
+    expect(find(off, "Claude Code")).toMatchObject({ status: "warn", fix: CLAUDE_CODE_INSTALL_FIX });
     expect(off.exitCode).toBe(0);
 
     const config = defaultConfig();
     config.helpers.codex = true;
-    const on = await runDoctor(healthy({ which, config }));
+    const on = await runDoctor(healthy({ codexStatus: missing, config }));
     expect(find(on, "Codex").status).toBe("fail");
     expect(on.exitCode).toBe(1);
+  });
+
+  test("a signed-out Codex or Claude Code says how to sign in: failure when on, warning when off", async () => {
+    const config = defaultConfig();
+    config.helpers.claudeCode = true;
+    const r = await runDoctor(
+      healthy({
+        config,
+        codexStatus: async () => ({ ok: false, installed: true, bin: "/bin/codex", fix: CODEX_SIGN_IN_FIX }),
+        claudeCodeStatus: async () => ({ ok: false, installed: true, bin: "/bin/claude", fix: CLAUDE_CODE_SIGN_IN_FIX }),
+      }),
+    );
+    expect(find(r, "Codex")).toMatchObject({ status: "warn", detail: "installed, not signed in (turned off)", fix: CODEX_SIGN_IN_FIX });
+    expect(find(r, "Claude Code")).toMatchObject({ status: "fail", detail: "installed, not signed in (turned on)" });
+    expect(find(r, "Claude Code").fix).toContain("claude auth login");
+    expect(r.exitCode).toBe(1);
+  });
+
+  test("a signed-in Codex or Claude Code is ready", async () => {
+    const config = defaultConfig();
+    config.helpers.codex = true;
+    const r = await runDoctor(healthy({ config }));
+    expect(find(r, "Codex")).toMatchObject({ status: "ok", detail: "installed and signed in" });
+    expect(find(r, "Claude Code")).toMatchObject({ status: "ok", detail: "installed and signed in (turned off)" });
   });
 
   test("the report prints one line per check and the fix under each problem", async () => {
