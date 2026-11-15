@@ -16,7 +16,8 @@ import type { Config } from "../config/index.ts";
 import type { JobSpec } from "../core/jobs.ts";
 import { claudeCodeJob, claudeCodeStatus } from "./claude-code.ts";
 import { codexJob, codexStatus } from "./codex.ts";
-import { geminiCliJob, geminiCliStatus, type HelperPaths } from "./gemini-cli.ts";
+import type { HelperPaths } from "./cli-job.ts";
+import { geminiCliJob, geminiCliStatus } from "./gemini-cli.ts";
 
 /** What the voice may name in start_helper. */
 export const HELPER_IDS = ["gemini-cli", "codex", "claude-code"] as const;

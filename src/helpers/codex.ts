@@ -14,8 +14,7 @@
 //   live-agent never signs in for them and never passes on the Gemini key.
 // - Ready check: `codex login status` exits 0 when signed in (no model call).
 import type { JobSpec } from "../core/jobs.ts";
-import type { HelperPaths } from "./gemini-cli.ts";
-import { capSummary, checkExitsZero, childEnv, findBin, jobTitle, jsonLine, runCli } from "./cli-job.ts";
+import { capSummary, checkExitsZero, childEnv, findBin, jobTitle, jsonLine, runCli, type HelperPaths } from "./cli-job.ts";
 import type { HelperStatus } from "./index.ts";
 
 export const DEFAULT_CODEX_BIN = "codex";

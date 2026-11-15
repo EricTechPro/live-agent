@@ -14,7 +14,7 @@
 // mode (see src/core/safety.ts), so a new tool is safe by declaring one word.
 
 import type { Config } from "../config/index.ts";
-import type { HelperPaths } from "../helpers/gemini-cli.ts";
+import type { HelperPaths } from "../helpers/cli-job.ts";
 import type { Jobs } from "./jobs.ts";
 import type { GateState, Ruling } from "./safety.ts";
 

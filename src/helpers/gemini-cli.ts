@@ -18,10 +18,9 @@
 // - Spawned in its own process group, so cancel stops the CLI and everything it
 //   started (shell commands, MCP servers): see src/helpers/cli-job.ts.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import type { JobSpec } from "../core/jobs.ts";
-import { capSummary, childEnv, findBin, jobTitle, jsonLine, runCli } from "./cli-job.ts";
+import { capSummary, childEnv, findBin, jobTitle, jsonLine, liveAgentDataDir, runCli, type HelperPaths } from "./cli-job.ts";
 import { geminiApiKey } from "../gemini-key.ts";
 
 const KEY_GUIDE = "README.md#get-your-gemini-key";
@@ -32,45 +31,11 @@ export const KEY_REJECTED_FIX = `Gemini CLI rejected the Gemini key. Check GEMIN
 /** The Gemini CLI binary looked up on PATH unless told otherwise. */
 export const DEFAULT_GEMINI_BIN = "gemini";
 
-/**
- * Where the helper CLIs live and what Gemini CLI runs on. One shape all the way down:
- * the session options, the tool context and this adapter all take it as is
- * (tests point it at a fake CLI script).
- */
-export interface HelperPaths {
-  /** The Gemini CLI binary: a name on PATH or a path. Default "gemini". */
-  geminiCliBin?: string;
-  /** The Codex binary. Default "codex" (src/helpers/codex.ts). */
-  codexBin?: string;
-  /** The Claude Code binary. Default "claude" (src/helpers/claude-code.ts). */
-  claudeCodeBin?: string;
-  /** live-agent's private Gemini CLI home (its GEMINI_CLI_HOME). Default: `defaultHelperHome()`. */
-  geminiCliHome?: string;
-  /** The Gemini API key. Default: `geminiApiKey()` (the same key as the voice). */
-  geminiApiKey?: string;
-  /** How long to wait after SIGINT before SIGKILL on cancel. Default 3000 ms. */
-  cancelGraceMs?: number;
-  /** Where helper worktrees go (config `worktrees`). Default: `defaultWorktreesRoot()` in src/helpers/worktree.ts. */
-  worktreesRoot?: string;
-}
-
 export interface GeminiCliOptions extends HelperPaths {
   /** What the helper should do, in plain words. */
   task: string;
   /** The project folder the helper works in. */
   cwd: string;
-}
-
-/** live-agent's own folder in the OS app-data folder (the helper's CLI home, helper worktrees). */
-export function liveAgentDataDir(): string {
-  const home = homedir();
-  const base =
-    process.platform === "darwin"
-      ? join(home, "Library", "Application Support")
-      : process.platform === "win32"
-        ? (process.env.APPDATA ?? join(home, "AppData", "Roaming"))
-        : (process.env.XDG_DATA_HOME ?? join(home, ".local", "share"));
-  return join(base, "live-agent");
 }
 
 /** live-agent's own folder for the helper's Gemini CLI home (in the OS app-data folder). */

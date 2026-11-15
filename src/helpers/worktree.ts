@@ -8,8 +8,8 @@
 // files, uncommitted work) is never touched.
 //
 // Decisions:
-// - Adapter-agnostic: this module knows git, not Gemini CLI. Any helper adapter
-//   (Gemini CLI now, Codex and Claude Code later) just runs in `worktree.cwd`.
+// - Adapter-agnostic: this module knows git, not any one CLI. Every helper
+//   adapter (Gemini CLI, Codex, Claude Code) just runs in `worktree.cwd`.
 // - Branch `live-agent/<task-slug>-<yyyymmdd-hhmmss>`, made from the user's
 //   current commit (HEAD). Uncommitted changes in the project are not copied.
 // - Worktrees live outside every project, in live-agent's app-data folder:
@@ -28,7 +28,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { JobSpec } from "../core/jobs.ts";
-import { liveAgentDataDir } from "./gemini-cli.ts";
+import { liveAgentDataDir } from "./cli-job.ts";
 
 /** Where a job's worktree is. Plain JSON: it rides on the job's events. */
 export interface WorktreeInfo {
