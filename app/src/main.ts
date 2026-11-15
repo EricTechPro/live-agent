@@ -13,6 +13,7 @@ import {
   type CoreClient,
   type CoreInfo,
 } from "./core-client.ts";
+import { mountDiagram } from "./diagram-view.ts";
 import { mountMini } from "./mini.ts";
 import { nextOrb, orbStart, type Orb, type OrbInput, type OrbState } from "./orb-state.ts";
 import { addToTranscript, emptyTranscript, type Transcript } from "./transcript.ts";
@@ -189,6 +190,7 @@ async function boot() {
   });
   mountBoardAndBar(core, $("jobs"), $("bar"));
   mountMini(core, $<HTMLButtonElement>("mini"), orbEl, $("mini-count"));
+  mountDiagram(core, $("diagram"));
   feedOrb({ type: "core.ready" });
 
   talkBtn.disabled = false;

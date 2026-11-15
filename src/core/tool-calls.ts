@@ -139,6 +139,9 @@ export function createToolCalls(deps: ToolCallsDeps): ToolCalls {
       brainWrote(path) {
         deps.emit({ type: "brain.write", path, cause: "tool", tool: call.name });
       },
+      showDiagram({ source, title }) {
+        deps.emit({ type: "diagram", id: call.id, ...(title ? { title } : {}), source });
+      },
       jobs: {
         submit(spec) {
           // A job never ends inside submit, so watching right after is safe.
