@@ -25,8 +25,8 @@ adds new files to `raw/` and writes pages in `wiki/`. It never deletes a note.
    a `# Title`, one line on the goal, a few bullets on status and next steps.
 3. **Fill `wiki/`** with pages you already have (copy markdown files in as they are),
    or drop your messy notes into `raw/` and let the tidy job write the wiki pages for you.
-4. **Point live-agent at it.** Either press **Setup** in the app window and give the folder
-   as the brain (from the repo: `bun run setup`), or edit
+4. **Point live-agent at it.** Either press **Setup** in the app window and pick the folder
+   with "Use my folder" (it maps your own folder names onto raw, wiki and projects), or edit
    `~/Desktop/live-agent/live-agent.config.json`: `"brainPath": "/Users/you/brain"`.
    Restart the app; new settings apply on the next start.
 5. **Check it.** Ask about something only your notes know. The bottom bar shows

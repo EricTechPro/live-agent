@@ -36,7 +36,7 @@ A small desktop app you talk to.
   to open the full window again.
 - **You decide what it may do alone.** Three safety modes, Ask me / Auto edits / Bypass.
   <kbd>Shift</kbd>+<kbd>Tab</kbd> switches them.
-- **One JSON file controls it all**, and a setup chat fills it in for you.
+- **One JSON file controls it all**, and a click-through setup wizard fills it in for you.
 
 All you need is a Gemini key. LiveKit (the part that carries your voice) runs on your own
 computer, inside the app. No accounts, no cloud servers.
@@ -55,24 +55,25 @@ Have your Gemini key ready (next section): the installer asks for it. It then:
 2. makes a `live-agent` folder on your Desktop with the sample brain,
 3. saves your key in that folder, readable only by you,
 4. runs the doctor check (key, microphone, LiveKit, helper CLIs),
-5. opens the app, which starts the **setup chat**.
+5. opens the app, which starts the **setup wizard**.
 
 Your Desktop folder `~/Desktop/live-agent`:
 
 | file | what it is |
 |---|---|
 | `sample-brain/` | the brain the app reads and writes (`raw`, `wiki`, `projects`) |
-| `live-agent.config.json` | your settings, written by the setup chat |
+| `live-agent.config.json` | your settings, written by the setup wizard |
 | `.env` | your Gemini key (`GEMINI_API_KEY=...`), readable only by you |
 
 Then:
 
 1. **Allow the microphone** when macOS asks. The reason it shows: "live-agent listens to your
    voice so you can talk to it."
-2. **Answer the setup chat.** Four questions: brain folder, safety mode, which helpers to
-   turn on (Gemini CLI, Codex, Claude Code), how many helpers at once. Say "keep it" to take
-   the default. It saves
-   `live-agent.config.json`, and the new settings are in use straight away.
+2. **Click through the setup wizard.** Jett's voice, your Gemini key (if not saved yet), the
+   mic, your notes folder (sample notes, or your own folder: it maps your folders onto raw,
+   wiki and projects), how Jett talks (Short, Casual, Friendly, Professional) and how careful
+   it is. Then say hi to test the voice. It saves `live-agent.config.json`, and the new
+   settings are in use straight away.
 3. **Press Start talking** and say "What is my sourdough starter called?" It answers from
    the sample brain, and the bottom bar shows `Notes used wiki/sourdough-starter.md`.
    Use headphones so it doesn't hear itself.
@@ -118,7 +119,7 @@ tidy job and the Gemini CLI helper. It takes about two minutes.
 
 **Skipped it?** No problem: the app opens on **Paste your Gemini key**. Paste it there and press
 **Save and start**. The app checks the key with Google, saves it in `~/Desktop/live-agent/.env`
-(readable only by you) and goes straight into the setup chat. The window never shows it again.
+(readable only by you) and goes straight into the setup wizard. The window never shows it again.
 
 **Got a new key?** Open the key file and put the key after `GEMINI_API_KEY=`:
 
@@ -134,7 +135,7 @@ Google may ask you to turn on billing for heavier use.
 
 ## Customise it
 
-Everything lives in one file: `~/Desktop/live-agent/live-agent.config.json`. The setup chat
+Everything lives in one file: `~/Desktop/live-agent/live-agent.config.json`. The setup wizard
 writes it (press **Setup** in the window to run it again), and you can edit it by hand.
 Every field is optional; a missing field uses the default. Restart the app after a change.
 
@@ -160,7 +161,9 @@ This is the whole file with every default:
 
 | field | what it does | default |
 |---|---|---|
-| `brainPath` | the brain folder. A relative path starts in `~/Desktop/live-agent`. By hand, write a full path (`/Users/you/notes`); the setup chat turns `~/notes` into one for you. | `sample-brain` |
+| `brainPath` | the brain folder. A relative path starts in `~/Desktop/live-agent`. By hand, write a full path (`/Users/you/notes`); the setup wizard picks it in Finder. Setup refuses a folder that does not exist. | `sample-brain` |
+| `brainFolders` | which folder inside the brain plays each part: `{ "raw": "_inbox", "wiki": "03 Notes", "projects": "work" }`. A name or a relative path; never outside the brain. The wizard detects them by name. | `raw`, `wiki`, `projects` |
+| `tone` | how Jett talks: `short` (answer first, few plain words, one idea per line), `casual`, `friendly` or `pro` | `short` |
 | `safety.mode` | what runs without asking: `ask-me`, `auto-edits` or `bypass` (table below) | `auto-edits` |
 | `safety.overrides` | per-tool verdicts that win over the mode: `allow`, `ask` or `block` | `{}` |
 | `helpers.geminiCli` | allow the Gemini CLI helper | `true` |
@@ -412,7 +415,7 @@ The order for the room. Demo first, inside last. About an hour.
 1. **Live demo (5 min).** Watch it talk, answer from the sample brain, take a "remember this",
    and start a helper while it keeps talking.
 2. **Setup (15 min).** [Get your Gemini key](#get-your-gemini-key), run the one-line
-   [install](#install), let the doctor pass, answer the setup chat, then say hello.
+   [install](#install), let the doctor pass, click through the setup wizard, then say hello.
 3. **Customise (10 min).** Open `live-agent.config.json`. Try each [safety mode](#safety-modes)
    with <kbd>Shift</kbd>+<kbd>Tab</kbd>, add a [per-tool override](#per-tool-overrides), restart.
 4. **Build your brain (10 min).** Add a page to `wiki/` and a project to `projects/`, ask about
@@ -429,7 +432,7 @@ The order for the room. Demo first, inside last. About an hour.
 Copy these into your own projects:
 
 - [`prompts/`](prompts/README.md): the real prompts the agent sends to Gemini (tidy, chat
-  summary, setup chat). The code reads them from these files.
+  summary). The code reads them from these files.
 - [`skills/`](skills/README.md): skills for coding agents, like adding a tool or bringing your
   own brain.
 - [`tools/`](tools): every tool the agent can call, one small file each, with "why" comments.
@@ -446,7 +449,6 @@ cp .env.example .env   # add your GEMINI_API_KEY
 bun run smoke          # one real text turn against Gemini Live (skips with no key)
 bun run start          # the core from source; open the printed /check page to talk
 bun run doctor         # the doctor check
-bun run setup          # the setup chat, typed in the terminal
 bunx tsc --noEmit      # type check (also in app/)
 ```
 

@@ -57,7 +57,7 @@ describe("get.sh", () => {
     expect(r.code).toBe(0);
     expect(readFileSync(join(s.apps, "live-agent.app", "Contents", "VERSION"), "utf8")).toBe("1");
     expect(readFileSync(join(s.folder, "sample-brain", "wiki", "tomato-garden.md"), "utf8")).toBe("# Tomatoes\n");
-    // No config yet: the setup chat writes it on first launch.
+    // No config yet: the setup wizard writes it on first launch.
     expect(existsSync(join(s.folder, "live-agent.config.json"))).toBe(false);
     // Doctor ran from the installed app, pointed at the Desktop folder.
     expect(readFileSync(join(s.folder, "doctor.log"), "utf8")).toContain(`doctor-ran doctor home=${s.folder}`);
@@ -113,7 +113,7 @@ describe("get.sh", () => {
   test("running it again upgrades the app and leaves the brain, config and key alone", () => {
     const s = sandbox();
     expect(runGet(s, fakeRelease(s.root, "1")).code).toBe(0);
-    // The user uses it: a note, a config from the setup chat, a key.
+    // The user uses it: a note, a config from the setup wizard, a key.
     writeFileSync(join(s.folder, "sample-brain", "wiki", "tomato-garden.md"), "# My tomatoes\n");
     mkdirSync(join(s.folder, "sample-brain", "raw"), { recursive: true });
     writeFileSync(join(s.folder, "sample-brain", "raw", "mine.md"), "my note\n");
@@ -143,7 +143,7 @@ describe("get.sh", () => {
     expect(readFileSync(join(s.folder, "doctor.log"), "utf8")).toContain(`cwd=${s.folder}`);
   });
 
-  test("a failing doctor only warns: the setup chat helps fix it", () => {
+  test("a failing doctor only warns: the setup wizard helps fix it", () => {
     const s = sandbox();
     const r = runGet(s, fakeRelease(s.root, "1"), { FAKE_DOCTOR_EXIT: "1" });
     expect(r.code).toBe(0);

@@ -6,7 +6,7 @@
 # Downloads the ready-built app from GitHub Releases (no Rust needed), puts it in
 # /Applications (or ~/Applications), makes ~/Desktop/live-agent with the sample
 # brain and your Gemini key, runs `live-agent doctor`, and opens the app into the
-# setup chat. Run it again to upgrade: your brain, config and key are kept.
+# setup wizard. Run it again to upgrade: your brain, config and key are kept.
 #
 # Options:
 #   --ref <tag>     install this release (default: the latest)
@@ -132,10 +132,10 @@ main() {
   # Run it from the live-agent folder: a .env in the folder this script was run
   # from (say, a clone of the repo) must never stand in for the key the app uses.
   ( cd "$home" && LIVE_AGENT_HOME="$home" "$app/Contents/MacOS/live-agent-core" doctor ) \
-    || warn "doctor found problems (see above). The setup chat will help you fix them."
+    || warn "doctor found problems (see above). The setup wizard will help you fix them."
 
   if [ "$open_app" -eq 1 ]; then
-    say "🚀 opening live-agent: the setup chat starts on first launch"
+    say "🚀 opening live-agent: the setup wizard starts on first launch"
     open "$app"
   fi
   say "🎉 live-agent is installed. Your folder: $home"
