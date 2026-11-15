@@ -258,18 +258,32 @@ v2 was too big: a 960 x 600 window with three columns feels like a desktop app, 
 - **Everything else only when clicked**: a small menu button by the orb opens one compact glass popover (dark tint, blur, rounded, thin teal border) with one view at a time, picked by icon tabs: **Chat** (transcript, composer with the safety mode pill, notes used), **Jobs** (job cards), **Brain** (past chats, the file tree, the read-only reader). New chat, Setup and Show log are icon buttons in its tab row. Esc or its X closes it. A running-jobs badge on the orb opens it on Jobs.
 - **Approvals** show as a small glass card next to the orb, not inside the popover.
 - The mini orb (ticket 15) is gone: the orb is always mini now.
+- **Follow my pointer** (Roamies' default) is an option in the popover; ours defaults to staying where you dragged it. While following, the orb trails the pointer and holds still when the pointer comes near, so you can click it.
+- **The drawing is a terminal-style glass card** (title bar, X) placed in the empty half of the screen, away from the orb; its marks draw in step with the voice as before.
+- **No Dock icon**: Jett is a macOS accessory app with a menu-bar icon. Clicking the icon opens the popover; its menu has Open, Show / hide and Quit (quitting still lets the core save the chat).
 
 ### Calls like a phone call (ticket 37)
 
 - **Not in a call: one button, Start call.** One click and it is live. Clicking the orb does the same.
 - **In a call: exactly two buttons, Mute (mic-slash when muted) and a red Hang up.** Mute stops the mic track in the window; the core keeps running. The user never sees a "pause". The core's pause stays for the API but the window no longer uses it.
 - **State at a glance, in plain words**: "Tap to talk", "Connecting…", "Listening…" (the orb's ring pulses with your voice level), "Thinking…", "Speaking…", "Muted" (orb dimmed, mic-slash badge), "Call ended". Each state has its own orb colour and motion. The mapping is a pure function (`app/src/call-state.ts`) with tests.
-- **Keys**: Space starts a call, and in a call mutes and unmutes. Cmd+. hangs up, and Esc does too when nothing else is open (the popover and the reader close first). Tooltips show the keys.
+- **Keys**: Space starts a call, and in a call mutes and unmutes. Cmd+. hangs up. Esc closes the popover or the reader first; else, while Jett speaks, it stops the reply (the core's new `POST /reply/stop`, an `interrupted` on the stream, the call stays on); else, in a call, it hangs up. Tooltips show the keys.
+- **Push to talk, anywhere**: hold Ctrl+Option to talk, let go to send, like a dictation app. The press opens the mic (starting a call if there is none); letting go closes it again 1.2 s later (so Gemini hears the quiet after your sentence), unless the mic was already open before. A hold must last 250 ms, so Ctrl+Option+S never starts talking. Read from the macOS modifier flags in the same Rust poll as the cursor (no global shortcut can be just two modifiers). Pure step function (`pttStep` in `app/src/overlay.ts`) with tests.
+- **Show / hide**: Ctrl+Option+S (a global shortcut) hides Jett or brings it back.
+- **Cues beside the orb** (Roamies-like, our own code): listening shows a small pill of equaliser bars that move with your mic level, with your words; working shows a pill with a spinner naming the action ("Asking Claude Code…", "Searching your notes…", from the tool calls); speaking shows a speech bubble with a tail pointing at the orb, folded to three lines with a chevron for long replies. While a drawing is on screen the words move to the bottom-centre caption bar instead. Pure (`app/src/cues.ts`) with tests.
 - **Language**: Jett always answers in the language the user spoke (rule in the system prompt). The window's state words follow the user's last spoken language (English and Chinese).
+
+### Later (not built; tickets 38 and up when Eric wants them)
+
+Seen in the Roamies demo, left for later:
+- A menu-bar drop-down panel with a sidebar: Home, Memory, Model, Appearance, Voice, Behavior.
+- A floating reminders card.
+- A new onboarding: look and size; permissions (mic, screen, accessibility, files) with ALLOWED badges; brain = Gemini key plus optional Claude / ChatGPT helper sign-in; reply mode.
+- Screen capture only on request, and a hotkey to ask about an area of the screen.
 
 ### Testing
 
-Pure code with tests: `app/src/overlay.ts` (orb and popover placement, hit test), `app/src/call-state.ts`, `app/src/captions.ts`, `app/src/panel.ts`, the language rule in the system prompt. Screenshots in a headless browser over a busy background. A hand check in the real app for transparency, click-through, dragging and voice.
+Pure code with tests: `app/src/overlay.ts` (also follow, card placement, push to talk), `app/src/cues.ts`, (orb and popover placement, hit test), `app/src/call-state.ts`, `app/src/captions.ts`, `app/src/panel.ts`, the language rule in the system prompt. Screenshots in a headless browser over a busy background. A hand check in the real app for transparency, click-through, dragging and voice.
 
 ### Why the app went to "Paused" by itself (v2)
 

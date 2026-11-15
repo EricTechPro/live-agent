@@ -52,3 +52,5 @@ is exact). Tauri reports outer == inner size here, so the bar can't be measured 
 **Needs a person** (box 4: real speech can't be driven by an agent): open the app, press Start talking,
 press Mini, ask something out loud. You should hear the answer and see the orb go Thinking -> Speaking.
 Click the orb, keep talking. Then tick box 4 and set Status to done.
+
+- 2026-11-15: replaced by ticket 36. The overlay orb is always small and on top now, so mini mode, its button and `set_mini` are gone; the running-jobs badge sits on the orb.
