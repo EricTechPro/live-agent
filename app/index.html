@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Jett</title>
+    <link rel="stylesheet" href="/src/pixel.css" />
     <link rel="stylesheet" href="/src/style.css" />
     <link rel="stylesheet" href="/src/wizard.css" />
     <script type="module" src="/src/main.ts"></script>
@@ -16,24 +17,24 @@
     <main class="shell">
       <section class="voice" aria-label="Voice">
         <div class="orb-wrap" data-tauri-drag-region>
-          <div id="orb" class="orb" data-state="connecting" role="img" aria-label="Agent state: connecting"></div>
+          <div id="orb" class="orb" data-state="connecting" role="img" aria-label="Agent state: connecting"><canvas id="orb-canvas" width="352" height="352" aria-hidden="true"></canvas></div>
           <span id="mini-count" class="mini-count" aria-label="Jobs running">0</span>
           <p id="orb-label" class="orb-label" aria-live="polite">Starting…</p>
-          <button id="talk" class="talk" type="button" disabled>Start talking</button>
+          <button id="talk" class="pf btn go talk" type="button" disabled>Start talking</button>
           <div class="quiet-buttons">
-            <button id="new-chat" class="setup" type="button" disabled title="Save this chat to your brain and start a fresh one">New chat</button>
-            <button id="setup" class="setup" type="button" disabled title="Open setup again">Setup</button>
-            <button id="show-log" class="setup" type="button" title="Show the core's log file in Finder">Show log</button>
-            <button id="mini" class="setup" type="button" disabled title="Shrink to a small floating orb">Mini</button>
+            <button id="new-chat" class="pf chip setup" type="button" disabled title="Save this chat to your brain and start a fresh one">New chat</button>
+            <button id="setup" class="pf chip setup" type="button" disabled title="Open setup again">Setup</button>
+            <button id="show-log" class="pf chip setup" type="button" title="Show the core's log file in Finder">Show log</button>
+            <button id="mini" class="pf chip setup" type="button" disabled title="Shrink to a small floating orb">Mini</button>
           </div>
         </div>
-        <section id="diagram" class="diagram" hidden aria-label="Diagram"></section>
+        <section id="diagram" class="pf diagram" hidden aria-label="Diagram"></section>
         <ol id="transcript" class="transcript" aria-label="Transcript" aria-live="polite"></ol>
         <form id="type" class="type">
-          <input id="type-input" type="text" placeholder="Or type to it…" autocomplete="off" disabled />
+          <span class="pf field"><input id="type-input" type="text" placeholder="Or type to Jett…" autocomplete="off" disabled /></span>
         </form>
       </section>
-      <aside id="jobs" class="jobs" aria-label="Job board"></aside>
+      <aside id="jobs" class="pf jobs" aria-label="Job board"></aside>
       <footer id="bar" class="bar" aria-label="Status"></footer>
     </main>
     <!--

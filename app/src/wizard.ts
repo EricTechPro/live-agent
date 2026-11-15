@@ -41,7 +41,7 @@ import {
   type StepName,
   type WizardState,
 } from "./wizard-flow.ts";
-import { mountWizardOrb, type Mood } from "./wizard-orb.ts";
+import { mountLedOrb, type Mood } from "./led-orb.ts";
 import { sortForPart } from "../../src/setup/parts.ts";
 
 // The dropdown's last option: the native picker, opening in the notes folder.
@@ -54,7 +54,7 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&
 const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 const led = (kind: "on" | "busy") => `<span class="led ${kind}"></span>`;
 
-let orb: ReturnType<typeof mountWizardOrb> | undefined;
+let orb: ReturnType<typeof mountLedOrb> | undefined;
 
 /**
  * Show the wizard and resolve with the core client once the user presses
@@ -63,7 +63,7 @@ let orb: ReturnType<typeof mountWizardOrb> | undefined;
  */
 export function runWizard(info: CoreInfo, status: SetupStatus, core?: CoreClient): Promise<CoreClient> {
   const root = $("wizard");
-  orb ??= mountWizardOrb($<HTMLCanvasElement>("w-orb"));
+  orb ??= mountLedOrb($<HTMLCanvasElement>("w-orb"));
   const state: WizardState = initialState(status.current, status.keyNeeded);
   const steps = wizardSteps(status.keyNeeded);
   const sections = [...root.querySelectorAll<HTMLElement>(".step")];

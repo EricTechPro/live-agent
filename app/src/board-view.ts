@@ -8,6 +8,8 @@ import { addJobEvent, emptyBoard, type JobBoard } from "./job-board.ts";
 import type { SafetyMode } from "../../src/core/safety.ts";
 
 const STATUS_LABELS = { waiting: "Waiting", working: "Working", done: "Done", failed: "Failed", cancelled: "Cancelled" };
+// Each job's LED: blinking while it works, lit when done, red when it failed, dark otherwise.
+const STATUS_LEDS = { waiting: "led", working: "led busy", done: "led on", failed: "led bad", cancelled: "led" };
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string, unknown> = {}, ...kids: (Node | string)[]) {
   const node: HTMLElementTagNameMap[K] = Object.assign(document.createElement(tag), props);
@@ -30,8 +32,9 @@ export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: H
       ...board.map((job) => {
         const li = el(
           "li",
-          { className: "job" },
+          { className: "pf job" },
           el("div", { className: "job-head" },
+            el("span", { className: STATUS_LEDS[job.status] }),
             el("span", { className: "job-title", textContent: job.title, title: job.id }),
             el("span", { className: "job-status", textContent: STATUS_LABELS[job.status] }),
           ),
@@ -43,7 +46,7 @@ export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: H
         }
         if (job.message) li.append(el("p", { className: "job-message", textContent: job.message }));
         if (job.cancellable) {
-          const btn = el("button", { className: "job-cancel", type: "button", textContent: "Cancel" });
+          const btn = el("button", { className: "pf btn ghost small job-cancel", type: "button", textContent: "Cancel" });
           btn.setAttribute("aria-label", `Cancel ${job.title}`);
           btn.onclick = () => {
             btn.disabled = true;
@@ -68,7 +71,7 @@ export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: H
   };
   barEl.append(
     notesEl,
-    el("label", { className: "bar-mode-wrap", title: "Shift+Tab cycles" }, el("span", { textContent: "Safety" }), select),
+    el("label", { className: "bar-mode-wrap", title: "Shift+Tab cycles" }, el("span", { textContent: "Safety" }), el("span", { className: "pf sel" }, select)),
   );
 
   function renderBar() {

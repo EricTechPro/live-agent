@@ -1,14 +1,19 @@
-// The setup wizard's stage mascot: a dot-matrix orb drawn square by square on a canvas.
+// Jett's LED orb: a dot-matrix orb drawn square by square on a canvas. The setup
+// wizard's mascot, the main view's orb and the mini orb are all this one drawing.
 //
-//   const orb = mountWizardOrb(canvas);
-//   orb.icon("mic");          // dissolve to the step's pixel icon
-//   orb.set("speak", 1.2);    // a mood for 1.2 s: idle | listen | speak | hype
+//   const orb = mountLedOrb(canvas);
+//   orb.icon("mic");          // dissolve to the step's pixel icon (wizard)
+//   orb.set("speak", 1.2);    // a mood for 1.2 s: idle | listen | speak | think | hype | off
+//   mountLedOrb(canvas, { follow: () => "listen" });   // main view: the mood follows the app's state
+//
+// Moods: idle breathes; listen sends a ring pulse out; speak runs the wave fast and
+// pulses the orb; think twinkles; off is dim and still (starting, offline).
 //
 // The canvas edge sits 10.5 units from the centre on a 22x22 grid. Each shape maps
 // a cell (u, v = offset from the centre, in units) to a brightness: 0 off, 0..1 teal,
 // 2 white-hot. Written fresh for live-agent (the Pixel mockup's Orb); no Roamies code.
 
-export type Mood = "idle" | "listen" | "speak" | "hype";
+export type Mood = "idle" | "listen" | "speak" | "think" | "hype" | "off";
 
 export interface WizardOrb {
   set(mood: Mood, secs?: number): void;
@@ -21,7 +26,12 @@ type Shape = (u: number, v: number, s: number) => number;
 const N = 22;
 const OFF = 0.04; // an unlit LED, drawn dark like the logo
 
-export function mountWizardOrb(canvas: HTMLCanvasElement): WizardOrb {
+export interface LedOrbOptions {
+  /** Read every frame: the mood to show when no timed mood (`set` with secs) is running. */
+  follow?: () => Mood;
+}
+
+export function mountLedOrb(canvas: HTMLCanvasElement, options: LedOrbOptions = {}): WizardOrb {
   const g = canvas.getContext("2d")!;
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
   let mood: Mood = "idle";
@@ -32,6 +42,8 @@ export function mountWizardOrb(canvas: HTMLCanvasElement): WizardOrb {
   let switchAt = -9;
   let p = 1;
   let frame = 0;
+  let last = 0;
+  let wph = 0; // the wave's phase: it runs faster while speaking
   const seed = Array.from({ length: N * N }, () => Math.random());
 
   const tw = (s: number) => 0.3 + 0.45 * Math.abs(Math.sin(t * 1.6 + s * 9)); // twinkle for dim dots
@@ -48,8 +60,10 @@ export function mountWizardOrb(canvas: HTMLCanvasElement): WizardOrb {
       // The Jett logo: LED orb, unlit dots inside, a white-hot sine wave across.
       const d = Math.hypot(u, v) / 10.5;
       if (d > 1) return 0;
-      if (Math.abs(v - 2.9 * Math.sin(u * 0.5 + t * 4) * (1 - 0.6 * d * d)) < 1) return 2;
+      const amp = mood === "speak" ? 3.6 : mood === "off" ? 1.4 : 2.9;
+      if (Math.abs(v - amp * Math.sin(u * 0.5 + wph) * (1 - 0.6 * d * d)) < 1) return 2;
       if (d > 0.8) return s > 0.2 ? tw(s) + 0.2 : OFF;
+      if (mood === "think") return s > 0.6 ? tw(s) : OFF;
       return s > 0.94 ? 0.5 : OFF;
     },
     key(u, v) {
@@ -123,6 +137,7 @@ export function mountWizardOrb(canvas: HTMLCanvasElement): WizardOrb {
     const size = W / N;
     const gap = Math.max(1, size * 0.12);
     g.clearRect(0, 0, W, W);
+    g.globalAlpha = mood === "off" ? 0.45 : 1;
     const k =
       1 + (mood === "speak" ? 0.09 * Math.abs(Math.sin(t * 9)) : mood === "listen" ? 0.05 * Math.sin(t * 6) : 0.025 * Math.sin(t * 2));
     const hop = mood === "hype" ? Math.max(0, Math.sin(Math.min(1, (t - (moodUntil - 0.6)) / 0.6) * Math.PI)) * 3 : 0;
@@ -141,10 +156,14 @@ export function mountWizardOrb(canvas: HTMLCanvasElement): WizardOrb {
 
   function loop(ts: number) {
     t = ts / 1000;
+    const dt = Math.min(0.1, Math.max(0, t - last));
+    last = t;
     if (moodUntil && t > moodUntil) {
       mood = "idle";
       moodUntil = 0;
     }
+    if (!moodUntil && options.follow) mood = options.follow();
+    wph += dt * (mood === "speak" ? 9 : mood === "off" ? 0 : mood === "think" ? 2 : 4);
     draw();
     if (!still) frame = requestAnimationFrame(loop);
   }

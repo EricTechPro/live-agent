@@ -20,11 +20,11 @@ export type SafetyOverrides = Record<string, Verdict>;
 /** The modes in Shift+Tab order: Ask me -> Auto edits -> Bypass -> back to Ask me. */
 export const MODES: readonly SafetyMode[] = ["ask-me", "auto-edits", "bypass"];
 
-/** How each mode is called on screen. GET /mode hands these to the window, so they live with the modes. */
+/** How each mode is called on screen (the same words as the setup wizard). GET /mode hands these to the window. */
 export const MODE_LABELS: Record<SafetyMode, string> = {
-  "ask-me": "Ask me",
-  "auto-edits": "Auto edits",
-  bypass: "Bypass",
+  "ask-me": "Ask first",
+  "auto-edits": "Auto",
+  bypass: "Full access",
 };
 
 /** The mode after `mode` in the Shift+Tab cycle. */

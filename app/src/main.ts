@@ -4,6 +4,7 @@ import { Room, RoomEvent, Track, type Participant } from "livekit-client";
 import { mountBoardAndBar } from "./board-view.ts";
 import { connectCore, getSetup, onCoreDown, revealLog, waitForCore, type CoreClient } from "./core-client.ts";
 import { mountDiagram } from "./diagram-view.ts";
+import { mountLedOrb, type Mood } from "./led-orb.ts";
 import { mountMini } from "./mini.ts";
 import { nextOrb, orbStart, type Orb, type OrbInput, type OrbState } from "./orb-state.ts";
 import { addToTranscript, emptyTranscript, type Transcript } from "./transcript.ts";
@@ -29,6 +30,14 @@ const LABELS: Record<OrbState, string> = {
 
 // ---- state -> screen ------------------------------------------------------
 
+// The LED orb follows the orb state: listening sends a ring pulse, speaking runs the
+// wave and pulses, thinking twinkles, starting/offline is dim. Idle breathes.
+const ORB_MOODS: Record<OrbState, Mood> = { connecting: "off", listening: "listen", thinking: "think", speaking: "speak", offline: "off" };
+// "listening" with no mic open is the resting state: the orb breathes.
+mountLedOrb($<HTMLCanvasElement>("orb-canvas"), {
+  follow: () => (orb.state === "listening" && !room ? "idle" : ORB_MOODS[orb.state]),
+});
+
 let orb: Orb = orbStart;
 let transcript: Transcript = emptyTranscript;
 
@@ -37,7 +46,7 @@ function feedOrb(input: OrbInput) {
   if (next.state !== orb.state) {
     orbEl.dataset.state = next.state;
     orbEl.setAttribute("aria-label", `Agent state: ${next.state}`);
-    orbLabel.textContent = LABELS[next.state];
+    orbLabel.textContent = labelFor(next.state);
   }
   orb = next;
 }
@@ -108,7 +117,13 @@ async function stopTalking() {
   setTalking(false);
 }
 
+// "Listening" only while the mic is open; with it closed Jett is just ready.
+function labelFor(state: OrbState): string {
+  return state === "listening" && !room ? "Ready" : LABELS[state];
+}
+
 function setTalking(on: boolean) {
+  if (orb.state === "listening") orbLabel.textContent = labelFor(orb.state);
   talkBtn.disabled = false;
   talkBtn.textContent = on ? "Stop talking" : "Start talking";
   talkBtn.setAttribute("aria-pressed", String(on));

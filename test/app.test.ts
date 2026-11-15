@@ -169,9 +169,9 @@ describe("window commands: cancel a job, switch the mode", () => {
       mode: "auto-edits",
       // The window draws its dropdown from this list, so the labels live with the core's modes.
       modes: [
-        { id: "ask-me", label: "Ask me" },
-        { id: "auto-edits", label: "Auto edits" },
-        { id: "bypass", label: "Bypass" },
+        { id: "ask-me", label: "Ask first" },
+        { id: "auto-edits", label: "Auto" },
+        { id: "bypass", label: "Full access" },
       ],
     });
 
