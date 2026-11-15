@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window may call our own core_status, open_key_page and reveal_log commands and listen for events. Rust spawns the sidecar, so the window gets no shell access.",
+  "description": "The main window may call our own core_status, open_key_page, reveal_log and set_mini commands and listen for events, and drag itself while it is the mini orb (no title bar then). Rust spawns the sidecar, so the window gets no shell access.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "core:window:allow-start-dragging"]
 }

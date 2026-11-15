@@ -43,3 +43,8 @@ export function addJobEvent(board: JobBoard, event: AgentEvent): JobBoard {
   const at = board.findIndex((r) => r.id === event.id);
   return at < 0 ? [...board, row] : board.map((r, i) => (i === at ? row : r));
 }
+
+/** The mini orb's number: jobs working right now (waiting ones are not running yet). */
+export function runningCount(board: JobBoard): number {
+  return board.filter((r) => r.status === "working").length;
+}
