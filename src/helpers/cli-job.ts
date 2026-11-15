@@ -15,6 +15,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { watchGroup } from "./group-watchdog.ts";
+import type { HelperStatus } from "./index.ts";
 
 /**
  * Where the helper CLIs live and what Gemini CLI runs on. One shape all the way down:
@@ -135,6 +136,22 @@ export async function checkExitsZero(argv: string[], timeoutMs = 15000): Promise
   } catch {
     return false;
   }
+}
+
+/**
+ * Installed and signed in? For CLIs with their own sign-in (Codex, Claude Code):
+ * `bin` is looked up, then `bin ...checkArgs` must exit 0 (no model call).
+ */
+export async function signInStatus(
+  binName: string,
+  checkArgs: string[],
+  fix: { install: string; signIn: string },
+): Promise<HelperStatus> {
+  const bin = findBin(binName);
+  if (!bin) return { ok: false, installed: false, fix: fix.install };
+  return (await checkExitsZero([bin, ...checkArgs]))
+    ? { ok: true, installed: true, bin }
+    : { ok: false, installed: true, bin, fix: fix.signIn };
 }
 
 const MAX_SUMMARY = 2000;

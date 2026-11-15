@@ -12,7 +12,7 @@
 // Every probe is injectable (`DoctorDeps`), so tests run with no network,
 // no LiveKit and no real CLIs.
 import { errorMessage } from "../errors.ts";
-import { geminiApiKey } from "../gemini-key.ts";
+import { geminiApiKey, lookupGeminiKey } from "../gemini-key.ts";
 import { livekitBinary } from "../home.ts";
 import { createSocket } from "node:dgram";
 import { createServer } from "node:net";
@@ -21,6 +21,7 @@ import { geminiCliStatus, type GeminiCliStatus } from "../helpers/gemini-cli.ts"
 import { codexStatus } from "../helpers/codex.ts";
 import { claudeCodeStatus } from "../helpers/claude-code.ts";
 import type { HelperStatus } from "../helpers/index.ts";
+import { DEFAULT_LIVE_MODEL } from "../models/gemini-live.ts";
 import { startLiveKit } from "../voice/livekit-runner.ts";
 
 export type CheckStatus = "ok" | "warn" | "fail";
@@ -57,7 +58,6 @@ export interface DoctorDeps {
 }
 
 export const KEY_GUIDE = "README.md#get-your-gemini-key";
-const MODEL = "gemini-3.8-live";
 const LIVEKIT_INSTALL = "Reinstall live-agent, or for development: brew install livekit";
 
 const ok = (name: string, detail: string): CheckResult => ({ name, status: "ok", detail });
@@ -84,25 +84,16 @@ async function checkGeminiKey(d: DoctorDeps): Promise<CheckResult> {
     const where = d.home ? `after GEMINI_API_KEY= in ${d.home}/.env` : "GEMINI_API_KEY in your .env file";
     return fail(name, "No Gemini key found.", `Put your key ${where}. How to get one: ${KEY_GUIDE}`);
   }
-  // A model lookup costs no tokens. The key goes in a header so it never lands in a URL or log.
-  const res = await d
-    .fetch(`https://generativelanguage.googleapis.com/v1beta/models/${d.model}`, {
-      headers: { "x-goog-api-key": key },
-      signal: AbortSignal.timeout(8000),
-    })
-    .catch(() => null);
-  if (!res) return fail(name, "Could not reach Google.", "Check your internet connection and run doctor again.");
-  if (res.ok) return ok(name, `key works, ${d.model} is available`);
-  const body: any = await res.json().catch(() => ({}));
-  const reason = body?.error?.details?.find((x: any) => x?.reason)?.reason;
-  if (res.status === 400 && reason === "API_KEY_INVALID")
-    return fail(name, "Gemini key is not valid.", `Make a new key and put it in .env. How: ${KEY_GUIDE}`);
-  if (res.status === 403)
+  const verdict = await lookupGeminiKey(key, { fetch: d.fetch, model: d.model });
+  if (verdict === "offline") return fail(name, "Could not reach Google.", "Check your internet connection and run doctor again.");
+  if (verdict === "ok") return ok(name, `key works, ${d.model} is available`);
+  if (verdict === "invalid") return fail(name, "Gemini key is not valid.", `Make a new key and put it in .env. How: ${KEY_GUIDE}`);
+  if (verdict === "forbidden")
     return fail(name, "This key may not use the Gemini API.", `Make the key in Google AI Studio. How: ${KEY_GUIDE}`);
-  if (res.status === 404)
+  if (verdict === "no-model")
     return fail(name, `Model ${d.model} is not available for this key.`, `Check your key's project. How: ${KEY_GUIDE}`);
-  if (res.status === 429) return warn(name, "Key works but is over its quota right now.", "Wait a minute, or check your quota in AI Studio.");
-  return fail(name, `Google answered ${res.status}.`, `Check your key. How: ${KEY_GUIDE}`);
+  if (verdict === "over-quota") return warn(name, "Key works but is over its quota right now.", "Wait a minute, or check your quota in AI Studio.");
+  return fail(name, `Google answered ${verdict.status}.`, `Check your key. How: ${KEY_GUIDE}`);
 }
 
 async function checkMic(d: DoctorDeps): Promise<CheckResult> {
@@ -212,7 +203,7 @@ function defaultDeps(): DoctorDeps {
     // Inside the installed app: the livekit-server bundled next to the core.
     livekitBinary: livekitBinary() === "livekit-server" ? undefined : livekitBinary(),
     config: defaultConfig(),
-    model: MODEL,
+    model: DEFAULT_LIVE_MODEL,
   };
 }
 

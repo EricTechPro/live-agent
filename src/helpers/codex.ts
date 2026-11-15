@@ -14,7 +14,7 @@
 //   live-agent never signs in for them and never passes on the Gemini key.
 // - Ready check: `codex login status` exits 0 when signed in (no model call).
 import type { JobSpec } from "../core/jobs.ts";
-import { capSummary, checkExitsZero, childEnv, findBin, jobTitle, jsonLine, runCli, type HelperPaths } from "./cli-job.ts";
+import { capSummary, childEnv, jobTitle, jsonLine, runCli, signInStatus, type HelperPaths } from "./cli-job.ts";
 import type { HelperStatus } from "./index.ts";
 
 export const DEFAULT_CODEX_BIN = "codex";
@@ -23,12 +23,8 @@ export const CODEX_SIGN_IN_FIX = 'Codex is not signed in. Run "codex login" once
 
 const SIGNED_OUT = /\b401\b|\bunauthori[sz]ed\b|not logged in|not signed in|please (log|sign) in|codex login/i;
 
-export async function codexStatus({ codexBin = DEFAULT_CODEX_BIN }: HelperPaths = {}): Promise<HelperStatus> {
-  const bin = findBin(codexBin);
-  if (!bin) return { ok: false, installed: false, fix: CODEX_INSTALL_FIX };
-  return (await checkExitsZero([bin, "login", "status"]))
-    ? { ok: true, installed: true, bin }
-    : { ok: false, installed: true, bin, fix: CODEX_SIGN_IN_FIX };
+export function codexStatus({ codexBin = DEFAULT_CODEX_BIN }: HelperPaths = {}): Promise<HelperStatus> {
+  return signInStatus(codexBin, ["login", "status"], { install: CODEX_INSTALL_FIX, signIn: CODEX_SIGN_IN_FIX });
 }
 
 export function codexJob({ task, cwd, cancelGraceMs = 3000, ...paths }: HelperPaths & { task: string; cwd: string }): JobSpec {
