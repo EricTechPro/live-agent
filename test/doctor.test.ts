@@ -68,6 +68,14 @@ describe("doctor", () => {
     expect(r.exitCode).toBe(1);
   });
 
+  test("an empty key in the live-agent folder fails with a fix that names that folder's .env", async () => {
+    const r = await runDoctor(healthy({ env: {}, home: "/Users/me/Desktop/live-agent" }));
+    const key = find(r, "Gemini key");
+    expect(key.status).toBe("fail");
+    expect(key.fix).toContain("/Users/me/Desktop/live-agent/.env");
+    expect(key.fix).toContain(KEY_GUIDE);
+  });
+
   test("GOOGLE_API_KEY counts when GEMINI_API_KEY is not set", async () => {
     let sent = "" as string | null;
     const fetch = (async (_url: string, init: RequestInit) => {

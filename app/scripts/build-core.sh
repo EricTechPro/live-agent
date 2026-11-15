@@ -18,7 +18,7 @@ esac
 OUT="src-tauri/binaries/live-agent-core-$TRIPLE"
 
 mkdir -p src-tauri/binaries
-npx --yes bun@1.4.4 build ../src/main.ts --compile --target="$BUN_TARGET" --outfile "$OUT"
+npx --yes bun@1.4.4 build ../src/main.ts --compile --no-compile-autoload-dotenv --no-compile-autoload-bunfig --target="$BUN_TARGET" --outfile "$OUT"
 
 if [ "$(uname)" = Darwin ]; then
   codesign -v "$OUT"

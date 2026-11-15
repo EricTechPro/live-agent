@@ -110,7 +110,11 @@ tidy job and the Gemini CLI helper. It takes about two minutes.
 
    <img src="docs/images/key-guide/06-paste-in-installer.png" width="640" alt="Terminal: the installer asking to paste the Gemini key">
 
-**Skipped it, or got a new key?** Open the key file and put the key after `GEMINI_API_KEY=`:
+**Skipped it?** No problem: the app opens on **Paste your Gemini key**. Paste it there and press
+**Save and start**. The app checks the key with Google, saves it in `~/Desktop/live-agent/.env`
+(readable only by you) and goes straight into the setup chat. The window never shows it again.
+
+**Got a new key?** Open the key file and put the key after `GEMINI_API_KEY=`:
 
 ```sh
 open -e ~/Desktop/live-agent/.env      # GEMINI_API_KEY=AIza...
@@ -319,6 +323,13 @@ the config; otherwise a missing or signed-out one is a warning with the fix. Cod
 Code are asked with their own `codex login status` and `claude auth status` (no model call).
 A bad key points you back to [Get your Gemini key](#get-your-gemini-key).
 
+The installed app and its doctor only use the key in `~/Desktop/live-agent/.env` (or one you set in
+the environment), never a `.env` in the folder you happen to run them from.
+
+**The log.** Opened from Finder, the app keeps what its core says in
+`~/Desktop/live-agent/logs/core.log` (small: old lines are dropped). The key and every token are
+hidden in it. The **Show log** button in the window shows the file in Finder.
+
 ## How it works inside
 
 Four ideas make it work. Each one is small.
@@ -379,7 +390,9 @@ core's token service trades the key for an **ephemeral token**: good for one ses
 start within a minute and dies within 30 minutes. The Live connection uses that token, not the
 key. The window never sees either: it only gets a 10-minute LiveKit token for the room, and a
 per-launch token for the core's local event stream. Even if the window leaked, there is no key
-in it.
+in it. (One exception, on purpose: if you skipped the key at install, you paste it into the
+window once. It goes straight to the core, which saves it to `.env`; the window keeps no copy.
+See [ADR 0002](docs/adr/0002-paste-key-in-the-window.md).)
 
 Want to read the code? Start at [`src/core/agent.ts`](src/core/agent.ts) (the core),
 [`src/models/gemini-live.ts`](src/models/gemini-live.ts) (Gemini Live and NON_BLOCKING),

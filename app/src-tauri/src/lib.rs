@@ -38,6 +38,13 @@ fn core_status(core: tauri::State<'_, Core>) -> CoreStatus {
     core.status.lock().unwrap().clone()
 }
 
+/// The key screen's link (ticket 19): open Google AI Studio's key page in the
+/// browser. The URL is fixed here, so the window cannot open anything else.
+#[tauri::command]
+fn open_key_page() {
+    let _ = std::process::Command::new("open").arg("https://aistudio.google.com/apikey").spawn();
+}
+
 fn parse_ready(line: &str) -> Option<CoreInfo> {
     let v: serde_json::Value = serde_json::from_str(line.trim()).ok()?;
     if v.get("type")?.as_str()? != "ready" {
@@ -57,6 +64,22 @@ fn live_agent_home() -> String {
         .ok()
         .filter(|h| !h.is_empty())
         .unwrap_or_else(|| format!("{}/Desktop/live-agent", std::env::var("HOME").unwrap_or_default()))
+}
+
+/// The window's "Show log" link: reveal the core's log (src/core-log.ts) in Finder.
+/// The window passes nothing: the path is fixed here, so this opens only that file
+/// (or its folder before the first line is written).
+#[tauri::command]
+fn reveal_log() -> Result<(), String> {
+    let home = live_agent_home();
+    let log = format!("{home}/logs/core.log");
+    let mut open = std::process::Command::new("open");
+    if std::path::Path::new(&log).exists() {
+        open.arg("-R").arg(&log);
+    } else {
+        open.arg(&home);
+    }
+    open.spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
 fn start_core(app: &tauri::AppHandle) -> Result<(), String> {
@@ -143,7 +166,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(Core { status: Mutex::new(CoreStatus::Starting), child: Mutex::new(None) })
-        .invoke_handler(tauri::generate_handler![core_status])
+        .invoke_handler(tauri::generate_handler![core_status, open_key_page, reveal_log])
         .setup(|app| {
             if let Err(reason) = start_core(app.handle()) {
                 *app.state::<Core>().status.lock().unwrap() = CoreStatus::Down { reason };

@@ -103,3 +103,18 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .bar-mode-wrap { display: flex; gap: 6px; align-items: center; color: var(--muted); flex: none; }
 .bar-mode { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; }
 .bar[data-mode="bypass"] .bar-mode { border-color: var(--note); }
+
+/* ---- Paste your key (ticket 19): covers the window until the core has a key ---- */
+.key-screen { position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg); padding: 16px; }
+.key-screen[hidden] { display: none; }
+.key-card { width: min(440px, 100%); display: flex; flex-direction: column; gap: 12px; }
+.key-card h1 { margin: 0; font-size: 20px; }
+.key-card p { margin: 0; color: var(--muted); }
+.key-card a { color: var(--user); }
+.key-card input {
+  width: 100%; font: inherit; color: var(--text); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+}
+.key-card button { align-self: flex-start; }
+.key-error { color: var(--note) !important; min-height: 1.5em; }
+.key-note { font-size: 12px; }
