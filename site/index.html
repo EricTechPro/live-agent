@@ -147,32 +147,35 @@ h3{font:600 16px/1.3 var(--sans);margin:0 0 4px}
 .fold .fold>.a{padding:0 14px 12px 42px}
 .fold .x{color:var(--bad)!important}.fold .w{color:var(--warn)!important}
 
-/* how it works: hub (three equal columns on one grid; boss centred) */
-.hub{--cw:76px;display:grid;grid-template-columns:minmax(0,1fr) var(--cw) minmax(0,1fr) var(--cw) minmax(0,1fr);grid-template-rows:auto auto auto auto 1fr;grid-template-areas:". . you . ." ". . yc . ." "brain c1 boss c2 help" "brain . vc . help" "brain . tools . help";margin:0 0 24px}
-.hb-you{grid-area:you;justify-self:center}.hb-yc{grid-area:yc}.hb-brain{grid-area:brain}.hb-c1{grid-area:c1;align-self:center}.hb-boss{grid-area:boss}.hb-vc{grid-area:vc}.hb-tools{grid-area:tools}.hb-c2{grid-area:c2;align-self:center}.hb-help{grid-area:help}
-.grp{border:1px solid var(--border);border-radius:12px;background:var(--soft);padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+/* how it works: hub (boss is the big centre; side boxes sized to content and centred on it) */
+.hub{--cw:80px;display:grid;justify-content:center;grid-template-columns:minmax(0,296px) var(--cw) minmax(0,320px) var(--cw) minmax(0,296px);grid-template-areas:". . you . ." ". . yc . ." "brain c1 boss c2 help" ". . vc . ." ". . tools . .";margin:0 0 24px}
+.hb-you{grid-area:you;justify-self:center}.hb-yc{grid-area:yc}.hb-brain{grid-area:brain;align-self:center}.hb-c1{grid-area:c1;align-self:center}.hb-boss{grid-area:boss}.hb-vc{grid-area:vc}.hb-tools{grid-area:tools}.hb-c2{grid-area:c2;align-self:center}.hb-help{grid-area:help;align-self:center}
+.grp{border:1px solid var(--border);border-radius:12px;background:var(--soft);padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.hb-brain,.hb-help{padding:12px}
 .grp .gh{display:flex;align-items:center;gap:8px;font:650 15px/24px var(--sans);margin:0;flex-wrap:wrap}
 .grp .gh .ic{width:18px;height:18px;color:var(--brand)}
 .grp .gh small{font-weight:400;color:var(--muted);font-size:13px}
-.grp ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
-.fl li,.hl li{display:flex;align-items:center;gap:8px;height:44px;box-sizing:border-box;padding:0 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:13.5px;min-width:0}
+.grp ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.fl li{height:36px}
+.hl li{height:42px}
+.fl li,.hl li{display:flex;align-items:center;gap:8px;box-sizing:border-box;padding:0 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:13.5px;min-width:0}
 .fl code{color:var(--fg);font-weight:600;font-size:13.5px}
 .fl span{flex:1;min-width:0}
 .rw{font:600 11px var(--mono);font-style:normal;border-radius:999px;padding:1px 7px;flex:none}
 .rw.r{color:var(--voice);background:color-mix(in srgb,var(--voice) 12%,transparent)}
 .rw.w{color:var(--answer);background:color-mix(in srgb,var(--answer) 14%,transparent)}
-.tidy,.mcp{border:1px dashed var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px}
-.tidy{flex:1;justify-content:center;font-size:12.5px;color:var(--muted);text-align:center}
-.tidy p{margin:0;display:flex;align-items:center;justify-content:center;gap:6px}
-.tidy .tt{color:var(--fg);font:650 13px var(--sans)}
-.tidy code{color:var(--fg);font-size:12px}
-.tidy .bl{width:16px;height:16px}
+.mcp{border:1px dashed var(--border);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:7px}
+.tidy{margin:0;border:1px dashed var(--border);border-radius:8px;padding:6px 7px;display:flex;align-items:center;flex-wrap:wrap;gap:4px 6px;font-size:12px;color:var(--muted)}
+.tidy .tt{color:var(--fg);font:650 12px var(--sans);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.tidy .tr{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
+.tidy code{color:var(--fg);font-size:11.5px}
+.tidy .ar.sm{width:14px}
+.tidy .bl{width:15px;height:15px}
 .ar{width:72px;height:12px;color:var(--muted);flex:none;display:block}
 .ar.l{transform:scaleX(-1)}
 .ar.sm{width:22px;height:10px}
 .fn{margin:0;font-size:12.5px;line-height:1.4;color:var(--muted);display:flex;gap:6px;align-items:flex-start}
 .fn .ic{width:15px;height:15px;color:var(--answer);margin-top:1px;flex:none}
-.hb-tools .fn{margin-top:auto}
 /* side connectors: centred on the boss, arrows span the gap */
 .conn{display:flex;flex-direction:column;gap:16px;min-width:0}
 .cl{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;color:var(--muted);text-align:center;line-height:1.3;white-space:nowrap}
@@ -181,9 +184,9 @@ h3{font:600 16px/1.3 var(--sans);margin:0 0 4px}
 .hb-c1 .cl:first-child .ar,.hb-c2 .cl:first-child .ar{color:var(--voice)}
 .hb-c1 .cl:last-child .ar,.hb-c2 .cl:last-child .ar{color:var(--answer)}
 /* boss */
-.boss{text-align:center;border:2px solid var(--brand);border-radius:16px;background:var(--bg);padding:24px 16px 22px;box-shadow:0 0 0 6px color-mix(in srgb,var(--brand) 10%,transparent);display:flex;flex-direction:column;align-items:center;justify-content:center}
-.boss .bm{width:56px;height:56px;display:block;margin:0 0 8px}
-.boss .bn{font:700 22px/1.2 var(--sans);margin:0}
+.boss{text-align:center;border:2px solid var(--brand);border-radius:16px;background:var(--bg);padding:28px 16px;min-height:220px;box-sizing:border-box;box-shadow:0 0 0 6px color-mix(in srgb,var(--brand) 10%,transparent);display:flex;flex-direction:column;align-items:center;justify-content:center}
+.boss .bm{width:64px;height:64px;display:block;margin:0 0 10px}
+.boss .bn{font:700 26px/1.2 var(--sans);margin:0}
 .boss .bp{margin:8px 0 0;font:600 12px var(--mono);color:var(--muted)}
 .boss .bp span{background:var(--brand);color:#fff;border-radius:999px;padding:2px 9px;margin-right:4px;font-family:var(--sans)}
 .boss .bs{margin:0;font-size:13.5px;color:var(--muted)}
@@ -198,6 +201,8 @@ h3{font:600 16px/1.3 var(--sans);margin:0 0 4px}
 .tl li div,.hl li div{display:flex;flex-direction:column;min-width:0;line-height:1.3}
 .tl b,.hl b{font-size:13.5px}
 .hl b{white-space:nowrap}
+.hl li div{gap:3px;align-items:flex-start}
+.hl .st{font-size:10.5px;padding:0 7px;line-height:16px}
 .tl span,.hl span{font-size:12px;color:var(--muted)}
 .hl li div{flex:1}
 .hl .bl{width:24px;height:24px;color:var(--fg);flex:none}
@@ -218,18 +223,18 @@ h3{font:600 16px/1.3 var(--sans);margin:0 0 4px}
 .yc .cl:first-child .ar{color:var(--voice)}
 .yc .cl:last-child .ar{color:var(--answer);transform:rotate(-90deg)}
 /* built-in tool chips */
-.tc{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px!important}
-.tc li{display:flex;align-items:center;gap:8px;height:40px;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:0 10px;font-size:13.5px;font-weight:600;white-space:nowrap;min-width:0}
+.tc{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px!important}
+.tc li{display:flex;align-items:center;gap:8px;height:36px;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:0 10px;font-size:13.5px;font-weight:600;white-space:nowrap;min-width:0}
 .tc .ic{width:16px;height:16px;color:var(--brand);flex:none}
 /* helpers' own MCP tools */
 .mcp{border-color:color-mix(in srgb,var(--brand) 45%,var(--border));background:color-mix(in srgb,var(--brand) 4%,transparent)}
-.mcp .mh{margin:0;display:flex;align-items:center;gap:7px;font:650 13px var(--sans)}
+.mcp .mh{margin:0;display:flex;align-items:center;gap:7px;font:650 12.5px var(--sans)}
 .mcp .mh svg{width:16px;height:16px;fill:var(--l-mcp)}
-.grp .lg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;list-style:none;margin:0;padding:0}
-.lg li{height:36px;border-radius:8px;background:var(--bg);border:1px solid var(--border);display:grid;place-items:center;box-sizing:border-box;min-width:0}
-.lg li svg{width:19px;height:19px;fill:currentColor}
-.lg .more{grid-column:span 2;padding:0 10px;font-size:12px;color:var(--muted);white-space:nowrap}
-.mcp .mf{margin:0;font-size:12px;line-height:1.4;color:var(--muted)}
+.grp .lg{display:grid;grid-template-columns:repeat(6,minmax(0,1fr)) auto;gap:5px;list-style:none;margin:0;padding:0}
+.lg li{height:30px;border-radius:7px;background:var(--bg);border:1px solid var(--border);display:grid;place-items:center;box-sizing:border-box;min-width:0}
+.lg li svg{width:16px;height:16px;fill:currentColor}
+.lg .more{padding:0 7px;font-size:11.5px;color:var(--muted);white-space:nowrap}
+.mcp .mf{margin:0;font-size:11.5px;line-height:1.4;color:var(--muted)}
 .c-chrome{color:#4285F4}.c-gmail{color:#EA4335}.c-gcal{color:#4285F4}.c-gdrive{color:#4285F4}.c-stripe{color:#635BFF}.c-sentry{color:var(--l-sentry)}.c-mcp{color:var(--l-mcp)}
 .soon{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:22px 0 0;font-size:13px;color:var(--muted)}
 .soon .sl{font:600 11.5px var(--mono);text-transform:uppercase;letter-spacing:.04em;color:var(--warn)}
@@ -250,7 +255,7 @@ h3{font:600 16px/1.3 var(--sans);margin:0 0 4px}
 .foot a:hover{color:var(--accent)}
 
 @media (max-width:1140px){
-  /* stacked: You, Gemini Live, Built-in tools, then each connector sits right on top of its box */
+  /* stacked: You, Gemini Live, Jett's tools, then each connector sits right on top of its box */
   .hub{grid-template-columns:minmax(0,1fr);grid-template-rows:none;grid-template-areas:"you" "yc" "boss" "vc" "tools" "c1" "brain" "c2" "help";max-width:560px;margin-left:auto;margin-right:auto}
   .hb-c1,.hb-c2{align-self:auto}
   .conn{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:24px;padding:28px 0 8px}
@@ -260,9 +265,8 @@ h3{font:600 16px/1.3 var(--sans);margin:0 0 4px}
   .conn .ar{width:34px;height:12px;aspect-ratio:auto;margin:11px -11px}
   .hb-c1 .cl:first-child .ar,.hb-c2 .cl:last-child .ar{transform:rotate(-90deg)}
   .hb-c1 .cl:last-child .ar,.hb-c2 .cl:first-child .ar{transform:rotate(90deg)}
-  .tidy{flex:none}
-  .grp .lg{grid-template-columns:repeat(6,minmax(0,1fr)) auto}
-  .lg .more{grid-column:auto}
+  .hb-brain,.hb-help{align-self:auto}
+  .boss{min-height:0}
 }
 @media (max-width:980px){
   .rgrid{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -462,7 +466,7 @@ bun run start          # open the printed /check page to talk</code></div>
   <h2>How it works</h2>
   <p class="lead">You talk. Gemini Live runs the show and hands work to your notes, its tools and your helpers.</p>
 
-  <div class="hub" role="img" aria-label="You talk to Gemini Live, which sits in the middle as the boss and talks back. On the left, your second brain: a notes folder it reads from and writes to. Below it, four built-in tools. On the right, three helper coding agents; each helper can also use its own MCP tools, such as Chrome, Gmail, Google Calendar, Google Drive, Stripe and Sentry, if you set them up in that helper.">
+  <div class="hub" role="img" aria-label="You talk to Gemini Live, which sits in the middle as the boss and talks back. On the left, your second brain: a notes folder it reads from and writes to. Below it, Jett's own four tools that Gemini calls. On the right, three helper coding agents; each helper can also use its own MCP tools, such as Chrome, Gmail, Google Calendar, Google Drive, Stripe and Sentry, if you set them up in that helper.">
     <div class="hb-you"><div class="you"><span class="av"><svg class="ic"><use href="#i-user"/></svg><span class="mc"><svg class="ic"><use href="#i-mic"/></svg></span></span><b>You talk</b></div></div>
     <div class="yc hb-yc">
       <div class="cl"><svg class="ar"><use href="#i-arrow"/></svg><span>voice in</span></div>
@@ -476,7 +480,7 @@ bun run start          # open the printed /check page to talk</code></div>
         <li><code>projects/</code><span></span><em class="rw r">read</em></li>
         <li><code>raw/</code><span></span><em class="rw w">write</em></li>
       </ul>
-      <div class="tidy"><p class="tt"><svg class="bl"><use href="#b-gemini"/></svg>Tidy · Gemini 3.8 Flash</p><p class="tr"><code>raw/</code><svg class="ar sm"><use href="#i-arrow"/></svg><code>wiki/</code></p></div>
+      <p class="tidy"><span class="tt"><svg class="bl"><use href="#b-gemini"/></svg>Tidy · Gemini 3.8 Flash:</span><span class="tr"><code>raw/</code><svg class="ar sm"><use href="#i-arrow"/></svg><code>wiki/</code></span></p>
       <p class="fn">After each chat. Raw notes never change.</p>
     </div>
 
@@ -494,7 +498,7 @@ bun run start          # open the printed /check page to talk</code></div>
     <div class="vc hb-vc"><svg class="ar v"><use href="#i-arrow"/></svg><span>picks one</span></div>
 
     <div class="grp hb-tools">
-      <p class="gh"><svg class="ic"><use href="#i-wrench"/></svg>Built-in tools</p>
+      <p class="gh"><svg class="ic"><use href="#i-wrench"/></svg>Jett's tools <small>Gemini calls these</small></p>
       <ul class="tc">
         <li><svg class="ic"><use href="#i-search"/></svg>search brain</li>
         <li><svg class="ic"><use href="#i-pin"/></svg>remember</li>
@@ -512,12 +516,12 @@ bun run start          # open the printed /check page to talk</code></div>
     <div class="grp hb-help">
       <p class="gh"><svg class="ic"><use href="#i-bot"/></svg>Helpers <small>do the big jobs</small></p>
       <ul class="hl">
-        <li><svg class="bl"><use href="#b-geminicli"/></svg><div><b>Gemini CLI</b></div><em class="st on">on by default</em></li>
-        <li><svg class="bl"><use href="#b-openai"/></svg><div><b>Codex</b></div><em class="st">off · turn on in setup</em></li>
-        <li><svg class="bl"><use href="#b-claude"/></svg><div><b>Claude Code</b></div><em class="st">off · turn on in setup</em></li>
+        <li><svg class="bl"><use href="#b-geminicli"/></svg><div><b>Gemini CLI</b><em class="st on">on by default</em></div></li>
+        <li><svg class="bl"><use href="#b-openai"/></svg><div><b>Codex</b><em class="st">off · turn on in setup</em></div></li>
+        <li><svg class="bl"><use href="#b-claude"/></svg><div><b>Claude Code</b><em class="st">off · turn on in setup</em></div></li>
       </ul>
       <div class="mcp">
-        <p class="mh"><svg><use href="#l-modelcontextprotocol"/></svg>Your helpers' tools (MCP)</p>
+        <p class="mh"><svg><use href="#l-modelcontextprotocol"/></svg>Their own MCP tools</p>
         <ul class="lg">
           <li class="c-chrome" title="Google Chrome"><svg role="img" aria-label="Google Chrome"><use href="#l-googlechrome"/></svg></li>
           <li class="c-gmail" title="Gmail"><svg role="img" aria-label="Gmail"><use href="#l-gmail"/></svg></li>
@@ -527,7 +531,7 @@ bun run start          # open the printed /check page to talk</code></div>
           <li class="c-sentry" title="Sentry"><svg role="img" aria-label="Sentry"><use href="#l-sentry"/></svg></li>
           <li class="more">+ more</li>
         </ul>
-        <p class="mf">Helpers can use their own MCP tools, if you set them up there.</p>
+        <p class="mf">If you set them up in that helper.</p>
       </div>
       <p class="fn">Jobs queue · own worktree each</p>
     </div>
