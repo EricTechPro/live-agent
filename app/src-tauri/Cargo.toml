@@ -1,6 +1,6 @@
 [package]
 name = "live-agent"
-version = "0.1.0"
+version = "0.1.1"
 description = "A light desktop app you talk to"
 edition = "2021"
 
