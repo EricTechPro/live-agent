@@ -13,6 +13,7 @@ export const SHORTCUTS: Record<Lang, Shortcut[]> = {
     { keys: "Space", what: "Mute in a call" },
     { keys: "Esc", what: "Stop the reply" },
     { keys: "⌘.", what: "Hang up" },
+    { keys: "⌘N", what: "New chat" },
     { keys: "⌃⌥S", what: "Hide / show" },
     { keys: "Double-click orb", what: "Minimise" },
   ],
@@ -22,6 +23,7 @@ export const SHORTCUTS: Record<Lang, Shortcut[]> = {
     { keys: "空格", what: "通话中静音" },
     { keys: "Esc", what: "停止回答" },
     { keys: "⌘.", what: "挂断" },
+    { keys: "⌘N", what: "新对话" },
     { keys: "⌃⌥S", what: "隐藏 / 显示" },
     { keys: "双击光球", what: "最小化" },
   ],
@@ -29,3 +31,8 @@ export const SHORTCUTS: Record<Lang, Shortcut[]> = {
 
 /** The card's title. */
 export const SHORTCUTS_TITLE: Record<Lang, string> = { en: "Shortcuts", zh: "快捷键" };
+
+/** Cmd+N (ticket 39): start a new chat while Jett has focus. */
+export function isNewChatKey(e: { key: string; metaKey: boolean; ctrlKey: boolean; altKey: boolean; shiftKey: boolean }): boolean {
+  return e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "n";
+}

@@ -52,6 +52,7 @@
       <div id="dock" class="dock" data-hit data-look="starting">
         <div class="dock-top">
           <button id="hide" class="ib glass-ib hide-btn" type="button" aria-label="Hide Jett" data-tip="Hide" data-key="⌃⌥S" data-icon="minus" data-size="12"></button>
+          <button id="orb-new-chat" class="ib glass-ib newchat-btn" type="button" aria-label="New chat" data-t="newChat" data-tip="New chat" data-key="⌘N" data-icon="newChat" data-size="12"></button>
           <button id="grip" class="grip" type="button" aria-label="Move Jett (arrow keys)" data-tip="Drag to move" data-key="← ↑ → ↓"><span aria-hidden="true"></span></button>
           <button id="open-center" class="ib glass-ib menu-btn" type="button" aria-controls="popover" aria-expanded="false" aria-label="Chats, jobs and brain" data-tip="Chats, jobs, brain" data-icon="center" data-size="14"></button>
         </div>
@@ -85,6 +86,9 @@
         <button id="pill-hangup" class="ib pill-act hangup" type="button" aria-label="Hang up" data-tip="Hang up" data-key="⌘." data-side="left" data-icon="hangup" data-size="14" hidden></button>
       </div>
 
+      <!-- A short note by the orb (ticket 39): "New chat". -->
+      <p id="toast" class="toast" role="status" hidden></p>
+
       <!-- The Shortcuts card (ticket 38), from the popover's "?" or the menu-bar item. -->
       <section id="shortcuts" class="shortcuts" data-hit tabindex="-1" aria-labelledby="shortcuts-title" hidden>
         <header class="shortcuts-head">
@@ -107,7 +111,7 @@
           </div>
           <span class="spacer"></span>
           <button id="follow" class="ib" type="button" aria-pressed="false" aria-label="Follow my pointer" data-tip="Follow my pointer" data-icon="mini" data-size="16"></button>
-          <button id="new-chat" class="ib" type="button" disabled aria-label="New chat" data-tip="New chat" data-icon="newChat" data-size="16"></button>
+          <button id="new-chat" class="ib" type="button" disabled aria-label="New chat" data-t="newChat" data-tip="New chat" data-key="⌘N" data-icon="newChat" data-size="16"></button>
           <button id="setup" class="ib" type="button" disabled aria-label="Setup" data-tip="Setup" data-icon="gear" data-size="16"></button>
           <button id="show-log" class="ib" type="button" aria-label="Show log" data-tip="Show log in Finder" data-icon="log" data-size="16"></button>
           <button id="open-shortcuts" class="ib" type="button" aria-controls="shortcuts" aria-label="Shortcuts" data-tip="Shortcuts" data-key="?" data-icon="help" data-size="16"></button>

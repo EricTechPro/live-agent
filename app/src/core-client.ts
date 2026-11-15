@@ -175,6 +175,11 @@ export function onToggleMini(cb: () => void) {
   return listen("toggle-mini", () => cb());
 }
 
+/** The menu-bar "New chat" item (ticket 39). */
+export function onNewChat(cb: () => void) {
+  return listen("new-chat", () => cb());
+}
+
 /** The menu-bar "Shortcuts" item (ticket 38). */
 export function onShowShortcuts(cb: () => void) {
   return listen("show-shortcuts", () => cb());

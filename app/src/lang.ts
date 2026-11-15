@@ -14,6 +14,6 @@ export function spokenLang(text: string): Lang | undefined {
 
 /** A few lines the window says itself (the greeting, new chat). */
 export const WORDS: Record<Lang, { hi: string; newChat: string }> = {
-  en: { hi: "Hi! I'm Jett.", newChat: "New chat!" },
-  zh: { hi: "嗨！我是 Jett。", newChat: "新对话！" },
+  en: { hi: "Hi! I'm Jett.", newChat: "New chat" },
+  zh: { hi: "嗨！我是 Jett。", newChat: "新对话" },
 };

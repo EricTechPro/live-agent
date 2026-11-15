@@ -266,15 +266,16 @@ fn set_tray_shown(toggle: tauri::State<'_, TrayToggle>, shown: bool) -> Result<(
     }
 }
 
-/// The menu-bar icon: a click opens the panel; its menu hides / shows Jett, lists the shortcuts or quits.
+/// The menu-bar icon: a click opens the panel; its menu starts a new chat, hides / shows Jett, lists the shortcuts or quits.
 fn add_tray(app: &tauri::App) -> tauri::Result<()> {
     use tauri::menu::{Menu, MenuItem};
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
     let open = MenuItem::with_id(app, "open", "Open Jett", true, None::<&str>)?;
     let toggle = MenuItem::with_id(app, "toggle", toggle_label(true), true, None::<&str>)?;
+    let new_chat = MenuItem::with_id(app, "new-chat", "New chat", true, None::<&str>)?;
     let shortcuts = MenuItem::with_id(app, "shortcuts", "Shortcuts", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit Jett", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &toggle, &shortcuts, &quit_item])?;
+    let menu = Menu::with_items(app, &[&open, &new_chat, &toggle, &shortcuts, &quit_item])?;
     *app.state::<TrayToggle>().0.lock().unwrap() = Some(toggle.clone());
     let mut tray = TrayIconBuilder::with_id("jett").tooltip("Jett").menu(&menu).show_menu_on_left_click(false);
     if let Some(icon) = app.default_window_icon() {
@@ -283,6 +284,13 @@ fn add_tray(app: &tauri::App) -> tauri::Result<()> {
     tray.on_menu_event(|app, event| match event.id.as_ref() {
         "open" => open_panel(app),
         "toggle" => toggle_overlay(app),
+        // Ticket 39: the page saves this chat and starts a fresh one.
+        "new-chat" => {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+            }
+            let _ = app.emit("new-chat", ());
+        }
         "shortcuts" => {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();

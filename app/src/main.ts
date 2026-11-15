@@ -11,11 +11,11 @@ import { mountApprovals } from "./approvals-view.ts";
 import { mountBrainView } from "./brain-view.ts";
 import { mountChatView } from "./chat-view.ts";
 import {
-  connectCore, getSetup, inTauri, onCoreDown, onOpenPanel, onShowShortcuts, onToggleMini, overlayPoll, revealLog, setClickThrough, setTrayShown,
+  connectCore, getSetup, inTauri, onCoreDown, onNewChat, onOpenPanel, onShowShortcuts, onToggleMini, overlayPoll, revealLog, setClickThrough, setTrayShown,
   waitForCore, type CoreClient,
 } from "./core-client.ts";
 import { waveFor, QUIET } from "./orb-wave.ts";
-import { SHORTCUTS, SHORTCUTS_TITLE } from "./shortcuts.ts";
+import { isNewChatKey, SHORTCUTS, SHORTCUTS_TITLE } from "./shortcuts.ts";
 import { addWork, cuesFor, noWork, type Work } from "./cues.ts";
 import { mountSketch } from "./sketch-view.ts";
 import { mountTooltips, paintIcons, setIcon } from "./tooltip.ts";
@@ -675,6 +675,40 @@ const pillBarEls = [...pillEl.querySelectorAll<HTMLElement>(".pill-bars i")];
   }
   requestAnimationFrame(pillMeter);
 })();
+// ---- New chat (ticket 39): menu bar, the orb's hover button, the popover, Cmd+N --------
+const toastEl = $("toast");
+let toastTimer: ReturnType<typeof setTimeout> | undefined;
+/** A short note by the orb (or the pill when minimised), gone after a moment. */
+function toast(text: string) {
+  toastEl.textContent = text;
+  toastEl.hidden = false;
+  const by = mini ? pillRect() : { ...orbAt, ...dockSize() };
+  const w = toastEl.offsetWidth;
+  const h = toastEl.offsetHeight;
+  const leftOf = by.x + by.width / 2 > innerWidth / 2;
+  const at = keepOn({ x: leftOf ? by.x - w - 10 : by.x + by.width + 10, y: by.y + (mini ? by.height / 2 - h / 2 : 30) }, { width: w, height: h }, view());
+  toastEl.style.left = `${at.x}px`;
+  toastEl.style.top = `${at.y}px`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (toastEl.hidden = true), 1600);
+}
+let newChatBusy = false;
+/** The core saves this chat (its note and tidy job) and starts fresh; its `chat.started` clears the captions, transcript and drawing. */
+async function startNewChat() {
+  if (!coreRef || newChatBusy) return;
+  newChatBusy = true;
+  newChatBtn.disabled = true;
+  try {
+    await coreRef.newChat();
+  } catch (err) {
+    showError(`new chat: ${errorText(err)}`);
+  } finally {
+    newChatBusy = false;
+    newChatBtn.disabled = false;
+  }
+}
+$<HTMLButtonElement>("orb-new-chat").onclick = () => void startNewChat();
+
 /** A line the window says itself (the greeting, new chat), shown as Jett's caption. */
 function say(text: string) {
   captions = { model: { text, at: performance.now() }, closed: true };
@@ -833,6 +867,11 @@ window.addEventListener("keydown", (e) => {
     void endCall();
     return;
   }
+  if (isNewChatKey(e)) {
+    e.preventDefault();
+    void startNewChat();
+    return;
+  }
   if (e.key === "Escape") {
     // The reader and the mode menu close themselves first (they prevent default).
     if (e.defaultPrevented) return;
@@ -866,6 +905,7 @@ async function boot() {
   void onOpenPanel(() => setLayer("open")).catch(() => {});
   void onToggleMini(() => void setMini(!mini)).catch(() => {});
   void onShowShortcuts(() => showShortcuts(true)).catch(() => {});
+  void onNewChat(() => void startNewChat()).catch(() => {});
   render();
   let core: CoreClient;
   try {
@@ -900,7 +940,12 @@ async function boot() {
       const heard = spokenLang(event.text);
       if (heard && heard !== lang) (lang = heard), render();
     }
-    if (event.type === "chat.started") say(WORDS[lang].newChat);
+    if (event.type === "chat.started") {
+      // Fresh start: the captions and the scene clear in their own state; the drawing
+      // card goes until something new is drawn; a short toast by the orb says so.
+      stage.dataset.dismissed = "true";
+      toast(WORDS[lang].newChat);
+    }
     // Something new drawn: show the drawing again if its X hid it.
     if (event.type === "canvas.beat") delete stage.dataset.dismissed;
     // After sketch-view (mounted below) has seen it: place the drawing card, redraw the cues.
@@ -962,19 +1007,9 @@ async function boot() {
     }
   };
 
-  // New chat: the core saves this one (its note and tidy job) and starts fresh;
-  // the transcript clears on the core's `chat.started`.
+  // New chat (ticket 39): one path for every way in (startNewChat).
   newChatBtn.disabled = false;
-  newChatBtn.onclick = async () => {
-    newChatBtn.disabled = true;
-    try {
-      await core.newChat();
-    } catch (err) {
-      showError(`new chat: ${errorText(err)}`);
-    } finally {
-      newChatBtn.disabled = false;
-    }
-  };
+  newChatBtn.onclick = () => void startNewChat();
 }
 
 // Dev server only (stripped from the app build): put the call in a state without a
