@@ -102,3 +102,23 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .bar-mode-wrap { display: flex; gap: 6px; align-items: center; color: var(--muted); flex: none; }
 .bar-mode { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; }
 .bar[data-mode="bypass"] .bar-mode { border-color: var(--note); }
+
+/* ---- Mini orb (ticket 15) ----
+   The window shrinks to ~132 px, frameless and on top (Rust `set_mini`). Only the
+   orb, its state word and the running-jobs count stay; click the orb to restore.
+   The background around the orb drags the window (data-tauri-drag-region). */
+.mini-count { display: none; }
+body.mini .shell { display: block; height: 100vh; }
+body.mini .voice { height: 100%; padding: 0; }
+body.mini .transcript, body.mini .type, body.mini .jobs, body.mini .bar,
+body.mini .talk, body.mini .quiet-buttons { display: none; }
+body.mini .orb-wrap { position: relative; height: 100%; justify-content: center; gap: 4px; }
+body.mini .orb { width: 72px; height: 72px; cursor: pointer; box-shadow: 0 0 18px #6a4cff66; }
+body.mini .orb-label { font-size: 11px; pointer-events: none; }
+body.mini .mini-count {
+  display: block; position: absolute; top: 14px; right: 18px; pointer-events: none;
+  min-width: 22px; padding: 0 6px; border-radius: 999px; text-align: center;
+  font-size: 12px; font-weight: 600; line-height: 22px;
+  background: var(--panel); border: 1px solid var(--line); color: var(--muted);
+}
+body.mini .mini-count:not([data-count="0"]) { background: var(--user); border-color: var(--user); color: var(--bg); }

@@ -132,6 +132,58 @@ fn stop_core(core: &Core) {
     let _ = child.kill();
 }
 
+// ---- mini orb (ticket 15) -------------------------------------------------
+//
+// Mini mode shrinks THIS window into a small borderless always-on-top orb; it
+// does not open a second window. Why: the LiveKit room, the agent's audio
+// element and the core's event stream all live in this one webview. A second
+// window would be a second page with no room (it would need its own copy of
+// every state), and closing or hiding this one could pause its audio. Resizing
+// keeps the page as it is, so voice keeps running; the window only swaps CSS.
+
+/// The orb window's size (logical px) and its gap from the screen's top-right corner.
+const MINI_SIZE: f64 = 132.0;
+const MINI_MARGIN: f64 = 24.0;
+
+/// Where the full window was, so clicking the orb puts it back.
+#[derive(Default)]
+struct Mini(Mutex<Option<(tauri::PhysicalPosition<i32>, tauri::PhysicalSize<u32>)>>);
+
+#[tauri::command]
+fn set_mini(window: tauri::WebviewWindow, mini: tauri::State<'_, Mini>, on: bool) -> Result<(), String> {
+    use tauri::{LogicalPosition, LogicalSize, Size};
+    let e = |err: tauri::Error| err.to_string();
+    let mut saved = mini.0.lock().unwrap();
+    if on {
+        if saved.is_none() {
+            *saved = Some((window.outer_position().map_err(e)?, window.inner_size().map_err(e)?));
+        }
+        window.set_min_size(None::<Size>).map_err(e)?;
+        window.set_decorations(false).map_err(e)?;
+        window.set_resizable(false).map_err(e)?;
+        window.set_size(LogicalSize::new(MINI_SIZE, MINI_SIZE)).map_err(e)?;
+        if let Some(monitor) = window.current_monitor().map_err(e)? {
+            let scale = monitor.scale_factor();
+            let area = monitor.work_area();
+            let x = (area.position.x as f64 + area.size.width as f64) / scale - MINI_SIZE - MINI_MARGIN;
+            let y = area.position.y as f64 / scale + MINI_MARGIN;
+            window.set_position(LogicalPosition::new(x, y)).map_err(e)?;
+        }
+        window.set_always_on_top(true).map_err(e)?;
+    } else {
+        window.set_always_on_top(false).map_err(e)?;
+        window.set_decorations(true).map_err(e)?;
+        window.set_resizable(true).map_err(e)?;
+        window.set_min_size(Some(LogicalSize::new(640.0, 420.0))).map_err(e)?;
+        if let Some((pos, size)) = saved.take() {
+            window.set_size(size).map_err(e)?;
+            window.set_position(pos).map_err(e)?;
+        }
+        window.set_focus().map_err(e)?;
+    }
+    Ok(())
+}
+
 #[cfg(unix)]
 extern "C" {
     #[link_name = "kill"]
@@ -143,7 +195,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(Core { status: Mutex::new(CoreStatus::Starting), child: Mutex::new(None) })
-        .invoke_handler(tauri::generate_handler![core_status])
+        .manage(Mini::default())
+        .invoke_handler(tauri::generate_handler![core_status, set_mini])
         .setup(|app| {
             if let Err(reason) = start_core(app.handle()) {
                 *app.state::<Core>().status.lock().unwrap() = CoreStatus::Down { reason };

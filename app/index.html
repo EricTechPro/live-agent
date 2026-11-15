@@ -14,13 +14,15 @@
     -->
     <main class="shell">
       <section class="voice" aria-label="Voice">
-        <div class="orb-wrap">
+        <div class="orb-wrap" data-tauri-drag-region>
           <div id="orb" class="orb" data-state="connecting" role="img" aria-label="Agent state: connecting"></div>
+          <span id="mini-count" class="mini-count" aria-label="Jobs running">0</span>
           <p id="orb-label" class="orb-label" aria-live="polite">Starting…</p>
           <button id="talk" class="talk" type="button" disabled>Start talking</button>
           <div class="quiet-buttons">
             <button id="new-chat" class="setup" type="button" disabled title="Save this chat to your brain and start a fresh one">New chat</button>
             <button id="setup" class="setup" type="button" disabled title="Run the setup chat again">Setup</button>
+            <button id="mini" class="setup" type="button" disabled title="Shrink to a small floating orb">Mini</button>
           </div>
         </div>
         <ol id="transcript" class="transcript" aria-label="Transcript" aria-live="polite"></ol>
