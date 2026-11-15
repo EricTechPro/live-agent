@@ -22,6 +22,8 @@ export const DEFAULT_CODEX_BIN = "codex";
 export const CODEX_INSTALL_FIX = "Codex is not installed. Install it with: npm install -g @openai/codex";
 export const CODEX_SIGN_IN_FIX = 'Codex is not signed in. Run "codex login" once in a terminal.';
 
+const SIGNED_OUT = /\b401\b|\bunauthori[sz]ed\b|not logged in|not signed in|please (log|sign) in|codex login/i;
+
 export async function codexStatus({ codexBin = DEFAULT_CODEX_BIN }: HelperPaths = {}): Promise<HelperStatus> {
   const bin = findBin(codexBin);
   if (!bin) return { ok: false, installed: false, fix: CODEX_INSTALL_FIX };
@@ -60,7 +62,8 @@ export function codexJob({ task, cwd, cancelGraceMs = 3000, ...paths }: HelperPa
         if (api?.code === "model_not_found") {
           throw new Error(`Codex: ${why} Fix: set a model your account can use as "model" in ~/.codex/config.toml.`);
         }
-        if (/401|unauthori[sz]ed|not logged in|login/i.test(why)) throw new Error(CODEX_SIGN_IN_FIX);
+        // Real sign-in errors only: a task's own words ("fix the login form") are not one.
+        if (SIGNED_OUT.test(why)) throw new Error(CODEX_SIGN_IN_FIX);
         throw new Error(`Codex stopped with exit code ${r.code}${why ? `: ${why}` : ""}`);
       }
       return capSummary(said, "Codex finished without a reply.");

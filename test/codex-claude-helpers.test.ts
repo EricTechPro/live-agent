@@ -160,6 +160,19 @@ describe("Codex helper", () => {
     expect(end).toMatchObject({ state: "failed", message: expect.stringContaining("model overloaded") });
   });
 
+  test("a task failure that only mentions a login form is not reported as signed out", async () => {
+    const loginForm = fakeCli(
+      "codex-login-form.sh",
+      `if [ "$1" = login ]; then exit 0; fi
+echo '{"type":"turn.failed","error":{"message":"could not fix the login form: tests still fail"}}'
+exit 1`,
+    );
+    const { end } = await runJob({ helper: "codex" }, configWith({ codex: true }), { codexBin: loginForm });
+    expect(end.state).toBe("failed");
+    expect(end.message).toContain("could not fix the login form");
+    expect(end.message).not.toContain("not signed in");
+  });
+
   test("a model Codex's own config picks but the account cannot use fails with where to change it", async () => {
     const badModel = fakeCli(
       "codex-model.sh",
