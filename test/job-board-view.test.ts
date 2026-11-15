@@ -19,6 +19,12 @@ test("each job shows once, in the order it started, with its latest state in boa
   ]);
 });
 
+test("a job in its own worktree shows the worktree's branch and path", () => {
+  const worktree = { path: "/data/live-agent/worktrees/app/fix-20261114-101500", branch: "live-agent/fix-20261114-101500" };
+  const rows = board([{ ...job("job-1", "queued"), worktree } as AgentEvent, { ...job("job-1", "done", "Fixed."), worktree } as AgentEvent]);
+  expect(rows[0]!.worktree).toEqual(worktree);
+});
+
 test("waiting and working jobs can be cancelled; failed and cancelled ones cannot", () => {
   const rows = board([job("a", "running"), job("b", "failed", "boom: try again"), job("c", "cancelled")]);
   expect(rows.map((r) => [r.id, r.status, r.cancellable])).toEqual([

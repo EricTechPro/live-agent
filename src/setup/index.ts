@@ -24,8 +24,8 @@ export const SETUP_TOOL = "save_setup";
 export interface SetupAnswers {
   brainPath?: string | null;
   safetyMode?: SafetyMode | null;
-  /** Only Gemini CLI is asked about: Codex and Claude Code keep their config fields but are not built yet. */
-  helpers?: { geminiCli?: boolean | null } | null;
+  /** Which helper CLIs to turn on or off. */
+  helpers?: { geminiCli?: boolean | null; codex?: boolean | null; claudeCode?: boolean | null } | null;
   maxAtOnce?: number | null;
 }
 
@@ -66,7 +66,9 @@ export function saveSetup(configPath: string, answers: SetupAnswers): { config: 
   const next: Record<string, any> = { ...raw, safety: { ...raw.safety }, helpers: { ...raw.helpers } };
   if (given(answers.brainPath)) next.brainPath = expandHome(answers.brainPath.trim());
   if (given(answers.safetyMode)) next.safety.mode = answers.safetyMode;
-  if (given(answers.helpers?.geminiCli)) next.helpers.geminiCli = answers.helpers.geminiCli;
+  for (const key of ["geminiCli", "codex", "claudeCode"] as const) {
+    if (given(answers.helpers?.[key])) next.helpers[key] = answers.helpers[key];
+  }
   if (given(answers.maxAtOnce)) next.helpers.maxAtOnce = answers.maxAtOnce;
 
   const config = checkConfig(next); // throws ConfigError naming the bad answer; nothing is written
@@ -97,6 +99,8 @@ export function setupKickoff(config: Config, firstRun: boolean): string {
     brainPath: config.brainPath,
     safetyMode: config.safety.mode,
     geminiCli: config.helpers.geminiCli ? "on" : "off",
+    codex: config.helpers.codex ? "on" : "off",
+    claudeCode: config.helpers.claudeCode ? "on" : "off",
     maxAtOnce: String(config.helpers.maxAtOnce),
     saveTool: SETUP_TOOL,
   };

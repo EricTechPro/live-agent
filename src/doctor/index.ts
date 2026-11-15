@@ -4,8 +4,9 @@
 //   live-agent doctor         (the compiled core binary)
 //
 // Checks: Gemini key works, a microphone is there, local LiveKit starts, and
-// which helper CLIs are installed (Gemini CLI also needs the Gemini key, which
-// it runs on; Codex and Claude Code sign-in is not checked). Exit code is 1 only when
+// which helper CLIs are ready (Gemini CLI: installed and the Gemini key, which
+// it runs on; Codex and Claude Code: installed and signed in, asked of each
+// CLI's own status command, no model call). Exit code is 1 only when
 // something required fails. A helper CLI is only required when it is turned on.
 //
 // Every probe is injectable (`DoctorDeps`), so tests run with no network,
@@ -17,6 +18,9 @@ import { createSocket } from "node:dgram";
 import { createServer } from "node:net";
 import { ConfigError, defaultConfig, loadConfig, type Config } from "../config/index.ts";
 import { geminiCliStatus, type GeminiCliStatus } from "../helpers/gemini-cli.ts";
+import { codexStatus } from "../helpers/codex.ts";
+import { claudeCodeStatus } from "../helpers/claude-code.ts";
+import type { HelperStatus } from "../helpers/index.ts";
 import { startLiveKit } from "../voice/livekit-runner.ts";
 
 export type CheckStatus = "ok" | "warn" | "fail";
@@ -30,6 +34,8 @@ export interface CheckResult {
 
 export interface DoctorDeps {
   env: { GEMINI_API_KEY?: string; GOOGLE_API_KEY?: string };
+  /** The live-agent folder (LIVE_AGENT_HOME), whose `.env` holds the key the app uses. */
+  home?: string;
   fetch: typeof fetch;
   platform: NodeJS.Platform;
   /** `system_profiler SPAudioDataType -json` output (macOS). */
@@ -41,6 +47,10 @@ export interface DoctorDeps {
   /** LiveKit binary. Default: `livekit-server` found on PATH. */
   livekitBinary?: string;
   geminiCliStatus: () => GeminiCliStatus;
+  /** Codex installed and signed in? Default: `codex login status`. */
+  codexStatus: () => Promise<HelperStatus>;
+  /** Claude Code installed and signed in? Default: `claude auth status`. */
+  claudeCodeStatus: () => Promise<HelperStatus>;
   which: (bin: string) => string | undefined;
   config: Config;
   model: string;
@@ -62,7 +72,7 @@ export async function runDoctor(deps: Partial<DoctorDeps> = {}): Promise<{ check
     await checkGeminiKey(d),
     await checkMic(d),
     await checkLiveKit(d),
-    ...checkHelpers(d),
+    ...(await checkHelpers(d)),
   ];
   return { checks, exitCode: checks.some((c) => c.status === "fail") ? 1 : 0 };
 }
@@ -70,7 +80,10 @@ export async function runDoctor(deps: Partial<DoctorDeps> = {}): Promise<{ check
 async function checkGeminiKey(d: DoctorDeps): Promise<CheckResult> {
   const name = "Gemini key";
   const key = geminiApiKey(d.env);
-  if (!key) return fail(name, "No Gemini key found.", `Put GEMINI_API_KEY in your .env file. How to get one: ${KEY_GUIDE}`);
+  if (!key) {
+    const where = d.home ? `after GEMINI_API_KEY= in ${d.home}/.env` : "GEMINI_API_KEY in your .env file";
+    return fail(name, "No Gemini key found.", `Put your key ${where}. How to get one: ${KEY_GUIDE}`);
+  }
   // A model lookup costs no tokens. The key goes in a header so it never lands in a URL or log.
   const res = await d
     .fetch(`https://generativelanguage.googleapis.com/v1beta/models/${d.model}`, {
@@ -126,7 +139,7 @@ async function checkLiveKit(d: DoctorDeps): Promise<CheckResult> {
   }
 }
 
-function checkHelpers(d: DoctorDeps): CheckResult[] {
+async function checkHelpers(d: DoctorDeps): Promise<CheckResult[]> {
   const h = d.config.helpers;
   const missingOrBad = (name: string, on: boolean, detail: string, fix: string) =>
     on ? fail(name, `${detail} (turned on)`, fix) : warn(name, `${detail} (turned off)`, fix);
@@ -136,16 +149,18 @@ function checkHelpers(d: DoctorDeps): CheckResult[] {
     ? ok("Gemini CLI", `installed, uses your Gemini key${h.geminiCli ? "" : " (turned off)"}`)
     : missingOrBad("Gemini CLI", h.geminiCli, g.installed ? "installed, no Gemini key" : "not installed", g.fix);
 
-  // v1 only checks that Codex and Claude Code are installed (sign-in is not checked).
-  const other = (name: string, bin: string, on: boolean, install: string) =>
-    d.which(bin)
-      ? ok(name, `installed${on ? "" : " (turned off)"}`)
-      : missingOrBad(name, on, "not installed", `Install it with: ${install}`);
+  // Codex and Claude Code run on the user's own sign-in with each vendor.
+  const signedIn = async (name: string, status: () => Promise<HelperStatus>, on: boolean) => {
+    const st = await status();
+    return st.ok
+      ? ok(name, `installed and signed in${on ? "" : " (turned off)"}`)
+      : missingOrBad(name, on, st.installed ? "installed, not signed in" : "not installed", st.fix!);
+  };
 
   return [
     gemini,
-    other("Codex", "codex", h.codex, "npm install -g @openai/codex"),
-    other("Claude Code", "claude", h.claudeCode, "npm install -g @anthropic-ai/claude-code"),
+    await signedIn("Codex", d.codexStatus, h.codex),
+    await signedIn("Claude Code", d.claudeCodeStatus, h.claudeCode),
   ];
 }
 
@@ -183,6 +198,7 @@ export async function doctorMain(): Promise<number> {
 function defaultDeps(): DoctorDeps {
   return {
     env: { GEMINI_API_KEY: process.env.GEMINI_API_KEY, GOOGLE_API_KEY: process.env.GOOGLE_API_KEY },
+    home: process.env.LIVE_AGENT_HOME || undefined,
     fetch: globalThis.fetch,
     platform: process.platform,
     audioDevices: () => Bun.$`system_profiler SPAudioDataType -json`.quiet().json(),
@@ -190,6 +206,8 @@ function defaultDeps(): DoctorDeps {
     startLiveKit: (o) => startLiveKit({ port: o.port, binary: o.binary, readyTimeoutMs: 5000 }),
     // The helper runs on the same key the voice uses (installed + key = ready).
     geminiCliStatus: () => geminiCliStatus(),
+    codexStatus: () => codexStatus(),
+    claudeCodeStatus: () => claudeCodeStatus(),
     which: (bin) => Bun.which(bin) ?? undefined,
     // Inside the installed app: the livekit-server bundled next to the core.
     livekitBinary: livekitBinary() === "livekit-server" ? undefined : livekitBinary(),

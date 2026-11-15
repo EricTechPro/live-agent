@@ -11,6 +11,8 @@ export interface JobRow {
   status: JobStatus;
   /** done: the summary; failed: what went wrong and how to fix it. */
   message?: string;
+  /** Worktrees on: the git worktree and branch the helper works in. */
+  worktree?: { path: string; branch: string };
   /** Only a waiting or working job has a cancel button. */
   cancellable: boolean;
 }
@@ -35,6 +37,7 @@ export function addJobEvent(board: JobBoard, event: AgentEvent): JobBoard {
     title: event.title,
     status,
     ...(event.message ? { message: event.message } : {}),
+    ...(event.worktree ? { worktree: event.worktree } : {}),
     cancellable: status === "waiting" || status === "working",
   };
   const at = board.findIndex((r) => r.id === event.id);

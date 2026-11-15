@@ -24,6 +24,7 @@ other users out. Keychain can come later without changing the core: the shell wo
 key in the sidecar's environment, which already wins over `.env`.
 
 ## Consequences
-- With no key the core exits with "no Gemini key. Put GEMINI_API_KEY=... in <home>/.env" and the
-  window shows that reason. Asking for the key inside the setup chat is future work.
+- ~~With no key the core exits with "no Gemini key. Put GEMINI_API_KEY=... in <home>/.env" and the
+  window shows that reason.~~ Changed by ADR 0002 (ticket 19): with no key the core waits and the
+  window asks for it once, then the core saves it to the same `.env`.
 - The key is plain text on disk (like every `.env`); the folder is the user's own Desktop.

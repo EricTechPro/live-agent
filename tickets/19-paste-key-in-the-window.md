@@ -4,12 +4,16 @@
 
 **Blocked by:** 12 Setup chat writes the config, 13 One-command install
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Priority:** must-have
 
-- [ ] Opening the app with no key shows the paste-your-key screen, not an error
-- [ ] A bad key is refused with a plain message, and nothing is saved
-- [ ] A good key is saved with only-you permissions, and the app moves on to the setup chat without a restart
-- [ ] The key never comes back to the window and is never written to a log
-- [ ] The installer run with no keyboard ends with the app open on the key screen
+- [x] Opening the app with no key shows the paste-your-key screen, not an error
+- [x] A bad key is refused with a plain message, and nothing is saved
+- [x] A good key is saved with only-you permissions, and the app moves on to the setup chat without a restart
+- [x] The key never comes back to the window and is never written to a log
+- [x] The installer run with no keyboard ends with the app open on the key screen
+
+## Comments
+
+- 2026-11-14 done: with no key the core starts in a "needs key" state (LiveKit + local API up, no chat; chat routes answer 503). `GET /key` / `POST /key` behind the launch token; the core checks the key with the doctor's cheap model lookup (`verifyGeminiKey` in `src/gemini-key.ts`), writes `<home>/.env` atomically with mode 600 (`saveGeminiKey` in `src/home.ts`), then starts the chat. Decision in docs/adr/0002. Verified with the built core binary + built frontend (Playwright, Chromium): key screen, bad key refused with nothing saved, real key saved 600 and the setup chat spoke first; the key was in no response, DOM or core log. The doctor still has its own copy of the key check (left alone because ticket 20 edits the doctor); it can call `verifyGeminiKey` later.
