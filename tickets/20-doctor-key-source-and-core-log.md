@@ -4,12 +4,12 @@
 
 **Blocked by:** 11 Doctor check, 13 One-command install
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Priority:** must-have
 
-- [ ] Doctor run from a folder with its own `.env` still reports the live-agent folder's key
-- [ ] An empty key in the live-agent folder makes doctor fail with the fix
-- [ ] Opened from Finder, the core writes its messages to a log file in the live-agent folder
-- [ ] The log never contains the key or any token
-- [ ] The log file stays small (old lines are dropped)
+- [x] Doctor run from a folder with its own `.env` still reports the live-agent folder's key
+- [x] An empty key in the live-agent folder makes doctor fail with the fix
+- [x] Opened from Finder, the core writes its messages to a log file in the live-agent folder
+- [x] The log never contains the key or any token
+- [x] The log file stays small (old lines are dropped)

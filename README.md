@@ -280,6 +280,13 @@ The key, the microphone and LiveKit must pass. A helper CLI only fails when it i
 the config; otherwise a missing one is a warning with an install hint. A bad key points you
 back to [Get your Gemini key](#get-your-gemini-key).
 
+The installed app and its doctor only use the key in `~/Desktop/live-agent/.env` (or one you set in
+the environment), never a `.env` in the folder you happen to run them from.
+
+**The log.** Opened from Finder, the app keeps what its core says in
+`~/Desktop/live-agent/logs/core.log` (small: old lines are dropped). The key and every token are
+hidden in it. The **Show log** button in the window shows the file in Finder.
+
 ## How it works inside
 
 Four ideas make it work. Each one is small.

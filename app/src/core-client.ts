@@ -58,6 +58,11 @@ export async function waitForCore(): Promise<CoreInfo> {
   }
 }
 
+/** "Show log": Rust reveals <live-agent folder>/logs/core.log in Finder. Works even when the core is down. */
+export function revealLog(): Promise<void> {
+  return invoke<void>("reveal_log");
+}
+
 /** Called once if the core process dies after starting. */
 export function onCoreDown(cb: (reason: string) => void) {
   return listen<string>("core-down", (e) => cb(e.payload));

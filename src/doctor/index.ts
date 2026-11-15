@@ -30,6 +30,8 @@ export interface CheckResult {
 
 export interface DoctorDeps {
   env: { GEMINI_API_KEY?: string; GOOGLE_API_KEY?: string };
+  /** The live-agent folder (LIVE_AGENT_HOME), whose `.env` holds the key the app uses. */
+  home?: string;
   fetch: typeof fetch;
   platform: NodeJS.Platform;
   /** `system_profiler SPAudioDataType -json` output (macOS). */
@@ -70,7 +72,10 @@ export async function runDoctor(deps: Partial<DoctorDeps> = {}): Promise<{ check
 async function checkGeminiKey(d: DoctorDeps): Promise<CheckResult> {
   const name = "Gemini key";
   const key = geminiApiKey(d.env);
-  if (!key) return fail(name, "No Gemini key found.", `Put GEMINI_API_KEY in your .env file. How to get one: ${KEY_GUIDE}`);
+  if (!key) {
+    const where = d.home ? `after GEMINI_API_KEY= in ${d.home}/.env` : "GEMINI_API_KEY in your .env file";
+    return fail(name, "No Gemini key found.", `Put your key ${where}. How to get one: ${KEY_GUIDE}`);
+  }
   // A model lookup costs no tokens. The key goes in a header so it never lands in a URL or log.
   const res = await d
     .fetch(`https://generativelanguage.googleapis.com/v1beta/models/${d.model}`, {
@@ -183,6 +188,7 @@ export async function doctorMain(): Promise<number> {
 function defaultDeps(): DoctorDeps {
   return {
     env: { GEMINI_API_KEY: process.env.GEMINI_API_KEY, GOOGLE_API_KEY: process.env.GOOGLE_API_KEY },
+    home: process.env.LIVE_AGENT_HOME || undefined,
     fetch: globalThis.fetch,
     platform: process.platform,
     audioDevices: () => Bun.$`system_profiler SPAudioDataType -json`.quiet().json(),

@@ -59,6 +59,22 @@ fn live_agent_home() -> String {
         .unwrap_or_else(|| format!("{}/Desktop/live-agent", std::env::var("HOME").unwrap_or_default()))
 }
 
+/// The window's "Show log" link: reveal the core's log (src/core-log.ts) in Finder.
+/// The window passes nothing: the path is fixed here, so this opens only that file
+/// (or its folder before the first line is written).
+#[tauri::command]
+fn reveal_log() -> Result<(), String> {
+    let home = live_agent_home();
+    let log = format!("{home}/logs/core.log");
+    let mut open = std::process::Command::new("open");
+    if std::path::Path::new(&log).exists() {
+        open.arg("-R").arg(&log);
+    } else {
+        open.arg(&home);
+    }
+    open.spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
 fn start_core(app: &tauri::AppHandle) -> Result<(), String> {
     // The sidecar inherits our environment; LIVE_AGENT_HOME tells it where its folder is.
     // livekit-server is bundled next to it (Contents/MacOS), so PATH does not matter.
@@ -143,7 +159,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(Core { status: Mutex::new(CoreStatus::Starting), child: Mutex::new(None) })
-        .invoke_handler(tauri::generate_handler![core_status])
+        .invoke_handler(tauri::generate_handler![core_status, reveal_log])
         .setup(|app| {
             if let Err(reason) = start_core(app.handle()) {
                 *app.state::<Core>().status.lock().unwrap() = CoreStatus::Down { reason };

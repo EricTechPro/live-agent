@@ -2,7 +2,7 @@
 // No agent logic here; the core decides everything (see docs/spec.md, App shell).
 import { Room, RoomEvent, Track, type Participant } from "livekit-client";
 import { mountBoardAndBar } from "./board-view.ts";
-import { connectCore, onCoreDown, waitForCore, type CoreClient } from "./core-client.ts";
+import { connectCore, onCoreDown, revealLog, waitForCore, type CoreClient } from "./core-client.ts";
 import { nextOrb, orbStart, type Orb, type OrbInput, type OrbState } from "./orb-state.ts";
 import { addToTranscript, emptyTranscript, type Transcript } from "./transcript.ts";
 
@@ -186,5 +186,8 @@ async function runSetup(core: CoreClient, ifNeeded: boolean) {
     showError(`setup: ${errorText(err)}`);
   }
 }
+
+// "Show log" works before and after the core is up (it is most useful when the core did not start).
+$<HTMLButtonElement>("show-log").onclick = () => revealLog().catch((err) => showError(`show log: ${errorText(err)}`));
 
 boot();

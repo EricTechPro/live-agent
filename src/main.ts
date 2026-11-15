@@ -22,6 +22,7 @@ import { bundledTools } from "./core/bundled-tools.ts";
 import { doctorMain } from "./doctor/index.ts";
 import { setupMain } from "./setup/chat.ts";
 import { useHome } from "./home.ts";
+import { captureConsole, openCoreLog } from "./core-log.ts";
 import { geminiApiKey } from "./gemini-key.ts";
 import { errorMessage } from "./errors.ts";
 import pkg from "../package.json" with { type: "json" };
@@ -42,6 +43,10 @@ if (process.argv[2] === "--version") {
 if (process.argv[2] === "setup") process.exit(await setupMain());
 
 const apiKey = geminiApiKey();
+// The installed app: opened from Finder nobody sees stderr, so keep a small log in
+// <home>/logs/core.log too (the window's "Show log" reveals it). Never the key or a token.
+const coreLog = home ? openCoreLog({ home, secrets: [apiKey] }) : undefined;
+if (coreLog) captureConsole(coreLog);
 if (!apiKey) {
   console.error(
     home
@@ -72,6 +77,7 @@ const app = await startApp({
   process.exit(1);
 });
 
+coreLog?.hide(app.launchToken);
 console.log(JSON.stringify({ type: "ready", url: app.url, launchToken: app.launchToken }));
 // For people (stderr, so the shell's stdout stays one JSON line):
 console.error(`live-agent: voice check page: ${app.url}/check#${app.launchToken}`);
