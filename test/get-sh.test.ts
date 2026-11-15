@@ -63,13 +63,38 @@ describe("get.sh", () => {
     expect(r.out).toContain("fake doctor: all checks pass");
   });
 
-  test("with no terminal it writes an empty key file, private to the user, and says where to put the key", () => {
+  test("with no terminal it writes an empty key file, private to the user, and the app asks for the key", () => {
     const s = sandbox();
     const r = runGet(s, fakeRelease(s.root, "1"));
     const env = join(s.folder, ".env");
     expect(readFileSync(env, "utf8")).toBe("GEMINI_API_KEY=\n");
     expect(statSync(env).mode & 0o777).toBe(0o600);
-    expect(r.out).toContain(env);
+    // Not a warning: the app opens on "Paste your Gemini key" (ticket 19).
+    expect(r.out).toContain("the app will ask for your Gemini key");
+    expect(r.out).not.toContain("no key yet");
+  });
+
+  test("with no terminal it still ends by opening the app, which shows the key screen", () => {
+    const s = sandbox();
+    // A fake `open` first on PATH records what get.sh opens.
+    const bin = join(s.root, "bin");
+    mkdirSync(bin);
+    writeFileSync(join(bin, "open"), `#!/bin/sh\necho "$@" > "${join(s.root, "opened")}"\n`);
+    chmodSync(join(bin, "open"), 0o755);
+    const tarball = fakeRelease(s.root, "1");
+    const r = Bun.spawnSync(["bash", GET_SH], {
+      env: {
+        PATH: `${bin}:${process.env.PATH}`,
+        HOME: s.home,
+        LIVE_AGENT_TARBALL: `file://${tarball}`,
+        LIVE_AGENT_APPS: s.apps,
+        LIVE_AGENT_TTY: "/dev/null",
+      },
+      stdin: "ignore",
+    });
+    expect(r.exitCode).toBe(0);
+    expect(readFileSync(join(s.root, "opened"), "utf8").trim()).toBe(join(s.apps, "live-agent.app"));
+    expect(readFileSync(join(s.folder, ".env"), "utf8")).toBe("GEMINI_API_KEY=\n");
   });
 
   test("asks for the Gemini key on the terminal and saves it with 600 permissions, without printing it", () => {

@@ -115,15 +115,16 @@ main() {
   else
     local key=""
     if { : < "$tty"; } 2>/dev/null; then
-      printf '🔑 Paste your Gemini key (from https://aistudio.google.com/apikey), or press Enter to skip: ' >&2
+      printf '🔑 Paste your Gemini key (from https://aistudio.google.com/apikey), or press Enter to paste it in the app later: ' >&2
       { IFS= read -r -s key < "$tty" || true; } 2>/dev/null
       printf '\n' >&2
     fi
     key="$(printf '%s' "$key" | tr -d '[:space:]')"
     ( umask 077; printf 'GEMINI_API_KEY=%s\n' "$key" > "$env" )
     chmod 600 "$env"
+    # Skipped (or no keyboard): fine. The app opens on "Paste your Gemini key" and saves it here.
     if [ -n "$key" ]; then say "🔑 key saved: $env"
-    else warn "no key yet. Put it after GEMINI_API_KEY= in $env (README: \"Get your Gemini key\")."; fi
+    else say "🔑 the app will ask for your Gemini key when it opens (it saves it in $env)."; fi
   fi
 
   # --- check, then open -----------------------------------------------------

@@ -2,6 +2,7 @@
 //
 // Rust starts the core and reads its one "ready" line. This file asks Rust for
 // that line, then speaks the core's local HTTP API (src/app.ts):
+//   GET/POST /key  first launch: does the core need a Gemini key? hand it the pasted one
 //   GET  /events   server-sent AgentEvents (the one event stream)
 //   GET  /session  a short-lived LiveKit room token for the mic
 //   POST /text     a typed turn
@@ -56,6 +57,32 @@ export async function waitForCore(): Promise<CoreInfo> {
     if (status.state === "down") throw new Error(status.reason ?? "the core stopped");
     await new Promise((r) => setTimeout(r, 200));
   }
+}
+
+/** Does the core still need a Gemini key (first launch, ticket 19)? Ask before `connectCore`. */
+export async function keyNeeded(info: CoreInfo): Promise<boolean> {
+  const res = await fetch(`${info.url}/key`, { headers: { Authorization: `Bearer ${info.launchToken}` } });
+  if (!res.ok) throw new Error(`core /key: ${res.status}`);
+  return ((await res.json()) as { needed: boolean }).needed;
+}
+
+/**
+ * Hand the pasted key to the core, once. It checks it with Google, saves it and
+ * starts the chat. Rejects with the core's plain reason for a bad key.
+ * The key goes out in this one request and never comes back.
+ */
+export async function sendKey(info: CoreInfo, key: string): Promise<void> {
+  const res = await fetch(`${info.url}/key`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${info.launchToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ key }),
+  });
+  if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? `core /key: ${res.status}`);
+}
+
+/** The key screen's link: Rust opens Google AI Studio's key page in the browser (a fixed URL). */
+export function openKeyPage(): Promise<void> {
+  return invoke("open_key_page");
 }
 
 /** Called once if the core process dies after starting. */

@@ -13,7 +13,7 @@
 //     The key stays in the core process: the window only ever gets tokens;
 //   - it adds the usual tool folders to PATH so helper CLIs (gemini) are found.
 // Without LIVE_AGENT_HOME (running from the repo) nothing changes.
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 type Env = Record<string, string | undefined>;
@@ -61,4 +61,24 @@ function parseDotenv(text: string): [string, string][] {
 export function livekitBinary(execPath: string = process.execPath): string {
   const bundled = join(dirname(execPath), "livekit-server");
   return existsSync(bundled) ? bundled : "livekit-server";
+}
+
+/**
+ * Save the key pasted in the window (ticket 19) as `GEMINI_API_KEY=` in
+ * `<dir>/.env`, readable only by you (600), and put it in `env` so the running
+ * core uses it now. Other lines stay. Written to a temp file, then renamed, so a
+ * crash never leaves a half-written .env. The caller checked the key's shape
+ * (one word, no newline), so it cannot add a line.
+ */
+export function saveGeminiKey(dir: string, key: string, env: Env = process.env): void {
+  const dotenv = join(dir, ".env");
+  const lines = existsSync(dotenv) ? readFileSync(dotenv, "utf8").replace(/\n$/, "").split("\n") : [];
+  const at = lines.findIndex((line) => /^\s*(?:export\s+)?GEMINI_API_KEY\s*=/.test(line));
+  if (at >= 0) lines[at] = `GEMINI_API_KEY=${key}`;
+  else lines.push(`GEMINI_API_KEY=${key}`);
+  const temp = `${dotenv}.${process.pid}.tmp`;
+  writeFileSync(temp, `${lines.join("\n")}\n`, { mode: 0o600 });
+  chmodSync(temp, 0o600); // the umask may have masked the mode
+  renameSync(temp, dotenv);
+  env.GEMINI_API_KEY = key;
 }

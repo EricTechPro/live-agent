@@ -8,7 +8,13 @@
 // Start order: LiveKit server -> token service -> agent core session -> the
 // core joins the room as "agent" -> local HTTP API for the window.
 //
+// With no Gemini key (and a `keyGate`), only LiveKit and the API start; the
+// chat starts once the window posts a key that works (ticket 19).
+//
 // The window's API (all need the launch token; see notes/08-voice-api.md):
+//   GET  /key      -> { needed }: true until there is a Gemini key
+//   POST /key      -> { key } in, { ok } out, or 400 { error } for a bad key: checks it,
+//                     saves it to .env, starts the chat. Until then the routes below answer 503.
 //   GET  /session  -> { livekitUrl, room, identity: "user", token, expiresAt }
 //   GET  /events   -> Server-Sent Events, one AgentEvent (JSON) per `data:` line
 //                     (EventSource cannot set headers, so `?token=` works here)
@@ -24,7 +30,7 @@
 // fetch/EventSource exist in every webview with no library.
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { dispose } from "@livekit/rtc-node";
-import { startSession, type SessionOptions } from "./core/agent.ts";
+import { startSession, type AgentSession, type SessionOptions } from "./core/agent.ts";
 import type { Model } from "./core/model.ts";
 import { MODE_LABELS, MODES, type SafetyMode } from "./core/safety.ts";
 import { errorMessage } from "./errors.ts";
@@ -47,6 +53,18 @@ export interface AppOptions extends Omit<SessionOptions, "model"> {
   /** The window API's port. Default 0: any free port (read it from `url`). */
   port?: number;
   room?: string;
+  /**
+   * With no `geminiApiKey`: start in "needs key" state. LiveKit and the API run;
+   * the chat waits for the window to post a key that `check` accepts and `save`
+   * has stored. Without a gate the chat starts with no key (tests, scripted model).
+   */
+  keyGate?: KeyGate;
+}
+
+export interface KeyGate {
+  /** Undefined when the key works, else one plain sentence for the window. */
+  check(key: string): Promise<string | undefined>;
+  save(key: string): void | Promise<void>;
 }
 
 export interface App {
@@ -81,10 +99,15 @@ const refused = (err: unknown) => json({ error: errorMessage(err) }, 409);
 const readBody = async (req: Request): Promise<Record<string, unknown>> =>
   ((await req.json().catch(() => ({}))) ?? {}) as Record<string, unknown>;
 
-type Route = (req: Request, url: URL) => Response | Promise<Response>;
+// What a pasted Gemini key may look like: one word of letters, digits, - and _.
+// Checked first, so a stray paste can never add a line to .env.
+const KEY_SHAPE = /^[A-Za-z0-9_-]{20,200}$/;
+
+type Chat = { session: AgentSession; tokens: TokenService };
+type Route = (chat: Chat, req: Request) => Response | Promise<Response>;
 
 export async function startApp(options: AppOptions): Promise<App> {
-  const { model, geminiApiKey, geminiModel, livekitPort, port, room: roomName, ...sessionOptions } = options;
+  const { model, geminiApiKey, geminiModel, livekitPort, port, room: roomName, keyGate, ...sessionOptions } = options;
   const room = roomName ?? "live-agent";
   const livekit = await startLiveKit({ port: livekitPort });
   const cleanups: (() => Promise<unknown> | unknown)[] = [() => livekit.stop()];
@@ -92,50 +115,77 @@ export async function startApp(options: AppOptions): Promise<App> {
     for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
   };
 
-  try {
-    const tokens = createTokenService({
-      livekit,
-      room,
-      gemini: geminiApiKey ? { apiKey: geminiApiKey, model: geminiModel } : undefined,
-    });
+  // The chat: token service, agent session, and the core in the voice room.
+  // Started now when there is a key, else once the window posts one.
+  let chat: Chat | undefined;
+  async function startChat(apiKey: string | undefined) {
+    const tokens = createTokenService({ livekit, room, gemini: apiKey ? { apiKey, model: geminiModel } : undefined });
     const session = await startSession({
       ...sessionOptions,
       model: typeof model === "function" ? model(tokens) : model,
     });
     cleanups.push(() => session.close());
-
     const bridge = await joinVoiceRoom({ session, url: livekit.url, token: (await tokens.livekitToken("agent")).token });
     cleanups.push(() => bridge.close());
+    chat = { session, tokens };
+  }
+
+  try {
+    if (geminiApiKey || !keyGate) await startChat(geminiApiKey);
 
     const launchToken = randomBytes(24).toString("hex");
     const allowed = (given: string | null) =>
       !!given && given.length === launchToken.length && timingSafeEqual(Buffer.from(given), Buffer.from(launchToken));
 
+    // The pasted key passes through here once: checked, saved, used to start the
+    // chat. No answer, log line or event carries it (spec story 12, ADR 0002).
+    let checking = false;
+    async function takeKey(req: Request): Promise<Response> {
+      if (chat || !keyGate) return json({ error: "The key is already set. To change it, edit .env and restart." }, 409);
+      if (checking) return json({ error: "Already checking a key." }, 409);
+      const { key: pasted } = await readBody(req);
+      const key = typeof pasted === "string" ? pasted.trim() : "";
+      if (!KEY_SHAPE.test(key)) return json({ error: "That does not look like a Gemini key. Copy it again from AI Studio." }, 400);
+      checking = true;
+      try {
+        const problem = await keyGate.check(key);
+        if (problem) return json({ error: problem }, 400);
+        await keyGate.save(key);
+        await startChat(key);
+        return json({ ok: true });
+      } catch (err) {
+        return json({ error: `Could not start: ${errorMessage(err)}` }, 500);
+      } finally {
+        checking = false;
+      }
+    }
+
     // The window's API, one entry per "METHOD /path" (see the list at the top).
+    // All of these need the chat: before a key arrives they answer 503.
     const routes: Record<string, Route> = {
-      async "GET /session"() {
+      async "GET /session"({ tokens }) {
         const { token, expiresAt } = await tokens.livekitToken("user");
         return json({ livekitUrl: livekit.url, room, identity: "user", token, expiresAt });
       },
 
-      async "POST /text"(req) {
+      async "POST /text"({ session }, req) {
         const { text } = await readBody(req);
         if (typeof text !== "string" || !text.trim()) return json({ error: "send { text }" }, 400);
         return session.sendText(text).then((events) => json({ events }), refused);
       },
 
       // The window's New chat button: end this chat (note + tidy job), start the next.
-      "POST /chat/new"() {
+      "POST /chat/new"({ session }) {
         return session.newChat().then(() => json({ ok: true }), refused);
       },
 
       // The safety mode (ticket 10). The window draws it from `mode.changed` events;
       // GET is for the first draw, and carries the modes and their labels for the dropdown.
-      "GET /mode"() {
+      "GET /mode"({ session }) {
         return json({ mode: session.mode(), modes: MODES.map((id) => ({ id, label: MODE_LABELS[id] })) });
       },
 
-      async "POST /mode"(req) {
+      async "POST /mode"({ session }, req) {
         const body = await readBody(req);
         if (body.cycle === true) session.cycleMode();
         else if (typeof body.mode === "string" && (MODES as readonly string[]).includes(body.mode)) {
@@ -149,16 +199,16 @@ export async function startApp(options: AppOptions): Promise<App> {
       // The setup chat (ticket 12). The window POSTs { ifNeeded: true } on boot, so
       // the core decides: setup starts only on a first launch (no config file).
       // Its Setup button POSTs {} to run setup again.
-      "GET /setup"() {
+      "GET /setup"({ session }) {
         return json({ needed: session.setup.needed(), configPath: sessionOptions.configPath ?? defaultConfigPath() });
       },
 
-      async "POST /setup"(req) {
+      async "POST /setup"({ session }, req) {
         const { ifNeeded } = await readBody(req);
         return session.setup.start({ ifNeeded: ifNeeded === true }).then((events) => json({ events }), refused);
       },
 
-      "GET /events"() {
+      "GET /events"({ session }) {
         let off = () => {};
         let ping: ReturnType<typeof setInterval> | undefined;
         const body = new ReadableStream<string>({
@@ -177,7 +227,7 @@ export async function startApp(options: AppOptions): Promise<App> {
     };
 
     // The job board's cancel button (ticket 10): the one route with a value in its path.
-    function cancelJob(id: string) {
+    function cancelJob({ session }: Chat, id: string) {
       if (!session.jobs.list().some((job) => job.id === id)) return json({ error: `no job ${id}` }, 404);
       // false = it had already ended; the board already shows how.
       return json({ cancelled: session.jobs.cancel(id) });
@@ -194,11 +244,14 @@ export async function startApp(options: AppOptions): Promise<App> {
       const given = bearer ?? (url.pathname === "/events" ? url.searchParams.get("token") : null);
       if (!allowed(given)) return json({ error: "unauthorized" }, 401);
 
-      const route = routes[`${req.method} ${url.pathname}`];
-      if (route) return route(req, url);
+      const name = `${req.method} ${url.pathname}`;
+      if (name === "GET /key") return json({ needed: !chat });
+      if (name === "POST /key") return takeKey(req);
+      const route = routes[name];
       const cancel = req.method === "POST" ? url.pathname.match(/^\/jobs\/([^/]+)\/cancel$/) : null;
-      if (cancel) return cancelJob(decodeURIComponent(cancel[1]!));
-      return json({ error: "not found" }, 404);
+      if (!route && !cancel) return json({ error: "not found" }, 404);
+      if (!chat) return json({ error: "No Gemini key yet: paste it in the window." }, 503);
+      return route ? route(chat, req) : cancelJob(chat, decodeURIComponent(cancel![1]!));
     }
 
     const server = Bun.serve({

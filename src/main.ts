@@ -21,8 +21,8 @@ import { TOOLS_DIR } from "./core/registry.ts";
 import { bundledTools } from "./core/bundled-tools.ts";
 import { doctorMain } from "./doctor/index.ts";
 import { setupMain } from "./setup/chat.ts";
-import { useHome } from "./home.ts";
-import { geminiApiKey } from "./gemini-key.ts";
+import { saveGeminiKey, useHome } from "./home.ts";
+import { geminiApiKey, verifyGeminiKey } from "./gemini-key.ts";
 import { errorMessage } from "./errors.ts";
 import pkg from "../package.json" with { type: "json" };
 
@@ -41,24 +41,25 @@ if (process.argv[2] === "--version") {
 // `live-agent setup` (or `bun run setup`): the setup chat, typed in the terminal (ticket 12).
 if (process.argv[2] === "setup") process.exit(await setupMain());
 
+// No key yet (first launch, installer run without a terminal): the core still
+// starts, and the window asks for the key (ticket 19, docs/adr/0002).
 const apiKey = geminiApiKey();
-if (!apiKey) {
-  console.error(
-    home
-      ? `live-agent: no Gemini key. Put GEMINI_API_KEY=... in ${home}/.env (or run the installer again).`
-      : "live-agent: no Gemini key. Copy .env.example to .env and set GEMINI_API_KEY.",
-  );
-  process.exit(1);
-}
+if (!apiKey) console.error("live-agent: no Gemini key yet: waiting for it in the window.");
 
 const config = loadConfig();
 const app = await startApp({
   config,
   geminiApiKey: apiKey,
+  // The key pasted in the window: checked with Google, saved to <home>/.env (600), never logged.
+  keyGate: {
+    check: (key) => verifyGeminiKey(key),
+    save: (key) => saveGeminiKey(home ?? process.cwd(), key),
+  },
   // The Live session connects with a fresh single-use token, never the key itself.
   model: (tokens) => geminiLiveModel({ token: () => tokens.geminiToken() }),
   // After each chat, a background job tidies new raw notes into wiki pages (ticket 07).
-  tidy: geminiTidyModel({ apiKey }),
+  // It reads the key when it runs, so a key pasted in the window works too.
+  tidy: (args) => geminiTidyModel({ apiKey: geminiApiKey() ?? "" })(args),
   livekitPort: Number(process.env.LIVE_AGENT_LIVEKIT_PORT ?? 7880),
   port: Number(process.env.LIVE_AGENT_PORT ?? 0),
   // From the repo: read tools/ as usual. As the compiled sidecar there is no tools/ folder, so use the baked-in list.

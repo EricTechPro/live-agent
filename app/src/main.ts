@@ -2,7 +2,16 @@
 // No agent logic here; the core decides everything (see docs/spec.md, App shell).
 import { Room, RoomEvent, Track, type Participant } from "livekit-client";
 import { mountBoardAndBar } from "./board-view.ts";
-import { connectCore, onCoreDown, waitForCore, type CoreClient } from "./core-client.ts";
+import {
+  connectCore,
+  keyNeeded,
+  onCoreDown,
+  openKeyPage,
+  sendKey,
+  waitForCore,
+  type CoreClient,
+  type CoreInfo,
+} from "./core-client.ts";
 import { nextOrb, orbStart, type Orb, type OrbInput, type OrbState } from "./orb-state.ts";
 import { addToTranscript, emptyTranscript, type Transcript } from "./transcript.ts";
 
@@ -113,10 +122,50 @@ function setTalking(on: boolean) {
 
 // ---- boot -----------------------------------------------------------------
 
+// First launch with no Gemini key: show the key screen until the core takes one.
+// The pasted key goes straight to the core and is cleared from the input; the
+// window keeps no copy (ticket 19, docs/adr/0002).
+function askForKey(info: CoreInfo): Promise<void> {
+  const screen = $("key-screen");
+  const form = $<HTMLFormElement>("key-form");
+  const input = $<HTMLInputElement>("key-input");
+  const save = $<HTMLButtonElement>("key-save");
+  const error = $("key-error");
+  $("key-link").onclick = (e) => {
+    e.preventDefault();
+    openKeyPage().catch(() => {});
+  };
+  screen.hidden = false;
+  input.focus();
+  orbLabel.textContent = "Waiting for your Gemini key";
+  return new Promise((resolve) => {
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const key = input.value.trim();
+      if (!key) return;
+      input.value = "";
+      save.disabled = input.disabled = true;
+      error.textContent = "Checking your key…";
+      try {
+        await sendKey(info, key);
+        screen.hidden = true;
+        resolve();
+      } catch (err) {
+        error.textContent = errorText(err);
+        input.focus();
+      } finally {
+        save.disabled = input.disabled = false;
+      }
+    };
+  });
+}
+
 async function boot() {
   let core: CoreClient;
   try {
-    core = connectCore(await waitForCore());
+    const info = await waitForCore();
+    if (await keyNeeded(info)) await askForKey(info);
+    core = connectCore(info);
   } catch (err) {
     feedOrb({ type: "core.down" });
     orbLabel.textContent = `Core did not start: ${errorText(err)}`;
