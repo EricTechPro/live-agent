@@ -49,6 +49,14 @@ describe("core log", () => {
     expect(text).toContain("gemini session with");
   });
 
+  test("a git commit id is not a secret: it stays readable", () => {
+    const home = tempHome();
+    const log = openCoreLog({ home, secrets: ["a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718"] });
+    const sha = "512d2c5e9f0a1b2c3d4e5f60718293a4b5c6d7e8";
+    log.write(`helper job committed ${sha} on live-agent/fix-the-bug`);
+    expect(read(home)).toContain(sha);
+  });
+
   test("stays small: past the cap the oldest lines are dropped, the newest kept", () => {
     const home = tempHome();
     const log = openCoreLog({ home, maxBytes: 4000 });
