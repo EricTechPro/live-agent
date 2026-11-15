@@ -124,9 +124,15 @@ export async function startApp(options: AppOptions): Promise<App> {
       ...sessionOptions,
       model: typeof model === "function" ? model(tokens) : model,
     });
-    cleanups.push(() => session.close());
-    const bridge = await joinVoiceRoom({ session, url: livekit.url, token: (await tokens.livekitToken("agent")).token });
-    cleanups.push(() => bridge.close());
+    // All or nothing: if the core cannot join the room, close the session it
+    // just opened, so a retry starts clean and nothing is left running.
+    const join = async () =>
+      joinVoiceRoom({ session, url: livekit.url, token: (await tokens.livekitToken("agent")).token });
+    const bridge = await join().catch(async (err) => {
+      await session.close().catch(() => {});
+      throw err;
+    });
+    cleanups.push(() => session.close(), () => bridge.close());
     chat = { session, tokens };
   }
 
@@ -143,11 +149,12 @@ export async function startApp(options: AppOptions): Promise<App> {
     async function takeKey(req: Request): Promise<Response> {
       if (chat || !keyGate) return json({ error: "The key is already set. To change it, edit .env and restart." }, 409);
       if (checking) return json({ error: "Already checking a key." }, 409);
-      const { key: pasted } = await readBody(req);
-      const key = typeof pasted === "string" ? pasted.trim() : "";
-      if (!KEY_SHAPE.test(key)) return json({ error: "That does not look like a Gemini key. Copy it again from AI Studio." }, 400);
+      // Set before the first await, so a double submit cannot start two chats.
       checking = true;
       try {
+        const { key: pasted } = await readBody(req);
+        const key = typeof pasted === "string" ? pasted.trim() : "";
+        if (!KEY_SHAPE.test(key)) return json({ error: "That does not look like a Gemini key. Copy it again from AI Studio." }, 400);
         const problem = await keyGate.check(key);
         if (problem) return json({ error: problem }, 400);
         await keyGate.save(key);
