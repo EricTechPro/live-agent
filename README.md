@@ -8,6 +8,8 @@
 
 <p>Gemini Live · LiveKit on your own computer · one Gemini key · macOS (Apple Silicon)</p>
 
+<p><a href="https://erictechpro.github.io/live-agent/"><strong>🌐 Live site: erictechpro.github.io/live-agent</strong></a></p>
+
 <p><a href="#install">Install</a> · <a href="#get-your-gemini-key">Get your Gemini key</a> · <a href="#customise-it">Customise</a> · <a href="#your-second-brain">Brain</a> · <a href="#helper-agents">Helpers</a> · <a href="#how-it-works-inside">How it works inside</a> · <a href="#devfest-codelab">Codelab</a></p>
 
 </div>
