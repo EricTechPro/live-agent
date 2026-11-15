@@ -100,3 +100,83 @@ describe("no key yet, as the window sees it", () => {
     expect(saved).toEqual([GOOD]);
   });
 });
+
+// Two pastes at once, and a chat that fails half-way through starting (review of 15-20).
+describe("key pastes that race or fail half-way", () => {
+  let app2: App;
+  let builds = 0;
+  let opened = 0;
+  let closed = 0;
+
+  beforeAll(async () => {
+    const script = scriptedModel([[{ type: "text", text: "Hi!" }]]);
+    app2 = await startApp({
+      // Counts model connections, and breaks the first chat right after its session
+      // opens (the agent's room token fails), the way a voice-room join can fail.
+      model: (tokens) => {
+        if (builds++ === 0) tokens.livekitToken = () => Promise.reject(new Error("the voice room is down"));
+        return {
+          async connect(onEvent, opts) {
+            opened++;
+            const session = await script.connect(onEvent, opts);
+            return {
+              ...session,
+              async close() {
+                closed++;
+                await session.close();
+              },
+            };
+          },
+        };
+      },
+      livekitPort: await freeLiveKitPort(),
+      configPath: join(dir, "race.config.json"),
+      keyGate: {
+        check: async (key) => {
+          await Bun.sleep(50);
+          return key === GOOD ? undefined : "That key does not work. Make a new one.";
+        },
+        save: () => {},
+      },
+    });
+  });
+  afterAll(async () => {
+    await app2.stop();
+  });
+
+  const post2 = (body: unknown) =>
+    fetch(`${app2.url}/key`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${app2.launchToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  test("a chat that fails half-way closes what it opened, so nothing is left running", async () => {
+    const res = await post2({ key: GOOD });
+    expect(res.status).toBe(500);
+    expect(opened).toBe(1);
+    expect(closed).toBe(1);
+  });
+
+  test("a double submit starts one chat, not two", async () => {
+    // The first paste's body arrives slowly, so the second lands while the first is still being read.
+    const slowBody = new ReadableStream({
+      async start(controller) {
+        await Bun.sleep(100);
+        controller.enqueue(new TextEncoder().encode(JSON.stringify({ key: GOOD })));
+        controller.close();
+      },
+    });
+    const slow = fetch(`${app2.url}/key`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${app2.launchToken}`, "Content-Type": "application/json" },
+      body: slowBody,
+    });
+    await Bun.sleep(20);
+    const [a, b] = await Promise.all([slow, post2({ key: GOOD })]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    // One more chat opened than before, and only the failed one closed.
+    expect(opened).toBe(2);
+    expect(closed).toBe(1);
+  });
+});

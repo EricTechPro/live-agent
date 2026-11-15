@@ -90,6 +90,11 @@ export function revealLog(): Promise<void> {
   return invoke<void>("reveal_log");
 }
 
+/** Mini mode: Rust shrinks the window to the orb (true) or restores it (false). */
+export function setMiniWindow(on: boolean): Promise<void> {
+  return invoke<void>("set_mini", { on });
+}
+
 /** Called once if the core process dies after starting. */
 export function onCoreDown(cb: (reason: string) => void) {
   return listen<string>("core-down", (e) => cb(e.payload));

@@ -26,8 +26,14 @@ A small desktop app you talk to.
 - **It learns slowly.** After a chat it saves a short note, and a background job tidies new
   notes into clean wiki pages.
 - **It hands off big jobs.** "Fix the bug in my recipe app" starts a **helper agent**
-  (Gemini CLI) in the background. A job board shows its progress, and the voice tells you
-  when it is done. It never freezes while a tool runs.
+  (Gemini CLI, Codex or Claude Code) in the background. A job board shows its progress, and
+  the voice tells you when it is done. It never freezes while a tool runs. With worktrees on,
+  a finished job's changes are committed on its own branch for you to review.
+- **It draws.** "Draw how the voice gets to Gemini" shows a diagram in the window
+  (`draw_diagram`, Mermaid) while the voice keeps talking.
+- **It shrinks out of the way.** The **Mini** button turns the window into a small
+  always-on-top orb that shows how many jobs are running. Voice keeps working; click the orb
+  to open the full window again.
 - **You decide what it may do alone.** Three safety modes, Ask me / Auto edits / Bypass.
   <kbd>Shift</kbd>+<kbd>Tab</kbd> switches them.
 - **One JSON file controls it all**, and a setup chat fills it in for you.
@@ -174,7 +180,7 @@ Every tool has a **risk class**. The mode decides what each class may do:
 
 | risk class | example tools | Ask me | Auto edits | Bypass |
 |---|---|---|---|---|
-| read | `search_brain`, `read_file` | runs | runs | runs |
+| read | `search_brain`, `read_file`, `draw_diagram` | runs | runs | runs |
 | edit | `remember`, `cancel_job` | asks | runs | runs |
 | command | (shell commands) | asks | asks | runs |
 | helper | `start_helper` | asks | asks | runs |

@@ -16,8 +16,7 @@
 //   the Gemini key.
 // - Ready check: `claude auth status` exits 0 when signed in (no model call).
 import type { JobSpec } from "../core/jobs.ts";
-import type { HelperPaths } from "./gemini-cli.ts";
-import { capSummary, checkExitsZero, childEnv, findBin, jobTitle, jsonLine, runCli } from "./cli-job.ts";
+import { capSummary, childEnv, jobTitle, jsonLine, runCli, signInStatus, type HelperPaths } from "./cli-job.ts";
 import type { HelperStatus } from "./index.ts";
 
 export const DEFAULT_CLAUDE_CODE_BIN = "claude";
@@ -33,12 +32,8 @@ function standaloneEnv() {
   );
 }
 
-export async function claudeCodeStatus({ claudeCodeBin = DEFAULT_CLAUDE_CODE_BIN }: HelperPaths = {}): Promise<HelperStatus> {
-  const bin = findBin(claudeCodeBin);
-  if (!bin) return { ok: false, installed: false, fix: CLAUDE_CODE_INSTALL_FIX };
-  return (await checkExitsZero([bin, "auth", "status"]))
-    ? { ok: true, installed: true, bin }
-    : { ok: false, installed: true, bin, fix: CLAUDE_CODE_SIGN_IN_FIX };
+export function claudeCodeStatus({ claudeCodeBin = DEFAULT_CLAUDE_CODE_BIN }: HelperPaths = {}): Promise<HelperStatus> {
+  return signInStatus(claudeCodeBin, ["auth", "status"], { install: CLAUDE_CODE_INSTALL_FIX, signIn: CLAUDE_CODE_SIGN_IN_FIX });
 }
 
 export function claudeCodeJob({ task, cwd, cancelGraceMs = 3000, ...paths }: HelperPaths & { task: string; cwd: string }): JobSpec {

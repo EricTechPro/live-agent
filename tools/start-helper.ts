@@ -35,11 +35,14 @@ export default defineTool<{ task: string; folder?: string; helper?: string }>({
     },
     required: ["task"],
   },
-  run({ task, folder, helper: asked }, { workDir, jobs, helpers }) {
+  async run({ task, folder, helper: asked }, { workDir, jobs, helpers }) {
     if (!jobs || !helpers) throw new Error("helper jobs are not available in this session");
     const { geminiCli, codex = false, claudeCode = false, worktrees, ...paths } = helpers;
     // Off, or none on: a plain fix for the voice, and no job starts.
     const helper = pickHelper({ geminiCli, codex, claudeCode }, asked);
+    // Not installed or not signed in: the same, before any worktree or branch is made.
+    const status = await helper.status(paths);
+    if (!status.ok) throw new Error(status.fix ?? `${helper.label} is not ready.`);
     const project = resolve(workDir, folder ?? ".");
     // Worktrees on: the helper works on its own branch, never in the user's checkout.
     // Not a git project: createWorktree throws a plain fix, and no job starts.

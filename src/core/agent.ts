@@ -28,7 +28,7 @@ import { brainRoot } from "../brain/index.ts";
 import { tidyJob, type TidyModel } from "../brain/tidy.ts";
 import { defaultConfig, defaultConfigPath, type Config } from "../config/index.ts";
 import { errorMessage } from "../errors.ts";
-import type { HelperPaths } from "../helpers/gemini-cli.ts";
+import type { HelperPaths } from "../helpers/cli-job.ts";
 import { currentConfig, setupKickoff } from "../setup/index.ts";
 import { saveChatNote, SUMMARY_REQUEST, summaryCollector, type ChatLine, type SummaryCollector } from "./chat-end.ts";
 import type { AgentEvent } from "./events.ts";

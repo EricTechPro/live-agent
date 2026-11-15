@@ -5,8 +5,7 @@
 // The same window and page stay alive (Rust `set_mini` only resizes it and
 // drops the frame), so the LiveKit room and the core's event stream are never
 // touched: voice keeps working. Here we only swap CSS and keep the count fresh.
-import { invoke } from "@tauri-apps/api/core";
-import type { CoreClient } from "./core-client.ts";
+import { setMiniWindow, type CoreClient } from "./core-client.ts";
 import { addJobEvent, emptyBoard, runningCount, type JobBoard } from "./job-board.ts";
 
 export function mountMini(core: CoreClient, button: HTMLButtonElement, orbEl: HTMLElement, countEl: HTMLElement) {
@@ -33,7 +32,7 @@ export function mountMini(core: CoreClient, button: HTMLButtonElement, orbEl: HT
     document.body.classList.toggle("mini", on);
     orbEl.title = on ? "Open the full window" : "";
     try {
-      await invoke("set_mini", { on });
+      await setMiniWindow(on);
     } catch {
       // Outside Tauri (browser preview) only the CSS changes.
     }

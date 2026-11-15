@@ -22,12 +22,12 @@ export interface CoreLog {
 /** About 30 minutes of a chatty session; old lines are dropped past this. */
 const MAX_BYTES = 256 * 1024;
 
-// Token shapes, hidden even when nobody told the log about them.
+// Token shapes, hidden even when nobody told the log about them. No rule for
+// plain hex: git commit ids are hex too. The launch token is hidden exactly (log.hide).
 const TOKEN_SHAPES: RegExp[] = [
   /eyJ[\w-]{6,}\.[\w-]+\.[\w-]+/g, // JWTs (LiveKit room tokens)
   /AIza[\w-]{20,}/g, // Google API keys
   /auth_tokens\/[\w-]+/g, // Gemini ephemeral tokens
-  /\b[0-9a-f]{32,}\b/gi, // long hex secrets (the window's launch token)
   /((?:token|key|secret|authorization)["']?\s*[:=]\s*["']?(?:Bearer\s+)?)[^\s"'&,}]{8,}/gi, // token=..., "key":"..."
 ];
 
