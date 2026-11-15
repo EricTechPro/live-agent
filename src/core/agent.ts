@@ -116,6 +116,12 @@ export interface AgentSession {
    */
   setPaused(on: boolean): void;
   paused(): boolean;
+  /**
+   * Esc (ticket 37): stop the reply being spoken, like talking over it. Its voice
+   * stops now (a `clear`), the rest of it is dropped, and `interrupted` goes on the
+   * stream. The call and the mic stay on.
+   */
+  stopReply(): void;
   /** Shift+Tab: Ask me -> Auto edits -> Bypass -> Ask me. Returns the new mode. */
   cycleMode(): SafetyMode;
   /** The setup wizard (the window's click-through setup). */
@@ -185,6 +191,8 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   let closed = false;
   // The window's Pause: no voice out, no mic in, same chat.
   let paused = false;
+  /** Esc stopped the reply (ticket 37): drop its voice until the user speaks or the turn ends. */
+  let silenced = false;
 
   // ---- jobs and tool calls -------------------------------------------------
   const jobs = createJobs({
@@ -298,6 +306,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     if (closed) return;
     switch (event.type) {
       case "user.text": {
+        silenced = false;
         const voice = openVoiceTurn();
         voice.heard += event.text;
         emit({ type: "transcript", role: "user", text: event.text });
@@ -307,7 +316,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         break;
       }
       case "audio":
-        if (paused) break; // the rest of a sentence that was paused: never played
+        if (paused || silenced) break; // the rest of a sentence that was paused or stopped: never played
         openVoiceTurn();
         playAudio(event);
         break;
@@ -332,6 +341,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         // Chat turns wait for turn.complete: the user is still hearing the reply.
         break;
       case "turn.complete":
+        silenced = false;
         if (!turn) return;
         turn.awaiting--;
         finishTurnIfOver();
@@ -451,6 +461,12 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       emit({ type: "paused", paused: on });
     },
     paused: () => paused,
+    stopReply() {
+      silenced = true;
+      playAudio({ type: "clear" });
+      emit({ type: "interrupted" });
+      canvas.interrupted();
+    },
     onEvent(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
