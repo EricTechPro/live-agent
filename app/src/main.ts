@@ -29,9 +29,10 @@ import { addCaption, noCaptions, shownCaptions, type Captions } from "./captions
 import { spokenLang, WORDS, type Lang } from "./lang.ts";
 import { followMic } from "./mic-follow.ts";
 import {
-  capture, DOUBLE_MS, dotFor, dragTo, dropDot, followStep, hoverOrb, isDoubleClick, isDrag, keepOn, parseSaved, placeCard, placeOrb, placePopover,
+  capture, DOUBLE_MS, dragTo, followStep, hoverOrb, isDoubleClick, isDrag, keepOn, parseSaved, placeCard, placeOrb, placePopover,
   pttCallIdle, pttIdle, pttPress, pttRelease, pttStep, type PttCall, type Point, type Ptt, type Rect,
 } from "./overlay.ts";
+import { dockPill, hoverPill, migrateDot, morph, MORPH_MS, parsePill, PILL, pillActions, pillAt, pillBars, pillFlyout, placePill, type PillAction, type PillSpot } from "./pill.ts";
 import { runWizard } from "./wizard.ts";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -82,13 +83,22 @@ function moveOrb(at: Point, save = false) {
     }
   }
 }
-// ---- the minimised dot (ticket 38): a small faint dot that stays where you drop it ----
+// ---- minimised (tickets 38, 39): a slim pill docked flush to a side edge ----------
 const MINI_KEY = "jett.mini";
+/** Where you dragged the pill (only drags are saved, so an untouched pill follows the orb). */
+const PILL_KEY = "jett.pill";
+/** Ticket 38's dot spot: moved over to the pill once, then dropped. */
 const DOT_KEY = "jett.dot";
 const DOT = { width: 20, height: 20 };
-const dotEl = $<HTMLButtonElement>("dot");
-let dotAt: Point = { x: 0, y: 0 };
+const pillEl = $<HTMLButtonElement>("pill");
+const pillActionsEl = $("pill-actions");
+const pillCallBtn = $<HTMLButtonElement>("pill-call");
+const pillHangupBtn = $<HTMLButtonElement>("pill-hangup");
+let pillSpot: PillSpot = { side: "right", y: 0 };
+let pillOpen = false;
+let pillList: PillAction[] = ["expand"];
 let mini = false;
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const load = (key: string) => {
   try {
     return localStorage.getItem(key);
@@ -96,50 +106,106 @@ const load = (key: string) => {
     return null; // storage off: defaults
   }
 };
-const store = (key: string, value: string) => {
+const store = (key: string, value: string | undefined) => {
   try {
-    localStorage.setItem(key, value);
+    if (value === undefined) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
   } catch {
     // Not remembered; works for this run.
   }
 };
-function moveDot(at: Point, save = false) {
-  dotAt = at;
-  dotEl.style.left = `${at.x}px`;
-  dotEl.style.top = `${at.y}px`;
-  if (save) store(DOT_KEY, JSON.stringify(at));
+// A dot you dragged in ticket 38 becomes the pill's spot, once.
+(function migrateOldDot() {
+  const dot = parseSaved(load(DOT_KEY));
+  if (!dot) return;
+  if (!parsePill(load(PILL_KEY))) store(PILL_KEY, JSON.stringify(migrateDot(dot, DOT, view())));
+  store(DOT_KEY, undefined);
+})();
+const pillRect = (): Rect => ({ ...pillAt(pillSpot, view()), ...PILL });
+function movePill(spot: PillSpot, save = false) {
+  pillSpot = spot;
+  const at = pillAt(spot, view());
+  pillEl.style.left = `${at.x}px`;
+  pillEl.style.top = `${at.y}px`;
+  pillEl.dataset.dock = spot.side;
+  // Tooltips open away from the edge.
+  for (const el of [pillEl, ...pillActionsEl.querySelectorAll<HTMLElement>("[data-tip]")]) {
+    if (spot.side === "right") el.dataset.side = "left";
+    else delete el.dataset.side;
+  }
+  if (pillOpen) placePillActions();
+  if (save) store(PILL_KEY, JSON.stringify(spot));
 }
-/** Minimise to the dot (minus, double-click, Ctrl+Option+S, the menu bar) or bring Jett back. */
-function setMini(on: boolean, save = true) {
+function placePillActions() {
+  const f = pillFlyout(pillRect(), pillSpot.side, pillList.length);
+  pillActionsEl.style.left = `${f.x}px`;
+  pillActionsEl.style.top = `${f.y}px`;
+}
+/** Hover from the poll's cursor (or the pointer in a browser preview) opens the quick actions. */
+function updatePillHover(point: Point | undefined) {
+  setPillOpen(mini && !drag && hoverPill(point, pillRect(), pillSpot.side, pillOpen, pillList.length));
+}
+function setPillOpen(open: boolean) {
+  if (open === pillOpen) return;
+  pillOpen = open;
+  pillEl.classList.toggle("hover", open);
+  pillActionsEl.hidden = !open;
+  if (open) placePillActions();
+  else tips.hide();
+}
+/** Orb <-> pill (ticket 39): the orb shrinks and slides onto the pill in about 200 ms. */
+function animateMorph(toPill: boolean): Promise<void> {
+  const ms = MORPH_MS(reducedMotion);
+  if (!ms || typeof dock.animate !== "function") return Promise.resolve();
+  const m = morph({ ...orbAt, ...dockSize() }, pillRect());
+  const frames: Keyframe[] = [
+    { transform: "none", opacity: 1, offset: 0 },
+    { opacity: 0.85, offset: 0.6 },
+    { transform: `translate(${m.x}px, ${m.y}px) scale(${m.sx}, ${m.sy})`, opacity: 0, offset: 1 },
+  ];
+  dock.style.transformOrigin = "0 0";
+  const a = dock.animate(toPill ? frames : frames.reverse().map((k) => ({ ...k, offset: 1 - (k.offset as number) })), { duration: ms, easing: "cubic-bezier(.2,.8,.2,1)" });
+  return a.finished.then(() => {}, () => {});
+}
+let miniSeq = 0;
+/** Minimise to the pill (minus, double-click, Ctrl+Option+S, the menu bar) or bring Jett back. */
+async function setMini(on: boolean, save = true, animate = true) {
+  const seq = ++miniSeq;
   mini = on;
-  overlay.dataset.mini = String(on);
-  dotEl.hidden = !on;
+  if (save) store(MINI_KEY, on ? "1" : "0");
+  void setTrayShown(!on).catch(() => {});
   if (on) {
     setLayer("close");
     showShortcuts(false);
-    tips.refresh(dotEl);
-    const saved = parseSaved(load(DOT_KEY));
-    moveDot(saved ? dropDot(saved, DOT, view()) : dotFor({ ...orbAt, ...dockSize() }, DOT, view()));
+    movePill(placePill(parsePill(load(PILL_KEY)), undefined, DOT, { ...orbAt, ...dockSize() }, view()));
+    if (animate && overlay.dataset.mini !== "true") await animateMorph(true);
+    if (seq !== miniSeq) return; // changed again mid-animation
+    overlay.dataset.mini = "true";
+    pillEl.hidden = false;
+    tips.hide();
   } else {
+    setPillOpen(false);
+    pillEl.hidden = true;
+    const was = overlay.dataset.mini === "true";
+    overlay.dataset.mini = "false";
     moveOrb(keepOn(orbAt, dockSize(), view()));
+    if (animate && was) void animateMorph(false);
   }
-  if (save) store(MINI_KEY, on ? "1" : "0");
-  void setTrayShown(!on).catch(() => {});
 }
-$<HTMLButtonElement>("hide").onclick = () => setMini(true);
+$<HTMLButtonElement>("hide").onclick = () => void setMini(true);
 
-// ---- dragging (ticket 38): press and move drags the whole orb, the grip or the dot; a
+// ---- dragging (tickets 38, 39): press and move drags the whole orb, the grip or the pill; a
 // press without movement is still a click (overlay.ts `isDrag`). ----
 const grip = $<HTMLButtonElement>("grip");
-let drag: { what: "orb" | "dot"; el: HTMLElement; start: Point; from: Point; moved: boolean } | undefined;
+let drag: { what: "orb" | "pill"; el: HTMLElement; start: Point; from: Point; moved: boolean } | undefined;
 /** A drag just ended on this press: the click that follows it is swallowed. */
 let swallowClick = false;
-function pressDrag(el: HTMLElement, what: "orb" | "dot", e: PointerEvent, now = false) {
+function pressDrag(el: HTMLElement, what: "orb" | "pill", e: PointerEvent, now = false) {
   if (e.button !== 0) return;
   swallowClick = false;
-  drag = { what, el, start: what === "dot" ? dotAt : orbAt, from: { x: e.clientX, y: e.clientY }, moved: now };
+  drag = { what, el, start: what === "pill" ? pillAt(pillSpot, view()) : orbAt, from: { x: e.clientX, y: e.clientY }, moved: now };
   el.setPointerCapture(e.pointerId);
-  if (now) (what === "dot" ? dotEl : dock).classList.add("dragging");
+  if (now) (what === "pill" ? pillEl : dock).classList.add("dragging");
 }
 function moveDrag(e: PointerEvent) {
   if (!drag) return;
@@ -147,13 +213,17 @@ function moveDrag(e: PointerEvent) {
   if (!drag.moved) {
     if (!isDrag(drag.from, now)) return;
     drag.moved = true;
-    (drag.what === "dot" ? dotEl : dock).classList.add("dragging");
+    (drag.what === "pill" ? pillEl : dock).classList.add("dragging");
+    if (drag.what === "pill") setPillOpen(false);
   }
   if (drag.what === "orb") moveOrb(dragTo(drag.start, drag.from, now, dockSize(), view()));
   else {
-    const x = Math.max(0, Math.min(innerWidth - DOT.width, drag.start.x + now.x - drag.from.x));
-    const y = Math.max(0, Math.min(innerHeight - DOT.height, drag.start.y + now.y - drag.from.y));
-    moveDot({ x, y });
+    // Free while held; it re-docks to the nearer side edge when dropped.
+    const x = Math.max(0, Math.min(innerWidth - PILL.width, drag.start.x + now.x - drag.from.x));
+    const y = Math.max(0, Math.min(innerHeight - PILL.height, drag.start.y + now.y - drag.from.y));
+    pillEl.style.left = `${x}px`;
+    pillEl.style.top = `${y}px`;
+    pillEl.dataset.dock = x + PILL.width / 2 < innerWidth / 2 ? "left" : "right";
   }
 }
 function endDrag() {
@@ -161,23 +231,28 @@ function endDrag() {
   const d = drag;
   drag = undefined;
   dock.classList.remove("dragging");
-  dotEl.classList.remove("dragging");
+  pillEl.classList.remove("dragging");
   if (!d.moved) return;
   swallowClick = true;
   if (d.what === "orb") moveOrb(orbAt, true);
-  else moveDot(dropDot(dotAt, DOT, view()), true);
+  else movePill(dockPill({ x: pillEl.offsetLeft, y: pillEl.offsetTop }, view()), true);
 }
-for (const [el, what, now] of [[grip, "orb", true], [orbEl, "orb", false], [dotEl, "dot", false]] as const) {
+for (const [el, what, now] of [[grip, "orb", true], [orbEl, "orb", false], [pillEl, "pill", false]] as const) {
   el.addEventListener("pointerdown", (e) => pressDrag(el, what, e, now));
   el.addEventListener("pointermove", moveDrag);
   el.addEventListener("pointerup", endDrag);
   el.addEventListener("pointercancel", endDrag);
 }
-// The dot: a click (not a drag) brings Jett back.
-dotEl.addEventListener("click", () => {
+// The pill: a click (not a drag) brings the orb back where it was. Its quick actions:
+// expand, the mic (start a call, or mute / unmute) and hang up.
+pillEl.addEventListener("click", () => {
   if (swallowClick) return void (swallowClick = false);
-  setMini(false);
+  void setMini(false);
 });
+$<HTMLButtonElement>("pill-expand").onclick = () => void setMini(false);
+pillCallBtn.onclick = () => primary();
+pillHangupBtn.onclick = () => void endCall();
+if (!inTauri()) window.addEventListener("pointermove", (e: PointerEvent) => updatePillHover({ x: e.clientX, y: e.clientY }));
 // The grip moves by keyboard too: arrow keys, Shift for bigger steps.
 grip.addEventListener("keydown", (e) => {
   const step = e.shiftKey ? 80 : 20;
@@ -186,7 +261,10 @@ grip.addEventListener("keydown", (e) => {
   e.preventDefault();
   moveOrb(keepOn({ x: orbAt.x + d[0]!, y: orbAt.y + d[1]! }, dockSize(), view()), true);
 });
-addEventListener("resize", () => moveOrb(keepOn(orbAt, dockSize(), view())));
+addEventListener("resize", () => {
+  moveOrb(keepOn(orbAt, dockSize(), view()));
+  movePill(pillSpot);
+});
 
 /** The popover and approval cards sit beside the orb, on the side with room. */
 function placeFloaters() {
@@ -218,7 +296,7 @@ function placeFloaters() {
 }
 new MutationObserver(() => {
   // A question for you brings Jett back from the dot: approvals sit beside the orb.
-  if (mini && !approvalsEl.hidden) setMini(false);
+  if (mini && !approvalsEl.hidden) void setMini(false);
   placeFloaters();
 }).observe(approvalsEl, { attributes: true, attributeFilter: ["hidden"], childList: true });
 
@@ -280,7 +358,7 @@ function startOverlayPoll() {
       if (step.act === "release") pushToTalk(false);
       // Hover from the cursor, not DOM hover: WebKit sends none while another app is in front.
       dock.classList.toggle("hover", !mini && hoverOrb(point, { ...orbAt, ...dockSize() }));
-      dotEl.classList.toggle("hover", mini && hoverOrb(point, { ...dotAt, ...DOT }, 6));
+      updatePillHover(point);
       if (following && !drag && !mini && layer === "home") {
         const next = followStep(orbAt, dockSize(), point, view());
         if (next.x !== orbAt.x || next.y !== orbAt.y) moveOrb(next);
@@ -305,7 +383,7 @@ let layer: Layer = startLayer;
 function setLayer(action: LayerAction) {
   const next = nextLayer(layer, action);
   if (next === layer) return;
-  if (next === "center" && mini) setMini(false);
+  if (next === "center" && mini) void setMini(false);
   layer = next;
   overlay.dataset.layer = layer;
   popover.hidden = layer !== "center";
@@ -352,7 +430,7 @@ renderPanel();
 const shortcutsEl = $("shortcuts");
 function showShortcuts(on: boolean) {
   if (on) {
-    if (mini) setMini(false);
+    if (mini) void setMini(false);
     setLayer("close");
     $("shortcuts-title").textContent = SHORTCUTS_TITLE[lang];
     $("shortcuts-list").replaceChildren(
@@ -392,8 +470,9 @@ let mic: ReturnType<typeof followMic> | undefined;
 /** Jett's voice, followed the same way as the mic (ticket 38): the wave moves with it while speaking. */
 let voice: ReturnType<typeof followMic> | undefined;
 let voiceHeard = false;
+/** Jett's output level, last read by the orb's wave (the pill's bars use it too). */
+let voiceOut = 0;
 let micLevel = 0;
-const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 // Push to talk (ticket 38): how often it has been used (the hint goes after two), and
 // whether letting go must mute once the call connects.
 const PTT_USES_KEY = "jett.pttUses";
@@ -423,7 +502,24 @@ function render() {
   dock.dataset.look = v.look;
   orbEl.dataset.state = orb.state;
   orbLabel.textContent = v.label;
-  dotEl.dataset.look = v.look;
+  pillEl.dataset.look = v.look;
+  // The pill's quick actions follow the call buttons (pill.ts `pillActions`).
+  pillList = pillActions(v.buttons);
+  const callAct = v.buttons.find((b) => b !== "hangup");
+  pillCallBtn.hidden = !callAct;
+  if (callAct) {
+    setIcon(pillCallBtn, callAct === "unmute" ? "micOff" : "mic");
+    pillCallBtn.classList.toggle("start", callAct === "start");
+    pillCallBtn.setAttribute("aria-pressed", String(callAct === "unmute"));
+    pillCallBtn.dataset.tip = BUTTON_TIPS[lang][callAct];
+    pillCallBtn.dataset.key = callAct === "start" ? "⌃⌥" : "";
+    pillCallBtn.setAttribute("aria-label", BUTTON_TIPS[lang][callAct]);
+    tips.refresh(pillCallBtn);
+  }
+  pillHangupBtn.hidden = !v.buttons.includes("hangup");
+  pillHangupBtn.dataset.tip = BUTTON_TIPS[lang].hangup;
+  pillHangupBtn.setAttribute("aria-label", BUTTON_TIPS[lang].hangup);
+  if (pillOpen) placePillActions();
   // The faint "or hold ⌃⌥" under Tap to talk, until push to talk has been used twice.
   const hint = talkHint(v.look, lang, pttUses);
   orbHint.hidden = !hint;
@@ -471,6 +567,7 @@ mountLedOrb($<HTMLCanvasElement>("orb-canvas"), {
   wave: () => {
     micLevel = mic && !muted ? mic.read() : 0;
     const out = voice?.read() ?? 0;
+    voiceOut = out;
     if (out > QUIET) voiceHeard = true;
     return waveFor({
       look: shown?.look ?? "starting",
@@ -563,6 +660,20 @@ const bars = [...document.querySelectorAll<HTMLElement>(".eq i")];
     bars.forEach((b, i) => (b.style.transform = `scaleY(${(0.25 + lvl * (0.55 + 0.45 * Math.abs(Math.sin(t * 7 + i * 1.7)))).toFixed(3)})`));
   }
   requestAnimationFrame(eq);
+})();
+// The pill's mini level bars (ticket 39): the same honest wave as the orb (pill.ts `pillBars`).
+const pillBarEls = [...pillEl.querySelectorAll<HTMLElement>(".pill-bars i")];
+(function pillMeter() {
+  if (mini && !pillEl.hidden) {
+    const t = performance.now() / 1000;
+    const w = waveFor({ look: shown?.look ?? "starting", t, mic: micLevel, voice: voice && voiceHeard ? voiceOut : undefined, still: reducedMotion });
+    pillBars(w, t, reducedMotion).forEach((h, i) => {
+      const el = pillBarEls[i];
+      if (el) el.style.transform = `scaleY(${h})`;
+    });
+    pillEl.dataset.dim = String(w.dim);
+  }
+  requestAnimationFrame(pillMeter);
 })();
 /** A line the window says itself (the greeting, new chat), shown as Jett's caption. */
 function say(text: string) {
@@ -672,7 +783,7 @@ async function setMuted(on: boolean) {
 function pushToTalk(on: boolean) {
   if (!coreRef) return;
   if (on) {
-    if (mini) setMini(false);
+    // Minimised, the pill shows listening; no need to expand (ticket 39).
     const step = pttPress(pttCall, call, muted);
     pttCall = step.state;
     if (step.act === "start") void startCall(coreRef);
@@ -685,6 +796,7 @@ function pushToTalk(on: boolean) {
     if (step.act === "mute") void setMuted(true);
   }
   dock.classList.toggle("ptt", on);
+  pillEl.classList.toggle("ptt", on);
 }
 
 // ---- keys: Space = start / mute, Cmd+. = hang up, Esc closes what is open, else hangs up ----
@@ -705,7 +817,7 @@ orbEl.onclick = () => {
   if (isDoubleClick(lastClickAt, now)) {
     clearTimeout(clickTimer);
     lastClickAt = undefined;
-    setMini(true);
+    void setMini(true);
     return;
   }
   lastClickAt = now;
@@ -748,11 +860,11 @@ window.addEventListener("keydown", (e) => {
 
 async function boot() {
   moveOrb(placeOrb(storedSpot(), dockSize(), view()));
-  // Minimised last time: come back as the dot (ticket 38).
-  setMini(load(MINI_KEY) === "1", false);
+  // Minimised last time: come back as the pill (tickets 38, 39).
+  void setMini(load(MINI_KEY) === "1", false, false);
   startOverlayPoll();
   void onOpenPanel(() => setLayer("open")).catch(() => {});
-  void onToggleMini(() => setMini(!mini)).catch(() => {});
+  void onToggleMini(() => void setMini(!mini)).catch(() => {});
   void onShowShortcuts(() => showShortcuts(true)).catch(() => {});
   render();
   let core: CoreClient;
@@ -876,9 +988,13 @@ if (import.meta.env.DEV) {
       render();
       renderCaptions();
     },
-    /** Minimise to the dot, or bring Jett back (ticket 38). */
+    /** Minimise to the pill, or bring Jett back (tickets 38, 39). */
     __jettMini(on: boolean) {
-      setMini(on, false);
+      return setMini(on, false);
+    },
+    /** Open or close the pill's quick actions, as the poll's hover would. */
+    __jettPillHover(on: boolean) {
+      setPillOpen(on);
     },
   });
 }

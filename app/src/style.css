@@ -122,21 +122,53 @@ body {
 }
 .controls { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
 
-/* Minimised (ticket 38): the orb and its cues go; a small faint dot stays, brighter under the pointer. */
+/* Minimised (ticket 39): the orb and its cues go; a slim pill docks flush to a side edge.
+   Dark glass with a teal edge and a deep shadow, so it reads on a white page and on a
+   dark wallpaper alike. Hovered (.hover, from the poll) it widens inward a little. */
 .overlay[data-mini="true"] .dock, .overlay[data-mini="true"] .cues { display: none; }
-.mini-dot {
-  position: absolute; left: 0; top: 0; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; cursor: pointer;
-  background: transparent; display: grid; place-items: center; touch-action: none; opacity: .55; transition: opacity .2s var(--ease), transform .2s var(--ease);
+.edge-pill {
+  --look: 120, 255, 226;
+  position: absolute; left: 0; top: 0; width: 28px; height: 112px; padding: 11px 0 8px; margin: 0; cursor: pointer; touch-action: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+  border-radius: 14px; border: 1px solid rgba(120, 255, 226, .34); color: var(--ink-2);
+  background: linear-gradient(180deg, rgba(14, 38, 40, .94), rgba(4, 16, 18, .96));
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .42), 0 0 0 1px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .09), 0 0 14px rgba(var(--look), .12);
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  transition: width .15s var(--ease), transform .15s var(--ease), border-color .2s var(--ease), box-shadow .2s var(--ease);
+  animation: pill-in .18s var(--ease);
 }
-.mini-dot span {
-  width: 12px; height: 12px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #e8fffa 0 18%, var(--led) 45%, rgba(120, 255, 226, .35) 100%);
-  box-shadow: 0 0 0 1px rgba(4, 16, 18, .55), 0 0 10px rgba(120, 255, 226, .45);
+.edge-pill[data-look="thinking"] { --look: 196, 160, 255; }
+.edge-pill[data-look="speaking"] { --look: 140, 206, 255; }
+.edge-pill[data-look="muted"], .edge-pill[data-look="ended"], .edge-pill[data-look="starting"] { --look: 206, 218, 216; }
+.edge-pill[data-look="offline"] { --look: 255, 150, 130; }
+.edge-pill.hover, .edge-pill:hover, .edge-pill.dragging { width: 32px; border-color: rgba(var(--look), .6); box-shadow: 0 10px 26px rgba(0, 0, 0, .5), 0 0 0 1px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .1), 0 0 18px rgba(var(--look), .25); }
+.edge-pill[data-dock="right"].hover, .edge-pill[data-dock="right"]:hover, .edge-pill[data-dock="right"].dragging { transform: translateX(-4px); }
+.edge-pill.dragging { cursor: grabbing; transition: none; }
+.edge-pill:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.pill-led { width: 8px; height: 8px; border-radius: 50%; background: rgb(var(--look)); box-shadow: 0 0 0 1px rgba(0, 0, 0, .5), 0 0 8px rgba(var(--look), .8); }
+.edge-pill[data-look="listening"] .pill-led, .edge-pill[data-look="speaking"] .pill-led { animation: led-live 1.2s ease-in-out infinite; }
+@keyframes led-live { 50% { box-shadow: 0 0 0 1px rgba(0, 0, 0, .5), 0 0 13px rgba(var(--look), 1); } }
+.pill-bars { display: flex; gap: 2px; align-items: center; height: 26px; }
+.pill-bars i { width: 2.5px; height: 26px; border-radius: 2px; background: rgb(var(--look)); transform: scaleY(.16); box-shadow: 0 0 5px rgba(var(--look), .45); }
+.edge-pill[data-dim="true"] .pill-bars i { opacity: .45; }
+.pill-chev { display: grid; place-items: center; color: rgba(200, 255, 244, .7); transform: rotate(90deg); }
+.edge-pill[data-dock="left"] .pill-chev { transform: rotate(-90deg); }
+.edge-pill:hover .pill-chev, .edge-pill.hover .pill-chev { color: var(--ink); }
+@keyframes pill-in { from { opacity: 0; transform: scale(.7); } }
+/* The quick actions beside the pill, away from the edge. */
+.pill-actions {
+  position: absolute; left: 0; top: 0; display: flex; flex-direction: column; gap: 4px; padding: 4px; border-radius: 18px;
+  background: var(--glass); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow);
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); animation: pill-pop .14s var(--ease);
 }
-.mini-dot:hover, .mini-dot.hover, .mini-dot.dragging { opacity: 1; transform: scale(1.25); }
-.mini-dot:focus-visible { outline: 2px solid var(--ink); opacity: 1; }
-.mini-dot[data-look="listening"] span, .mini-dot[data-look="speaking"] span { animation: dot-live 1.2s ease-in-out infinite; }
-@keyframes dot-live { 50% { box-shadow: 0 0 0 1px rgba(4, 16, 18, .55), 0 0 16px rgba(120, 255, 226, .8); } }
-@media (prefers-reduced-motion: reduce) { .mini-dot span { animation: none !important; } }
+.pill-act { width: 28px; height: 28px; border-radius: 50%; color: var(--ink); }
+.pill-act.start { background: var(--led); color: var(--led-ink); }
+.pill-act.start:hover { background: var(--led-hi); color: var(--led-ink); }
+.pill-act[aria-pressed="true"] { background: #f3f6f5; color: #18302d; }
+.pill-act.hangup { background: #e5483a; color: #fff; }
+.pill-act.hangup:hover { background: #f05a4c; color: #fff; }
+@keyframes pill-pop { from { opacity: 0; transform: scale(.85); } }
+@media (prefers-reduced-motion: reduce) { .edge-pill, .pill-actions, .pill-led { animation: none !important; transition: none !important; } }
 
 /* The Shortcuts card (ticket 38): a small glass card. */
 .shortcuts {

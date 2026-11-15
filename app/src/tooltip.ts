@@ -78,5 +78,7 @@ export function mountTooltips(root: HTMLElement = document.body) {
     refresh(el: HTMLElement) {
       if (anchor === el) show(el);
     },
+    /** Hide the tip now (ticket 39): the polled cursor left, and no DOM event will say so. */
+    hide,
   };
 }
