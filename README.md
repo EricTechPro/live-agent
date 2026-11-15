@@ -1,12 +1,14 @@
 <div align="center">
 
-<img src="assets/logo.svg" width="112" alt="live-agent logo">
+<img src="assets/logo.svg" width="112" alt="Jett logo">
 
-<h1>live-agent</h1>
+<h1>Jett</h1>
 
-<p><strong>Talk to your own AI. It hears you, talks back in real time, knows your notes, and hands big jobs to helper agents.</strong></p>
+<p><strong>Live Agent Jett: talk to your own AI. It hears you, talks back in real time, knows your notes, and hands big jobs to helper agents.</strong></p>
 
 <p>Gemini Live · LiveKit on your own computer · one Gemini key · macOS (Apple Silicon)</p>
+
+<p><a href="https://erictechpro.github.io/live-agent/"><strong>🌐 Live site: erictechpro.github.io/live-agent</strong></a></p>
 
 <p><a href="#install">Install</a> · <a href="#get-your-gemini-key">Get your Gemini key</a> · <a href="#customise-it">Customise</a> · <a href="#your-second-brain">Brain</a> · <a href="#helper-agents">Helpers</a> · <a href="#how-it-works-inside">How it works inside</a> · <a href="#devfest-codelab">Codelab</a></p>
 
