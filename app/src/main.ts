@@ -4,6 +4,7 @@ import { Room, RoomEvent, Track, type Participant } from "livekit-client";
 import { mountBoardAndBar } from "./board-view.ts";
 import { connectCore, getSetup, onCoreDown, revealLog, waitForCore, type CoreClient } from "./core-client.ts";
 import { mountDiagram } from "./diagram-view.ts";
+import { nextLayer, startLayer, type Layer, type LayerAction } from "./layers.ts";
 import { mountLedOrb, type Mood } from "./led-orb.ts";
 import { mountMini } from "./mini.ts";
 import { nextOrb, orbStart, type Orb, type OrbInput, type OrbState } from "./orb-state.ts";
@@ -22,6 +23,32 @@ const pauseBtn = $<HTMLButtonElement>("pause");
 const sendBtn = $<HTMLButtonElement>("send");
 const sayEl = $("say");
 const newChatBtn = $<HTMLButtonElement>("new-chat");
+
+// ---- two layers (ticket 22): home and the control center ------------------
+// One dock (bubble, orb, call controls) moves between the two, so the orb's canvas
+// and the LiveKit room are never touched: the call keeps going on both.
+const shell = $("shell");
+const dock = $("dock");
+const openCenterBtn = $<HTMLButtonElement>("open-center");
+const closeCenterBtn = $<HTMLButtonElement>("close-center");
+let layer: Layer = startLayer;
+function setLayer(action: LayerAction) {
+  const next = nextLayer(layer, action);
+  if (next === layer) return;
+  layer = next;
+  shell.dataset.layer = layer;
+  $("home").hidden = layer !== "home";
+  $("center").hidden = layer !== "center";
+  $(layer === "center" ? "chat-slot" : "home-slot").append(dock);
+  // A button or Escape moves focus to the other layer's way back; "show" never steals it.
+  if (action !== "show") (layer === "center" ? closeCenterBtn : openCenterBtn).focus();
+}
+openCenterBtn.onclick = () => setLayer("open");
+closeCenterBtn.onclick = () => setLayer("close");
+window.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || e.defaultPrevented || !$("wizard").hidden || document.body.classList.contains("mini")) return;
+  setLayer("escape");
+});
 
 const LABELS: Record<OrbState, string> = {
   connecting: "Starting…",

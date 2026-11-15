@@ -11,43 +11,61 @@
   </head>
   <body>
     <!--
-      Layout: one centred column like the wizard (stage with the orb and its speech
-      bubble, transcript, input), the job board as a drawer on the right that opens
-      when a job starts, and a slim bottom bar. Ticket 10 fills #jobs and #bar.
+      Two layers (ticket 22). Home: the big orb, the call controls and one way into the
+      control center. Control center: left sidebar, middle chat (the orb small at its top),
+      right panel. The orb and its controls (#dock) are one block that main.ts moves
+      between #home-slot and #chat-slot, so the call and the orb never restart.
     -->
-    <main class="shell">
-      <section class="voice" aria-label="Voice">
-        <header class="orb-wrap" data-tauri-drag-region>
-          <div class="orb-stage" data-tauri-drag-region>
-            <p id="say" class="pf say" aria-live="polite">Hi!</p>
-            <span class="tail" aria-hidden="true"></span>
-            <div id="orb" class="orb" data-state="connecting" role="img" aria-label="Agent state: connecting"><canvas id="orb-canvas" width="352" height="352" aria-hidden="true"></canvas></div>
-            <span id="mini-count" class="mini-count" aria-label="Jobs running">0</span>
-            <p id="orb-label" class="orb-label" aria-live="polite">Starting…</p>
-          </div>
-          <div class="controls">
-            <div class="talk-row">
+    <main class="shell" id="shell" data-layer="home">
+      <header class="topbar" data-tauri-drag-region>
+        <span class="spacer" data-tauri-drag-region></span>
+        <div class="top-actions">
+          <button id="new-chat" class="pf chip setup center-only" type="button" disabled title="Save this chat to your brain and start a fresh one">New chat</button>
+          <button id="setup" class="pf chip setup center-only" type="button" disabled title="Open setup again">Setup</button>
+          <button id="show-log" class="pf chip setup center-only" type="button" title="Show the core's log file in Finder">Show log</button>
+          <button id="mini" class="pf chip setup" type="button" disabled title="Shrink to a small floating orb">Mini</button>
+          <button id="jobs-toggle" class="pf chip setup jobs-toggle" type="button" aria-controls="jobs" aria-expanded="false" title="Show or hide the job board"><span class="led"></span>Jobs <b id="jobs-count">0</b></button>
+          <button id="open-center" class="pf chip setup home-only" type="button" aria-controls="center" title="Open the control center">Control center</button>
+          <button id="close-center" class="pf chip setup center-only" type="button" aria-controls="center" title="Close the control center (Esc)">Close</button>
+        </div>
+      </header>
+      <section id="home" class="home" aria-label="Home">
+        <div id="home-slot" class="home-slot">
+          <div id="dock" class="dock">
+            <div class="orb-stage" data-tauri-drag-region>
+              <p id="say" class="pf say" aria-live="polite">Hi!</p>
+              <span class="tail" aria-hidden="true"></span>
+              <div id="orb" class="orb" data-state="connecting" role="img" aria-label="Agent state: connecting"><canvas id="orb-canvas" width="352" height="352" aria-hidden="true"></canvas></div>
+              <span id="mini-count" class="mini-count" aria-label="Jobs running">0</span>
+              <p id="orb-label" class="orb-label" aria-live="polite">Starting…</p>
+            </div>
+            <div class="controls">
               <button id="talk" class="pf btn go talk" type="button" disabled>Start talking</button>
               <button id="pause" class="pf btn ghost pause" type="button" disabled aria-pressed="false" title="Pause: Jett stops speaking and listening (Space)">Pause</button>
             </div>
-            <div class="quiet-buttons">
-              <button id="new-chat" class="pf chip setup" type="button" disabled title="Save this chat to your brain and start a fresh one">New chat</button>
-              <button id="setup" class="pf chip setup" type="button" disabled title="Open setup again">Setup</button>
-              <button id="show-log" class="pf chip setup" type="button" title="Show the core's log file in Finder">Show log</button>
-              <button id="mini" class="pf chip setup" type="button" disabled title="Shrink to a small floating orb">Mini</button>
-              <button id="jobs-toggle" class="pf chip setup jobs-toggle" type="button" aria-controls="jobs" aria-expanded="false" title="Show or hide the job board"><span class="led"></span>Jobs <b id="jobs-count">0</b></button>
-            </div>
           </div>
-        </header>
-        <section id="diagram" class="pf diagram" hidden aria-label="Diagram"></section>
-        <ol id="transcript" class="transcript" aria-label="Transcript" aria-live="polite"></ol>
-        <form id="type" class="type">
-          <span class="pf field"><input id="type-input" type="text" placeholder="Or type to Jett…" autocomplete="off" disabled /></span>
-          <button id="send" class="pf btn go send" type="submit" disabled>Send</button>
-        </form>
+        </div>
+      </section>
+      <section id="center" class="center" aria-label="Control center" hidden>
+        <aside id="sidebar" class="sidebar" aria-label="Chats and brain">
+          <h2 class="side-title">Chats</h2>
+          <p class="side-empty">Past chats show here.</p>
+          <h2 class="side-title">Brain</h2>
+          <p class="side-empty">Your notes show here.</p>
+        </aside>
+        <section class="chat" aria-label="Chat">
+          <div id="chat-slot" class="chat-slot"></div>
+          <section id="diagram" class="pf diagram" hidden aria-label="Diagram"></section>
+          <ol id="transcript" class="transcript" aria-label="Transcript" aria-live="polite"></ol>
+          <form id="type" class="type">
+            <span class="pf field"><input id="type-input" type="text" placeholder="Or type to Jett…" autocomplete="off" disabled /></span>
+            <button id="send" class="pf btn go send" type="submit" disabled>Send</button>
+          </form>
+          <footer id="bar" class="bar" aria-label="Status"></footer>
+        </section>
+        <aside id="panel" class="panel" aria-label="Panel"></aside>
       </section>
       <aside id="jobs" class="pf jobs" aria-label="Job board"></aside>
-      <footer id="bar" class="bar" aria-label="Status"></footer>
     </main>
     <!--
       The setup wizard (Jett setup): first launch (no config file, or no Gemini key) and the

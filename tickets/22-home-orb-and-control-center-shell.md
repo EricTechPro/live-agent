@@ -4,15 +4,17 @@
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Priority:** must-have
 
-- [ ] The app opens on home: the big orb, the call controls, and a control center button
-- [ ] Opening the control center shows left sidebar, middle chat and right panel; the orb sits small at the top of the chat
-- [ ] Closing it (X button or Escape) goes back to home, and the call keeps going
-- [ ] The orb shows the same states (listening, thinking, speaking) on both layers
-- [ ] Which layer is open is a pure reducer with a test, like `app/src/diagram.ts`
+- [x] The app opens on home: the big orb, the call controls, and a control center button
+- [x] Opening the control center shows left sidebar, middle chat and right panel; the orb sits small at the top of the chat
+- [x] Closing it (X button or Escape) goes back to home, and the call keeps going
+- [x] The orb shows the same states (listening, thinking, speaking) on both layers
+- [x] Which layer is open is a pure reducer with a test, like `app/src/diagram.ts`
 - [ ] Hand check in the real app: talking works the same on both layers, and the mini orb still works
 
 ## Comments
+
+- 2026-11-15: built. One `#dock` (bubble, orb, call controls) moves between home and the top of the chat, so the orb canvas and the LiveKit room never restart. `app/src/layers.ts` is the reducer (`test/layers.test.ts`). Checked in a headless browser against a fake core: home, control center, X and Escape. The hand check in the real app (voice on both layers, mini orb) is left for a person.
