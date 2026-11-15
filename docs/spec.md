@@ -239,3 +239,39 @@ Same single seam: the core's event stream. Core-side tickets (21, 23, 24, 28, 29
 ### DevFest order
 
 Must-have before Nov 27: 21, 22, 23, 25, 26, 27, 28, 29, 30, 31, 32. If time runs short, cut in this order: 32 (keep `draw_diagram`), 31, 29, 23. After the talk: 24, 33, 34, 35.
+
+## Addendum: Jett v3: floating overlay (2026-11-15)
+
+Asked for by Eric after seeing v2 on 2026-11-15. Ticket 36. Where this addendum and the v2 addendum disagree, this one wins.
+
+### Why
+
+v2 was too big: a 960 x 600 window with three columns feels like a desktop app. Jett should feel like a small helper that floats over whatever you are doing, the way Roamies does (ideas only; Roamies is AGPL, never its code).
+
+### The window
+
+- **Frameless, transparent, always on top.** No title bar, no window shadow, no background: only the orb and a few floating glass pieces are visible, and the desktop shows through everywhere else. macOS needs `macOSPrivateApi` (and the `macos-private-api` Cargo feature) for a transparent webview.
+- **Small.** Home is about 280 x 340. The control center grows the window to about 420 x 640 and shrinks it back when it closes. The setup wizard grows it to its own size and centres it while it runs.
+- **A handle you can grab.** A small grip pill at the top centre drags the window (`data-tauri-drag-region`). When the window grows or shrinks, the grip stays where it was (the top centre is the anchor), and the window is kept on screen.
+- **Remembers where you left it.** The position is saved when you drag it and restored on the next launch, if that spot is still on a screen. Otherwise Jett starts in the top-right corner of the main screen.
+- The window code that sizes, anchors and restores is pure (`app/src/overlay.ts`) with tests; the window only calls Tauri's size and position APIs.
+
+### Home: just the orb
+
+- The orb, the speech bubble over it, a small state word under it, and the grip. A running-jobs badge sits on the orb while helpers work; clicking it opens the control center on Jobs.
+- Clicking the orb opens the control center.
+- The call controls (Start call / End call, Pause / Resume, Control center) are small icon buttons under the orb. They show on hover and keyboard focus, and stay while in a call or paused.
+- The old mini orb (ticket 15) is gone: home is the mini orb now.
+
+### Control center: one glass panel
+
+- Opens from the orb as one compact translucent glass panel (dark tint, backdrop blur, rounded corners, thin teal border), not three columns.
+- At its top: the grip, the orb small with its state word, the call controls and the close X. Esc closes it too.
+- One view at a time, picked with icon tabs (tooltips, arrow keys): **Chat** (transcript, composer with the safety mode pill, approval cards, notes used), **Canvas** (the sketch), **Jobs** (job cards), **Brain** (past chats and the brain file tree; a click opens the read-only reader in the same view).
+- New chat, Setup and Show log are small icon buttons in the tab row.
+- Something drawn opens the control center on Canvas; an approval waiting opens it on Chat. A job starting never switches the view.
+- The canvas board is see-through (the desktop shows faintly behind it); pen strokes get a dark halo under their glow so they stay readable over any background.
+
+### Testing
+
+Pure reducers and geometry with tests (`app/src/panel.ts` for the views, `app/src/layers.ts`, `app/src/overlay.ts`). Screenshots in a headless browser over a busy background. A hand check in the real app for transparency, dragging, resizing and click-through.
