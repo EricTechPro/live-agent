@@ -235,24 +235,47 @@ fn set_click_through(window: tauri::WebviewWindow, on: bool) -> Result<(), Strin
     window.set_ignore_cursor_events(on).map_err(|e| e.to_string())
 }
 
-/// Ctrl+Option+S and the menu-bar item: hide Jett, or bring it back.
-fn toggle_overlay(app: &tauri::AppHandle) {
-    let Some(window) = app.get_webview_window("main") else { return };
-    if window.is_visible().unwrap_or(true) {
-        let _ = window.hide();
+/// The menu-bar "Hide / Show Jett" item, kept so its words can follow the page's state.
+struct TrayToggle(Mutex<Option<tauri::menu::MenuItem<tauri::Wry>>>);
+
+fn toggle_label(shown: bool) -> &'static str {
+    if shown {
+        "Hide Jett (⌃⌥S)"
     } else {
-        let _ = window.show();
+        "Show Jett (⌃⌥S)"
     }
 }
 
-/// The menu-bar icon: a click opens the panel; its menu shows / hides Jett or quits.
+/// Ctrl+Option+S and the menu-bar item (ticket 38): the page minimises Jett to a small dot,
+/// or brings it back. The window itself stays up (it is click-through around the dot).
+fn toggle_overlay(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        if !window.is_visible().unwrap_or(true) {
+            let _ = window.show();
+        }
+    }
+    let _ = app.emit("toggle-mini", ());
+}
+
+/// The page says whether Jett is shown (true) or minimised: the menu-bar item's words follow.
+#[tauri::command]
+fn set_tray_shown(toggle: tauri::State<'_, TrayToggle>, shown: bool) -> Result<(), String> {
+    match toggle.0.lock().unwrap().as_ref() {
+        Some(item) => item.set_text(toggle_label(shown)).map_err(|e| e.to_string()),
+        None => Ok(()),
+    }
+}
+
+/// The menu-bar icon: a click opens the panel; its menu hides / shows Jett, lists the shortcuts or quits.
 fn add_tray(app: &tauri::App) -> tauri::Result<()> {
     use tauri::menu::{Menu, MenuItem};
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
     let open = MenuItem::with_id(app, "open", "Open Jett", true, None::<&str>)?;
-    let toggle = MenuItem::with_id(app, "toggle", "Show / hide (Ctrl+Option+S)", true, None::<&str>)?;
+    let toggle = MenuItem::with_id(app, "toggle", toggle_label(true), true, None::<&str>)?;
+    let shortcuts = MenuItem::with_id(app, "shortcuts", "Shortcuts", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit Jett", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &toggle, &quit_item])?;
+    let menu = Menu::with_items(app, &[&open, &toggle, &shortcuts, &quit_item])?;
+    *app.state::<TrayToggle>().0.lock().unwrap() = Some(toggle.clone());
     let mut tray = TrayIconBuilder::with_id("jett").tooltip("Jett").menu(&menu).show_menu_on_left_click(false);
     if let Some(icon) = app.default_window_icon() {
         tray = tray.icon(icon.clone());
@@ -260,6 +283,12 @@ fn add_tray(app: &tauri::App) -> tauri::Result<()> {
     tray.on_menu_event(|app, event| match event.id.as_ref() {
         "open" => open_panel(app),
         "toggle" => toggle_overlay(app),
+        "shortcuts" => {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+            }
+            let _ = app.emit("show-shortcuts", ());
+        }
         "quit" => quit(app),
         _ => {}
     })
@@ -315,7 +344,8 @@ pub fn run() {
                 .build(),
         )
         .manage(Core { status: Mutex::new(CoreStatus::Starting), child: Mutex::new(None) })
-        .invoke_handler(tauri::generate_handler![core_status, open_key_page, reveal_log, overlay_poll, set_click_through])
+        .manage(TrayToggle(Mutex::new(None)))
+        .invoke_handler(tauri::generate_handler![core_status, open_key_page, reveal_log, overlay_poll, set_click_through, set_tray_shown])
         .setup(|app| {
             // No Dock icon: Jett lives in the menu bar and floats over everything.
             #[cfg(target_os = "macos")]

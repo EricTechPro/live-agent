@@ -22,7 +22,9 @@
         "alwaysOnTop": true,
         "visibleOnAllWorkspaces": true,
         "skipTaskbar": true,
-        "resizable": false
+        "resizable": false,
+        "focus": false,
+        "acceptFirstMouse": true
       }
     ],
     "macOSPrivateApi": true,
