@@ -49,8 +49,10 @@
       </section>
       <section id="center" class="center" aria-label="Control center" hidden>
         <aside id="sidebar" class="sidebar" aria-label="Chats and brain">
-          <h2 class="side-title">Chats</h2>
-          <p class="side-empty">Past chats show here.</p>
+          <h2 class="side-title" id="chats-title">Chats</h2>
+          <!-- Past chats (ticket 24): the chat-end notes, newest first. Click one to read it; it does not resume the call. -->
+          <ul id="chat-list" class="chat-list" aria-labelledby="chats-title"></ul>
+          <p id="chats-empty" class="side-empty">Past chats show here.</p>
           <h2 class="side-title" id="brain-title">Brain</h2>
           <!-- The brain file tree (ticket 23): the three parts, folders collapsible. Click a note to read it. -->
           <ul id="brain-tree" class="brain-tree" role="tree" aria-labelledby="brain-title"></ul>

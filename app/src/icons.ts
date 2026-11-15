@@ -286,6 +286,21 @@ const ICONS = {
     "............",
     "............",
   ],
+  // Past chats in the sidebar (ticket 24): a speech bubble.
+  chat: [
+    "............",
+    ".##########.",
+    "#..........#",
+    "#..........#",
+    "#..##..##..#",
+    "#..........#",
+    "#..........#",
+    ".######.###.",
+    ".....#.#....",
+    ".....##.....",
+    ".....#......",
+    "............",
+  ],
 } satisfies Record<string, string[]>;
 
 export type IconName = keyof typeof ICONS;

@@ -38,6 +38,7 @@
 //   GET  /brain/tree -> the brain's three parts as a file tree (markdown only, junk folders skipped)
 //   GET  /brain/file?path=wiki/x.md -> { path, text }: one note, read only. 400 for anything
 //                     outside the three part folders (.., absolute, a symlink out), 404 when gone
+//   GET  /brain/chats -> { chats: [{ path, title, date }] }: past chats (chat-end notes in raw), newest first
 //
 // Why HTTP + SSE (not a WebSocket): the window only reads the stream, and
 // fetch/EventSource exist in every webview with no library.
@@ -51,6 +52,7 @@ import { errorMessage } from "./errors.ts";
 import { ConfigError, defaultConfigPath } from "./config/index.ts";
 import { brainRoot } from "./brain/index.ts";
 import { BrainFileMissing, BrainPathError, brainTree, readBrainFile } from "./brain/tree.ts";
+import { pastChats } from "./brain/chats.ts";
 import { currentConfig, saveSetup, type SetupAnswers } from "./setup/index.ts";
 import { detectParts, pickFolder as macPickFolder, scanFolder, type FolderPicker } from "./setup/folders.ts";
 import { insideBrain } from "./setup/parts.ts";
@@ -240,6 +242,13 @@ export async function startApp(options: AppOptions): Promise<App> {
       async "GET /brain/tree"({ session }) {
         const { root, folders } = session.brain();
         return json(await brainTree(root, folders));
+      },
+
+      // The sidebar's past chats (ticket 24): the chat-end notes in raw, newest first.
+      // The window reads one through GET /brain/file, and asks again on `chat.started`.
+      async "GET /brain/chats"({ session }) {
+        const { root, folders } = session.brain();
+        return json({ chats: await pastChats(root, folders) });
       },
 
       async "GET /brain/file"({ session }, req) {

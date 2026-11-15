@@ -18,10 +18,20 @@ export interface BrainViewEls {
   transcript: HTMLElement;
 }
 
-export function mountBrainView(core: CoreClient, els: BrainViewEls) {
+/** What other sidebar lists (past chats, ticket 24) use: the same reader. */
+export interface BrainReader {
+  /** Show one note read only. `name` is the reader's heading (default: the file name). */
+  open(path: string, name?: string): Promise<void>;
+  /** Told the open note's path on every change, undefined when the reader closes. */
+  onCurrent(cb: (path: string | undefined) => void): void;
+}
+
+export function mountBrainView(core: CoreClient, els: BrainViewEls): BrainReader {
   let tree: BrainTree | undefined;
   let open = new Set<string>();
   let current: string | undefined;
+  const watchers: ((path: string | undefined) => void)[] = [];
+  const tell = () => watchers.forEach((cb) => cb(current));
 
   function render() {
     els.empty.hidden = !!tree && tree.parts.some((p) => p.children.length > 0);
@@ -73,10 +83,11 @@ export function mountBrainView(core: CoreClient, els: BrainViewEls) {
     render();
   }
 
-  async function openNote(path: string) {
+  async function openNote(path: string, name?: string) {
     current = path;
     render();
-    els.readerName.textContent = path.split("/").pop() ?? path;
+    tell();
+    els.readerName.textContent = name ?? path.split("/").pop() ?? path;
     els.readerPath.textContent = path;
     els.readerText.textContent = "";
     showReader(true);
@@ -96,6 +107,7 @@ export function mountBrainView(core: CoreClient, els: BrainViewEls) {
       const was = current;
       current = undefined;
       render();
+      tell();
       if (was) els.tree.querySelector<HTMLButtonElement>(`[data-path="${CSS.escape(was)}"]`)?.focus();
     }
   }
@@ -115,4 +127,5 @@ export function mountBrainView(core: CoreClient, els: BrainViewEls) {
     if (refreshesTree(event)) void load();
   });
   void load();
+  return { open: openNote, onCurrent: (cb) => void watchers.push(cb) };
 }

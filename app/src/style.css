@@ -100,6 +100,22 @@ body {
 .side-empty { margin: 0 0 18px; color: var(--ink-3); font-size: 11px; }
 .center[data-panel="closed"] { grid-template-columns: 208px minmax(0, 1fr); }
 
+/* ---- past chats (ticket 24): newest first, title + relative date, a click reads the note ---- */
+.chat-list { list-style: none; margin: 0 -6px 18px; padding: 0; max-height: 38vh; overflow: auto; }
+.chat-list:empty { margin-bottom: 0; }
+.chat-item {
+  appearance: none; border: 0; background: none; cursor: pointer; width: 100%;
+  display: flex; align-items: center; gap: 6px; padding: 5px 6px;
+  color: var(--ink-2); font: 500 12px/1.3 var(--mono); font-stretch: 87.5%; text-align: left;
+}
+.chat-item:hover { background: #0c2b2c; color: var(--ink); }
+.chat-item:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.chat-item .icon { flex: none; color: var(--ink-3); }
+.chat-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-when { flex: none; color: var(--ink-3); font-size: 10px; }
+.chat-row[aria-current="true"] .chat-item { background: #12393a; color: var(--led); }
+.chat-row[aria-current="true"] .chat-item .icon { color: var(--led); }
+
 /* ---- brain tree (ticket 23): the three parts, folders collapsible, a click reads a note ---- */
 .brain-tree { list-style: none; margin: 0 -6px 18px; padding: 0; }
 .brain-item {

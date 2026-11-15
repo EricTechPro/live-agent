@@ -11,6 +11,7 @@
 //   GET  /setup, POST /setup/pick-folder|scan|save   the setup wizard (works before a key)
 //   POST /chat/new end this chat (note + tidy job) and start the next
 //   GET  /brain/tree, /brain/file?path=   the sidebar's brain tree and the read-only file view (ticket 23)
+//   GET  /brain/chats  the sidebar's past chats (ticket 24)
 // Every call carries the per-launch token. Each command gets one small method
 // here, so the rest of the window never builds URLs.
 import { invoke } from "@tauri-apps/api/core";
@@ -20,6 +21,7 @@ import type { SafetyMode } from "../../src/core/safety.ts";
 import type { Config } from "../../src/config/index.ts";
 import type { SetupAnswers } from "../../src/setup/index.ts";
 import type { BrainTree } from "../../src/brain/tree.ts";
+import type { PastChat } from "../../src/brain/chats.ts";
 import type { FolderTree, Part, PartChoice } from "./wizard-flow.ts";
 
 export interface CoreInfo {
@@ -59,6 +61,8 @@ export interface CoreClient {
   brainTree(): Promise<BrainTree>;
   /** One note's text, read only. Rejects with the core's plain reason (outside the brain, gone). */
   brainFile(path: string): Promise<{ path: string; text: string; truncated?: boolean }>;
+  /** Past chats, newest first: the chat-end notes in raw (ticket 24). */
+  pastChats(): Promise<PastChat[]>;
 }
 
 /** Wait for Rust to report the core is up. Rejects with the reason if it failed to start. */
@@ -224,5 +228,6 @@ export function connectCore(info: CoreInfo): CoreClient {
     },
     brainTree: () => setupCall<BrainTree>(info, "/brain/tree"),
     brainFile: (path) => setupCall(info, `/brain/file?path=${encodeURIComponent(path)}`),
+    pastChats: async () => (await setupCall<{ chats: PastChat[] }>(info, "/brain/chats")).chats,
   };
 }
