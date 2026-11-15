@@ -20,14 +20,11 @@ function loadMermaid(): Promise<Mermaid> {
 export function mountDiagram(core: CoreClient, panel: HTMLElement) {
   let diagram: Diagram = noDiagram;
   const title = Object.assign(document.createElement("h2"), { className: "diagram-title" });
-  const close = Object.assign(document.createElement("button"), {
-    className: "diagram-close", type: "button", textContent: "×", title: "Hide the diagram",
-  });
+  // No close button of its own: it lives in the right panel's Canvas tab, which has the X (ticket 25).
   const body = Object.assign(document.createElement("div"), { className: "diagram-body" });
   const head = Object.assign(document.createElement("div"), { className: "diagram-head" });
-  head.append(title, close);
+  head.append(title);
   panel.append(head, body);
-  close.onclick = () => (panel.hidden = true);
 
   // Each render gets a number, so a slow render never paints over a newer diagram.
   let renders = 0;

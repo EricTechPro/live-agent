@@ -2,8 +2,14 @@
 // No agent logic here; the core decides everything (see docs/spec.md, App shell).
 import { Room, RoomEvent, Track, type Participant } from "livekit-client";
 import { mountBoardAndBar } from "./board-view.ts";
+import { mountModePill } from "./mode-pill.ts";
+import { mountApprovals } from "./approvals-view.ts";
+import { bubbleLine } from "./bubble.ts";
 import { connectCore, getSetup, onCoreDown, revealLog, waitForCore, type CoreClient } from "./core-client.ts";
 import { mountDiagram } from "./diagram-view.ts";
+import { mountTooltips, paintIcons, setIcon } from "./tooltip.ts";
+import { drawsOnCanvas, nextPanel, startPanel, tabForKey, TABS, type Panel, type Tab } from "./panel.ts";
+import { nextLayer, startLayer, type Layer, type LayerAction } from "./layers.ts";
 import { mountLedOrb, type Mood } from "./led-orb.ts";
 import { mountMini } from "./mini.ts";
 import { nextOrb, orbStart, type Orb, type OrbInput, type OrbState } from "./orb-state.ts";
@@ -11,6 +17,9 @@ import { addToTranscript, emptyTranscript, type Transcript } from "./transcript.
 import { runWizard } from "./wizard.ts";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+// Icon buttons (ticket 26): pixel icons from icons.ts, one shared tooltip.
+paintIcons();
+const tips = mountTooltips();
 const orbEl = $("orb");
 const orbLabel = $("orb-label");
 const talkBtn = $<HTMLButtonElement>("talk");
@@ -22,6 +31,72 @@ const pauseBtn = $<HTMLButtonElement>("pause");
 const sendBtn = $<HTMLButtonElement>("send");
 const sayEl = $("say");
 const newChatBtn = $<HTMLButtonElement>("new-chat");
+
+// ---- two layers (ticket 22): home and the control center ------------------
+// One dock (bubble, orb, call controls) moves between the two, so the orb's canvas
+// and the LiveKit room are never touched: the call keeps going on both.
+const shell = $("shell");
+const dock = $("dock");
+const openCenterBtn = $<HTMLButtonElement>("open-center");
+const closeCenterBtn = $<HTMLButtonElement>("close-center");
+let layer: Layer = startLayer;
+function setLayer(action: LayerAction) {
+  const next = nextLayer(layer, action);
+  if (next === layer) return;
+  layer = next;
+  shell.dataset.layer = layer;
+  $("home").hidden = layer !== "home";
+  $("center").hidden = layer !== "center";
+  $(layer === "center" ? "chat-slot" : "home-slot").append(dock);
+  // A button or Escape moves focus to the other layer's way back; "show" never steals it.
+  if (action !== "show") (layer === "center" ? closeCenterBtn : openCenterBtn).focus();
+  renderPanel(); // the Jobs icon's aria-expanded depends on the layer too
+}
+openCenterBtn.onclick = () => setLayer("open");
+closeCenterBtn.onclick = () => setLayer("close");
+window.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || e.defaultPrevented || !$("wizard").hidden || document.body.classList.contains("mini")) return;
+  setLayer("escape");
+});
+
+// ---- right panel (ticket 25): Canvas and Jobs tabs ----------------------
+const jobsBtn = $<HTMLButtonElement>("jobs-toggle");
+const tabBtns: Record<Tab, HTMLButtonElement> = { canvas: $("tab-canvas"), jobs: $("tab-jobs") };
+let panel: Panel = startPanel;
+function feedPanel(input: Parameters<typeof nextPanel>[1], focusTab = false) {
+  const next = nextPanel(panel, input);
+  if (next !== panel) (panel = next), renderPanel();
+  if (focusTab) tabBtns[panel.tab].focus();
+}
+function renderPanel() {
+  $("center").dataset.panel = panel.open ? "open" : "closed";
+  $("panel").hidden = !panel.open;
+  for (const tab of TABS) {
+    const on = tab === panel.tab;
+    tabBtns[tab].setAttribute("aria-selected", String(on));
+    tabBtns[tab].tabIndex = on ? 0 : -1;
+    $(`panel-${tab}`).hidden = !on;
+  }
+  jobsBtn.setAttribute("aria-expanded", String(layer === "center" && panel.open && panel.tab === "jobs"));
+}
+for (const tab of TABS) tabBtns[tab].onclick = () => feedPanel({ type: "panel.select", tab });
+$("tab-canvas").parentElement!.addEventListener("keydown", (e) => {
+  const tab = tabForKey(panel.tab, e.key);
+  if (!tab) return;
+  e.preventDefault();
+  feedPanel({ type: "panel.select", tab }, true);
+});
+$("close-panel").onclick = () => {
+  feedPanel({ type: "panel.close" });
+  jobsBtn.focus();
+};
+// The top bar's Jobs icon: from home, open the control center on Jobs; inside it, toggle the Jobs tab.
+jobsBtn.onclick = () => {
+  if (layer === "home") feedPanel({ type: "panel.select", tab: "jobs" }), setLayer("show");
+  else feedPanel({ type: "panel.jobs-button" });
+  renderPanel();
+};
+renderPanel();
 
 const LABELS: Record<OrbState, string> = {
   connecting: "Starting…",
@@ -51,11 +126,6 @@ function say(text: string) {
     sayEl.textContent = text.slice(0, ++n);
     if (n >= text.length) clearInterval(typer);
   }, 24);
-}
-/** A reply as a bubble line: its first line, cut to a few words. */
-function bubbleLine(reply: string): string {
-  const first = reply.trim().split("\n")[0] ?? "";
-  return first.length <= 40 ? first : `${first.slice(0, 38).replace(/\s+\S*$/, "")}…`;
 }
 
 let orb: Orb = orbStart;
@@ -149,8 +219,11 @@ let paused = false;
 function showPaused(on: boolean) {
   paused = on;
   document.body.classList.toggle("paused", on);
-  pauseBtn.textContent = on ? "Resume" : "Pause";
+  // A toggle: its name stays "Pause" and aria-pressed says it is on; the icon and tip show Resume.
+  setIcon(pauseBtn, on ? "play" : "pause");
+  pauseBtn.dataset.tip = on ? "Resume" : "Pause";
   pauseBtn.setAttribute("aria-pressed", String(on));
+  tips.refresh(pauseBtn);
   orbLabel.textContent = labelFor(orb.state);
   say(on ? "Paused." : "I'm back.");
   // The mic itself goes quiet too, so nothing leaves the Mac while paused.
@@ -160,8 +233,13 @@ function showPaused(on: boolean) {
 function setTalking(on: boolean) {
   if (orb.state === "listening") orbLabel.textContent = labelFor(orb.state);
   talkBtn.disabled = false;
-  talkBtn.textContent = on ? "Stop talking" : "Start talking";
-  talkBtn.setAttribute("aria-pressed", String(on));
+  // One button, two actions: Start call (mic) and, in a call, End call (red hang-up).
+  const label = on ? "End call" : "Start call";
+  setIcon(talkBtn, on ? "hangup" : "mic");
+  talkBtn.setAttribute("aria-label", label);
+  talkBtn.dataset.tip = label;
+  talkBtn.classList.toggle("end", on);
+  tips.refresh(talkBtn);
 }
 
 // ---- boot -----------------------------------------------------------------
@@ -196,8 +274,18 @@ async function boot() {
     if (event.type === "paused") showPaused(event.paused);
     if (event.type === "turn.done" && event.reply.trim()) say(bubbleLine(event.reply));
     if (event.type === "chat.started") say("New chat!");
+    // Something drawn: show it, on the Canvas tab of the control center.
+    feedPanel(event);
+    if (drawsOnCanvas(event)) setLayer("show"), renderPanel();
   });
-  mountBoardAndBar(core, $("jobs"), $("bar"), { button: $<HTMLButtonElement>("jobs-toggle"), count: $("jobs-count") });
+  mountBoardAndBar(core, $("jobs"), $("bar"), {
+    buttons: [
+      { button: jobsBtn, count: $("jobs-count"), label: "Jobs" },
+      { button: tabBtns.jobs, count: $("tab-jobs-count"), label: "Jobs" },
+    ],
+  });
+  mountModePill(core, $<HTMLButtonElement>("mode-pill"), $<HTMLUListElement>("mode-menu"));
+  mountApprovals(core, $("approvals"));
   say("Hi! I'm Jett.");
   mountMini(core, $<HTMLButtonElement>("mini"), orbEl, $("mini-count"));
   mountDiagram(core, $("diagram"));

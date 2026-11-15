@@ -7,6 +7,7 @@
 //   GET  /session  a short-lived LiveKit room token for the mic
 //   POST /text     a typed turn
 //   GET/POST /mode the safety mode; POST /jobs/:id/cancel the board's cancel button
+//   POST /approvals/:id/approve|decline  the approve / deny card (ticket 28)
 //   GET  /setup, POST /setup/pick-folder|scan|save   the setup wizard (works before a key)
 //   POST /chat/new end this chat (note + tidy job) and start the next
 // Every call carries the per-launch token. Each command gets one small method
@@ -46,6 +47,8 @@ export interface CoreClient {
   setMode(mode: SafetyMode | "cycle"): Promise<void>;
   /** The job board's cancel button. The board updates from the job's `job.state` events. */
   cancelJob(id: string): Promise<void>;
+  /** The approve / deny card (ticket 28): the same as a spoken yes or no for one waiting call. Rejects if it was already answered. */
+  answerCall(id: string, approve: boolean): Promise<void>;
   /** New chat: the core saves this chat to the brain, tidies it on the job board, and starts fresh. */
   newChat(): Promise<void>;
   /** Pause (true) or resume: Jett stops speaking and hearing; the chat stays. The core echoes a `paused` event. */
@@ -204,6 +207,10 @@ export function connectCore(info: CoreInfo): CoreClient {
         body: JSON.stringify({ paused: on }),
       });
       if (!res.ok) throw new Error(`core /pause: ${res.status}`);
+    },
+    async answerCall(id, approve) {
+      const res = await fetch(`${info.url}/approvals/${encodeURIComponent(id)}/${approve ? "approve" : "decline"}`, { method: "POST", headers: auth });
+      if (!res.ok) throw new Error(`core answer ${id}: ${res.status}`);
     },
     async newChat() {
       const res = await fetch(`${info.url}/chat/new`, { method: "POST", headers: auth });

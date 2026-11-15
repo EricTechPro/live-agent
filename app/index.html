@@ -11,43 +11,82 @@
   </head>
   <body>
     <!--
-      Layout: one centred column like the wizard (stage with the orb and its speech
-      bubble, transcript, input), the job board as a drawer on the right that opens
-      when a job starts, and a slim bottom bar. Ticket 10 fills #jobs and #bar.
+      Two layers (ticket 22). Home: the big orb, the call controls and one way into the
+      control center. Control center: left sidebar, middle chat (the orb small at its top),
+      right panel. The orb and its controls (#dock) are one block that main.ts moves
+      between #home-slot and #chat-slot, so the call and the orb never restart.
     -->
-    <main class="shell">
-      <section class="voice" aria-label="Voice">
-        <header class="orb-wrap" data-tauri-drag-region>
-          <div class="orb-stage" data-tauri-drag-region>
-            <p id="say" class="pf say" aria-live="polite">Hi!</p>
-            <span class="tail" aria-hidden="true"></span>
-            <div id="orb" class="orb" data-state="connecting" role="img" aria-label="Agent state: connecting"><canvas id="orb-canvas" width="352" height="352" aria-hidden="true"></canvas></div>
-            <span id="mini-count" class="mini-count" aria-label="Jobs running">0</span>
-            <p id="orb-label" class="orb-label" aria-live="polite">Starting…</p>
-          </div>
-          <div class="controls">
-            <div class="talk-row">
-              <button id="talk" class="pf btn go talk" type="button" disabled>Start talking</button>
-              <button id="pause" class="pf btn ghost pause" type="button" disabled aria-pressed="false" title="Pause: Jett stops speaking and listening (Space)">Pause</button>
+    <main class="shell" id="shell" data-layer="home">
+      <header class="topbar" data-tauri-drag-region>
+        <span class="spacer" data-tauri-drag-region></span>
+        <div class="top-actions">
+          <button id="new-chat" class="pf ib center-only" type="button" disabled aria-label="New chat" data-tip="New chat" data-icon="newChat"></button>
+          <button id="setup" class="pf ib center-only" type="button" disabled aria-label="Setup" data-tip="Setup" data-icon="gear"></button>
+          <button id="show-log" class="pf ib center-only" type="button" aria-label="Show log" data-tip="Show log in Finder" data-icon="log"></button>
+          <button id="mini" class="pf ib" type="button" disabled aria-label="Mini orb" data-tip="Mini orb" data-icon="mini"></button>
+          <button id="jobs-toggle" class="pf ib jobs-toggle" type="button" aria-controls="panel" aria-expanded="false" aria-label="Jobs" data-tip="Jobs"><span class="icon-slot" data-icon="jobs"></span><b id="jobs-count" class="badge" data-count="0" aria-hidden="true">0</b></button>
+          <button id="open-center" class="pf ib home-only" type="button" aria-controls="center" aria-label="Open control center" data-tip="Control center" data-icon="center"></button>
+          <button id="close-center" class="pf ib center-only" type="button" aria-controls="center" aria-label="Close control center" data-tip="Close" data-key="Esc" data-icon="close"></button>
+        </div>
+      </header>
+      <section id="home" class="home" aria-label="Home">
+        <div id="home-slot" class="home-slot">
+          <div id="dock" class="dock">
+            <div class="orb-stage" data-tauri-drag-region>
+              <p id="say" class="pf say" aria-live="polite">Hi!</p>
+              <span class="tail" aria-hidden="true"></span>
+              <div id="orb" class="orb" data-state="connecting" role="img" aria-label="Agent state: connecting"><canvas id="orb-canvas" width="352" height="352" aria-hidden="true"></canvas></div>
+              <span id="mini-count" class="mini-count" aria-label="Jobs running">0</span>
+              <p id="orb-label" class="orb-label" aria-live="polite">Starting…</p>
             </div>
-            <div class="quiet-buttons">
-              <button id="new-chat" class="pf chip setup" type="button" disabled title="Save this chat to your brain and start a fresh one">New chat</button>
-              <button id="setup" class="pf chip setup" type="button" disabled title="Open setup again">Setup</button>
-              <button id="show-log" class="pf chip setup" type="button" title="Show the core's log file in Finder">Show log</button>
-              <button id="mini" class="pf chip setup" type="button" disabled title="Shrink to a small floating orb">Mini</button>
-              <button id="jobs-toggle" class="pf chip setup jobs-toggle" type="button" aria-controls="jobs" aria-expanded="false" title="Show or hide the job board"><span class="led"></span>Jobs <b id="jobs-count">0</b></button>
+            <div class="controls">
+              <button id="pause" class="pf ib call pause" type="button" disabled aria-pressed="false" aria-label="Pause" data-tip="Pause" data-key="Space" data-icon="pause" data-size="24"></button>
+              <button id="talk" class="pf ib call talk" type="button" disabled aria-label="Start call" data-tip="Start call" data-icon="mic" data-size="24"></button>
             </div>
           </div>
-        </header>
-        <section id="diagram" class="pf diagram" hidden aria-label="Diagram"></section>
-        <ol id="transcript" class="transcript" aria-label="Transcript" aria-live="polite"></ol>
-        <form id="type" class="type">
-          <span class="pf field"><input id="type-input" type="text" placeholder="Or type to Jett…" autocomplete="off" disabled /></span>
-          <button id="send" class="pf btn go send" type="submit" disabled>Send</button>
-        </form>
+        </div>
       </section>
-      <aside id="jobs" class="pf jobs" aria-label="Job board"></aside>
-      <footer id="bar" class="bar" aria-label="Status"></footer>
+      <section id="center" class="center" aria-label="Control center" hidden>
+        <aside id="sidebar" class="sidebar" aria-label="Chats and brain">
+          <h2 class="side-title">Chats</h2>
+          <p class="side-empty">Past chats show here.</p>
+          <h2 class="side-title">Brain</h2>
+          <p class="side-empty">Your notes show here.</p>
+        </aside>
+        <section class="chat" aria-label="Chat">
+          <div id="chat-slot" class="chat-slot"></div>
+          <ol id="transcript" class="transcript" aria-label="Transcript" aria-live="polite"></ol>
+          <div class="composer-wrap">
+          <!-- The safety mode menu sits outside the composer's pixel frame, which would clip it. -->
+          <ul id="mode-menu" class="pf mode-menu" hidden></ul>
+          <!-- Approve / deny cards for calls waiting on a yes (ticket 28). -->
+          <ul id="approvals" class="approvals" aria-label="Waiting for your yes" aria-live="polite" hidden></ul>
+          <form id="type" class="pf composer type">
+            <button id="mode-pill" class="pill" type="button" disabled></button>
+            <input id="type-input" type="text" placeholder="Type to Jett…" aria-label="Message Jett" autocomplete="off" disabled />
+            <button id="send" class="ib send" type="submit" disabled aria-label="Send" data-tip="Send" data-key="Enter" data-icon="send"></button>
+          </form>
+          </div>
+          <footer id="bar" class="bar" aria-label="Status"></footer>
+        </section>
+        <aside id="panel" class="panel" aria-label="Canvas and jobs">
+          <div class="panel-head">
+            <div class="tabs" role="tablist" aria-label="Canvas and jobs">
+              <button id="tab-canvas" class="tab" role="tab" type="button" aria-controls="panel-canvas" aria-selected="true">Canvas</button>
+              <button id="tab-jobs" class="tab" role="tab" type="button" aria-controls="panel-jobs" aria-selected="false" tabindex="-1">Jobs<b id="tab-jobs-count" class="badge tab-badge" data-count="0" aria-hidden="true">0</b></button>
+            </div>
+            <button id="close-panel" class="pf ib" type="button" aria-controls="panel" aria-label="Close panel" data-tip="Close panel" data-icon="close"></button>
+          </div>
+          <!-- Canvas: today's diagram panel, until the sketch canvas (ticket 32) draws here. -->
+          <section id="panel-canvas" class="tabpanel" role="tabpanel" aria-labelledby="tab-canvas">
+            <section id="diagram" class="pf diagram" hidden aria-label="Diagram"></section>
+            <p class="canvas-empty">Jett draws here.</p>
+          </section>
+          <section id="panel-jobs" class="tabpanel" role="tabpanel" aria-labelledby="tab-jobs" hidden>
+            <div id="jobs" class="jobs" aria-label="Job board"></div>
+          </section>
+        </aside>
+      </section>
     </main>
     <!--
       The setup wizard (Jett setup): first launch (no config file, or no Gemini key) and the

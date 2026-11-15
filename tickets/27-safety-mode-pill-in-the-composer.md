@@ -4,15 +4,17 @@
 
 **Blocked by:** 22 Two layers: home orb and the control center shell
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Priority:** must-have
 
-- [ ] The composer shows the current mode as a pill left of the input
-- [ ] Picking a mode in the pill menu changes it in the core; the pill updates from `mode.changed`
-- [ ] Shift+Tab still cycles the mode and the pill follows
-- [ ] The pill menu works by keyboard (open, arrows, Enter, Escape)
-- [ ] The bottom bar no longer has a mode dropdown
-- [ ] Existing mode-switch tests still pass (`test/mode-switch.test.ts`)
+- [x] The composer shows the current mode as a pill left of the input
+- [x] Picking a mode in the pill menu changes it in the core; the pill updates from `mode.changed`
+- [x] Shift+Tab still cycles the mode and the pill follows
+- [x] The pill menu works by keyboard (open, arrows, Enter, Escape)
+- [x] The bottom bar no longer has a mode dropdown
+- [x] Existing mode-switch tests still pass (`test/mode-switch.test.ts`)
 
 ## Comments
+
+- 2026-11-15: built. `app/src/mode-pill.ts` draws the pill and its listbox menu (opens upward, outside the composer's pixel frame); `app/src/mode-menu.ts` is the pure keyboard/click reducer (`test/mode-pill.test.ts`). The pill shows the mode only from `mode.changed` through `bottom-bar.ts`; Shift+Tab moved here from `board-view.ts`, which now draws only the notes used (and nothing when none). Escape inside the open menu closes only the menu, not the control center. Checked against a fake core in a headless browser: click pick, Shift+Tab and arrow keys all change the mode in the core and the pill follows.

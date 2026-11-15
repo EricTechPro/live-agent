@@ -1,11 +1,8 @@
-// The job board (right) and the bottom bar (notes used + safety mode). Ticket 10.
-// Renders only: core events in (through the pure reducers), commands out
-// (cancel, set mode). The mode on screen comes only from the core's
-// `mode.changed`, so the dropdown and Shift+Tab can never disagree.
+// The job board (the right panel's Jobs tab, ticket 25) and the status line (notes used). Ticket 10; the safety mode moved to the composer pill (mode-pill.ts, ticket 27).
+// Renders only: core events in (through the pure reducers), the cancel command out.
 import type { CoreClient } from "./core-client.ts";
-import { addBarEvent, emptyBar, isModeCycleKey, type Bar } from "./bottom-bar.ts";
+import { addBarEvent, emptyBar, type Bar } from "./bottom-bar.ts";
 import { addJobEvent, emptyBoard, type JobBoard } from "./job-board.ts";
-import type { SafetyMode } from "../../src/core/safety.ts";
 
 const STATUS_LABELS = { waiting: "Waiting", working: "Working", done: "Done", failed: "Failed", cancelled: "Cancelled" };
 // Each job's LED: blinking while it works, lit when done, red when it failed, dark otherwise.
@@ -20,34 +17,32 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string,
 // The bar shows at most this many notes as chips (file name; full path on hover), then "+N".
 const NOTE_CHIPS = 3;
 
-/** The job board drawer's toggle chip ("Jobs 0") and its count. */
-export interface JobsToggle {
-  button: HTMLButtonElement;
-  count: HTMLElement;
+/** Where the running count shows: the top bar's Jobs icon and the panel's Jobs tab (ticket 25), each with a badge. */
+export interface JobsBadges {
+  buttons: { button: HTMLElement; count: HTMLElement; label: string }[];
 }
 
-export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: HTMLElement, toggle?: JobsToggle) {
+export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: HTMLElement, toggle?: JobsBadges) {
   let board: JobBoard = emptyBoard;
   let bar: Bar = emptyBar;
 
-  // The board is a drawer: shut while empty, opened by the Jobs chip or when a job starts.
-  const setOpen = (open: boolean) => {
-    jobsEl.classList.toggle("open", open);
-    toggle?.button.setAttribute("aria-expanded", String(open));
-  };
-  if (toggle) toggle.button.onclick = () => setOpen(!jobsEl.classList.contains("open"));
-
-  // ---- job board ----
+  // ---- job board (the right panel's Jobs tab; a new job never switches to it) ----
   const list = el("ol", { className: "job-list" });
   const empty = el("p", { className: "job-empty", textContent: "No helper jobs yet." });
-  jobsEl.append(el("h2", { className: "jobs-title", textContent: "Jobs" }), empty, list);
+  jobsEl.append(empty, list);
 
   function renderBoard() {
     empty.hidden = board.length > 0;
     if (toggle) {
       const running = board.filter((j) => j.status === "working" || j.status === "waiting").length;
-      toggle.count.textContent = String(running);
-      toggle.button.querySelector(".led")!.className = running ? "led busy" : board.some((j) => j.status === "failed") ? "led bad" : "led";
+      const failed = !running && board.some((j) => j.status === "failed");
+      // Each badge: the running count, hidden at 0, red when one failed.
+      for (const { button, count, label } of toggle.buttons) {
+        count.textContent = String(running);
+        count.dataset.count = String(running);
+        button.dataset.failed = String(failed);
+        button.setAttribute("aria-label", running ? `${label}, ${running} running` : label);
+      }
     }
     list.replaceChildren(
       ...board.map((job) => {
@@ -82,18 +77,7 @@ export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: H
 
   // ---- bottom bar ----
   const notesEl = el("span", { className: "bar-notes" });
-  const select = el("select", { className: "bar-mode", id: "mode", disabled: true });
-  select.setAttribute("aria-label", "Safety mode (Shift+Tab cycles)");
-  select.onchange = () => {
-    const wanted = select.value as SafetyMode;
-    // Snap back to what the core says until its mode.changed arrives.
-    if (bar.mode) select.value = bar.mode;
-    core.setMode(wanted).catch(() => {});
-  };
-  barEl.append(
-    notesEl,
-    el("label", { className: "bar-mode-wrap", title: "Shift+Tab cycles" }, el("span", { textContent: "Safety" }), el("span", { className: "pf sel" }, select)),
-  );
+  barEl.append(notesEl);
 
   function renderBar() {
     notesEl.replaceChildren(
@@ -105,37 +89,15 @@ export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: H
               ? [el("span", { className: "bar-more", textContent: `+${bar.notes.length - NOTE_CHIPS}`, title: bar.notes.slice(NOTE_CHIPS).join("\n") })]
               : []),
           ]
-        : [el("span", { className: "bar-label", textContent: "No notes used" })]),
+        : []),
     );
-    if (bar.mode) {
-      select.disabled = false;
-      select.value = bar.mode;
-      barEl.dataset.mode = bar.mode;
-    }
   }
 
   core.onEvent((event) => {
     const nextBoard = addJobEvent(board, event);
-    // A job just started: show the drawer.
-    if (event.type === "job.state" && (event.state === "queued" || event.state === "running") && !board.some((j) => j.id === event.id)) setOpen(true);
     const nextBar = addBarEvent(bar, event);
     if (nextBoard !== board) (board = nextBoard), renderBoard();
     if (nextBar !== bar) (bar = nextBar), renderBar();
-  });
-
-  // First draw: the core says which modes exist (with their labels) and which
-  // one is on. A mode.changed that beat this reply wins.
-  core.getMode().then(({ mode, modes }) => {
-    select.replaceChildren(...modes.map(({ id, label }) => el("option", { value: id, textContent: label })));
-    if (bar.mode) select.value = bar.mode;
-    else (bar = addBarEvent(bar, { type: "mode.changed", mode })), renderBar();
-  }, () => {});
-
-  // In-window shortcut, not a global one: only while this window has focus.
-  window.addEventListener("keydown", (e) => {
-    if (!isModeCycleKey(e)) return;
-    e.preventDefault();
-    core.setMode("cycle").catch(() => {});
   });
 
   renderBoard();

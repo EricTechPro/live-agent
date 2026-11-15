@@ -1,6 +1,7 @@
 // The live transcript, built from the core's events. Pure, like orb-state.ts:
 // the core sends text in chunks; this joins them into lines the window shows.
 import type { AgentEvent } from "../../src/core/events.ts";
+import { joinText } from "../../src/core/join-text.ts";
 
 export interface Line {
   role: "user" | "model" | "note";
@@ -20,7 +21,7 @@ export function addToTranscript(t: Transcript, event: AgentEvent): Transcript {
   switch (event.type) {
     case "transcript":
       if (t.open && last?.role === event.role) {
-        return { lines: [...t.lines.slice(0, -1), { role: last.role, text: last.text + event.text }], open: true };
+        return { lines: [...t.lines.slice(0, -1), { role: last.role, text: joinText(last.text, event.text) }], open: true };
       }
       return { lines: [...t.lines, { role: event.role, text: event.text }], open: true };
     case "turn.done":
