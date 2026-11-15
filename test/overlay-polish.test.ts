@@ -1,7 +1,7 @@
 // v3 polish (ticket 38): drag anywhere, the minimised dot, hover from the poll, push to talk that always lets go.
 import { expect, test } from "bun:test";
 import {
-  DOT_INSET, DOUBLE_MS, DRAG_PX, dotFor, dropDot, HOVER_PAD, hoverOrb, isDoubleClick, isDrag, pttCallIdle, pttPress, pttRelease, SNAP_PX,
+  DOT_INSET, DOUBLE_MS, DRAG_PX, dotFor, dropDot, HOVER_PAD, hoverOrb, isDoubleClick, pollHover, isDrag, pttCallIdle, pttPress, pttRelease, SNAP_PX,
 } from "../app/src/overlay.ts";
 
 const view = { width: 1440, height: 900 };
@@ -95,4 +95,14 @@ test("muted before the press: unmute while held, mute again on release", () => {
 test("a call you started by click, still connecting: holding and letting go does not mute it", () => {
   const press = pttPress(pttCallIdle, "joining", false);
   expect(pttRelease(press.state, "joining").state.muteOnLive).toBe(false);
+});
+
+test("hover clears on the first poll the cursor is away, and the tooltip goes with it (ticket 39)", () => {
+  const orb = { x: 1000, y: 500, width: 148, height: 200 };
+  expect(pollHover(false, { x: 1070, y: 600 }, orb)).toEqual({ hover: true, hideTip: false });
+  // Moved 1000 px away to another app: no DOM event comes, the poll still sees it.
+  expect(pollHover(true, { x: 70, y: 600 }, orb)).toEqual({ hover: false, hideTip: true });
+  // Off this screen.
+  expect(pollHover(true, undefined, orb)).toEqual({ hover: false, hideTip: true });
+  expect(pollHover(false, { x: 70, y: 600 }, orb)).toEqual({ hover: false, hideTip: false });
 });

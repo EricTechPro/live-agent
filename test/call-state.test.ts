@@ -1,6 +1,6 @@
 // The orb as a phone call (ticket 37): core state + call + mute -> words, look, buttons.
 import { expect, test } from "bun:test";
-import { callView, spaceAction } from "../app/src/call-state.ts";
+import { callView, showCallButtons, spaceAction } from "../app/src/call-state.ts";
 import { spokenLang } from "../app/src/lang.ts";
 import { nextOrb, orbStart, type OrbInput } from "../app/src/orb-state.ts";
 
@@ -75,4 +75,17 @@ test("the words follow the user's language", () => {
   expect(spokenLang("what's on today")).toBe("en");
   expect(spokenLang("Jett 你好")).toBe("zh");
   expect(spokenLang("42")).toBeUndefined();
+});
+
+// Ticket 39: less on screen at rest during a call.
+test("in a call, Mute and Hang up show only on hover or while someone is actually talking", () => {
+  expect(showCallButtons({ look: "muted", inCall: true, hovered: false, talking: false })).toBe(false);
+  expect(showCallButtons({ look: "listening", inCall: true, hovered: false, talking: false })).toBe(false);
+  expect(showCallButtons({ look: "listening", inCall: true, hovered: false, talking: true })).toBe(true);
+  expect(showCallButtons({ look: "speaking", inCall: true, hovered: false, talking: false })).toBe(true);
+  expect(showCallButtons({ look: "thinking", inCall: true, hovered: false, talking: false })).toBe(false);
+  expect(showCallButtons({ look: "muted", inCall: true, hovered: true, talking: false })).toBe(true);
+  expect(showCallButtons({ look: "joining", inCall: true, hovered: false, talking: false })).toBe(false);
+  // Not in a call: the Start call button stays, it is how you begin.
+  expect(showCallButtons({ look: "idle", inCall: false, hovered: false, talking: false })).toBe(true);
 });

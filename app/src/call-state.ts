@@ -95,3 +95,13 @@ export function spaceAction(call: CallPhase, muted: boolean): "start" | "mute" |
   if (call === "off" || call === "ended") return "start";
   return undefined;
 }
+
+/**
+ * Less on screen at rest (ticket 39): in a call, Mute and Hang up show only under the
+ * cursor or while someone is actually talking (your mic heard just now, or Jett speaking).
+ * Not in a call, the Start call button stays: it is how you begin.
+ */
+export function showCallButtons({ look, inCall, hovered, talking }: { look: CallLook; inCall: boolean; hovered: boolean; talking: boolean }): boolean {
+  if (!inCall || hovered) return true;
+  return look === "speaking" || (look === "listening" && talking);
+}

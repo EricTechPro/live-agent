@@ -207,6 +207,17 @@ export function hoverOrb(point: Point | undefined, orb: Rect, pad = HOVER_PAD): 
   return point !== undefined && hit(point, [orb], pad);
 }
 
+/**
+ * One poll's hover (ticket 39): on as soon as the cursor is over the orb, off on the first
+ * poll it is away, focus or not. `hideTip`: it just went off, so drop any tooltip too (a
+ * DOM tooltip would otherwise wait for a pointer event that never comes while another app
+ * is in front).
+ */
+export function pollHover(prev: boolean, point: Point | undefined, orb: Rect, pad = HOVER_PAD): { hover: boolean; hideTip: boolean } {
+  const hover = hoverOrb(point, orb, pad);
+  return { hover, hideTip: prev && !hover };
+}
+
 // ---- push to talk and the call: letting go always wins ---------------------------------
 type Phase = "off" | "joining" | "live" | "ended";
 

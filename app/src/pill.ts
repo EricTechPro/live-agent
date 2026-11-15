@@ -2,8 +2,9 @@
 // left or right screen edge. Pure: sizes, points and levels in, spots, bars and yes/no out.
 // All values are CSS pixels inside the overlay.
 //
-// - First minimise: the right edge, its centre 35% from the top (another app's pill often
-//   sits at the vertical centre of the same edge).
+// - Minimising: level with where the orb was, on its nearer side edge, until you drag it.
+//   (`defaultPill`, right edge 35% down, is the spot with no orb to go by; it keeps clear
+//   of another app's pill at the vertical centre.)
 // - Dragged, it moves freely; dropped, it re-docks to the nearer side edge.
 // - Inside: a state dot, five mini level bars, an expand chevron.
 // - Under the cursor it widens and shows quick actions beside it, away from the edge.
@@ -52,11 +53,20 @@ export function migrateDot(dot: Point, dotSize: Size, view: Size): PillSpot {
   return dockPill({ x: c.x - PILL.width / 2, y: c.y - PILL.height / 2 }, view);
 }
 
-/** Where the pill goes: its saved spot, else the old dot's spot moved over, else the default. */
-export function placePill(saved: PillSpot | undefined, oldDot: Point | undefined, dotSize: Size, view: Size): PillSpot {
+/** Minimising: the pill docks level with where the orb was, on the orb's nearer side edge. */
+export function pillForOrb(orb: Rect, view: Size): PillSpot {
+  return dockPill({ x: orb.x + orb.width / 2 - PILL.width / 2, y: orb.y + orb.height / 2 - PILL.height / 2 }, view);
+}
+
+/**
+ * Where the pill goes: the spot you dragged it to, else a ticket-38 dot you dragged
+ * (moved over), else level with the orb. Only drags are saved, so an untouched pill
+ * always follows the orb.
+ */
+export function placePill(saved: PillSpot | undefined, oldDot: Point | undefined, dotSize: Size, orb: Rect, view: Size): PillSpot {
   if (saved) return { side: saved.side, y: keepY(saved.y, view) };
   if (oldDot) return migrateDot(oldDot, dotSize, view);
-  return defaultPill(view);
+  return pillForOrb(orb, view);
 }
 
 /** The saved spot (JSON in localStorage), or undefined for nothing or junk. */

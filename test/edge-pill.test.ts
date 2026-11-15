@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test";
 import {
   BARS, BAR_MIN, defaultPill, dockPill, hoverPill, migrateDot, morph, MORPH_MS, parsePill, PILL, PILL_INSET, PILL_MARGIN, pillActions, pillAt,
-  pillBars, pillFlyout, placePill,
+  pillBars, pillFlyout, pillForOrb, placePill,
 } from "../app/src/pill.ts";
 import { waveFor } from "../app/src/orb-wave.ts";
 
@@ -42,11 +42,19 @@ test("the remembered ticket-38 dot moves over: nearest side edge, level with the
   expect(migrateDot({ x: 1000, y: 4 }, dot, view)).toEqual({ side: "right", y: PILL_MARGIN });
 });
 
-test("placing: saved pill spot first, else the old dot, else the default", () => {
+test("minimising: level with where the orb was, on its nearer side edge, kept on screen", () => {
+  const orb = { x: 1200, y: 500, width: 148, height: 200 };
+  expect(pillForOrb(orb, view)).toEqual({ side: "right", y: 600 - PILL.height / 2 });
+  expect(pillForOrb({ ...orb, x: 60 }, view).side).toBe("left");
+  expect(pillForOrb({ ...orb, y: 780 }, view).y).toBe(900 - PILL.height - PILL_MARGIN);
+});
+
+test("placing: a dragged pill's spot first, else a dragged ticket-38 dot, else level with the orb", () => {
   const dot = { width: 20, height: 20 };
-  expect(placePill({ side: "left", y: 200 }, { x: 1416, y: 590 }, dot, view)).toEqual({ side: "left", y: 200 });
-  expect(placePill(undefined, { x: 1416, y: 590 }, dot, view)).toEqual(migrateDot({ x: 1416, y: 590 }, dot, view));
-  expect(placePill(undefined, undefined, dot, view)).toEqual(defaultPill(view));
+  const orb = { x: 1200, y: 500, width: 148, height: 200 };
+  expect(placePill({ side: "left", y: 200 }, { x: 1416, y: 590 }, dot, orb, view)).toEqual({ side: "left", y: 200 });
+  expect(placePill(undefined, { x: 1416, y: 300 }, dot, orb, view)).toEqual(migrateDot({ x: 1416, y: 300 }, dot, view));
+  expect(placePill(undefined, undefined, dot, orb, view)).toEqual(pillForOrb(orb, view));
 });
 
 test("the saved spot parses, junk is ignored", () => {
