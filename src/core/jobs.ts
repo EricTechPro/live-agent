@@ -24,6 +24,8 @@ export interface JobInfo {
   state: JobState;
   /** done: the job's summary; failed: what went wrong and how to fix it. */
   message?: string;
+  /** Helper jobs: the folder the job works in (the asked-for project folder; see `worktree` for where the code changes land). */
+  folder?: string;
   /** Helper jobs with worktrees on (config `worktrees`): the git worktree and branch the job works in. */
   worktree?: { path: string; branch: string };
 }
@@ -36,6 +38,8 @@ export interface JobRun {
 export interface JobSpec {
   kind: string;
   title: string;
+  /** The folder the job works in (helper jobs). Shown on every event. */
+  folder?: string;
   /** Where the job works, if in its own git worktree (src/helpers/worktree.ts). Shown on every event. */
   worktree?: JobInfo["worktree"];
   /** Do the work. Resolve with a short summary; throw to fail (the error message is shown). */
@@ -101,6 +105,7 @@ export function createJobs({ maxAtOnce, onState }: JobsOptions): Jobs {
       const entry: Entry = {
         info: {
           id: `job-${nextId++}`, kind: spec.kind, title: spec.title, state: "queued",
+          ...(spec.folder ? { folder: spec.folder } : {}),
           ...(spec.worktree ? { worktree: { ...spec.worktree } } : {}),
         },
         spec,

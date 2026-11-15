@@ -11,15 +11,17 @@
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Priority:** must-have
 
-- [ ] A `start_helper` call with no folder starts its job in the brain folder (`ToolContext.brainPath`), checked through the event stream with the scripted fake model
-- [ ] A relative folder (`projects/live-agent`) resolves inside the brain folder; an absolute folder is used as given
-- [ ] A folder that doesn't exist fails the call with a plain fix the model hears, and no job starts
-- [ ] Every `job.state` event for a helper job carries the folder it works in, and the job board shows it
-- [ ] The `start_helper` schema and the system prompt say the same default (the brain folder)
-- [ ] Opened like the installed app (`LIVE_AGENT_HOME` set), a helper job never runs in the home folder
+- [x] A `start_helper` call with no folder starts its job in the brain folder (`ToolContext.brainPath`), checked through the event stream with the scripted fake model
+- [x] A relative folder (`projects/live-agent`) resolves inside the brain folder; an absolute folder is used as given
+- [x] A folder that doesn't exist fails the call with a plain fix the model hears, and no job starts
+- [ ] Every `job.state` event for a helper job carries the folder it works in, and the job board shows it (core half done: `job.state.folder`; the job board half is window work, left to the app builder)
+- [x] The `start_helper` schema and the system prompt say the same default (the brain folder)
+- [x] Opened like the installed app (`LIVE_AGENT_HOME` set), a helper job never runs in the home folder
 
 ## Comments
+
+- 2026-11-15 (core builder): `start_helper` resolves against `ToolContext.brainPath`, checks the folder exists, and every helper `job.state` (and the tool's first result) carries `folder` (absolute path). Tests: `test/helper-folder.test.ts`, with `workDir` set to a fake app home. Open: the job board does not render `folder` yet (`app/src/board-view.ts`, `app/src/job-board.ts`); that box stays unticked for the UI builder (fits ticket 29's card work).

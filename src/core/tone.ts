@@ -59,8 +59,8 @@ function workRules(brainPath?: string): string {
     "- When a request needs the computer (git status or diffs, code, files outside the notes, running commands, " +
       "fixing or building something), do not say you cannot. Never say you cannot do it or have no access. Instead say one short line, " +
       'like "Sending that to Claude Code." (name the helper you use), and call start_helper with a clear, complete task.',
-    `- Helper folder: the user's notes folder "${brainPath ?? "the working folder"}" by default; for a named project, its folder ` +
-      "(e.g. projects/<name> inside the notes folder), or the path the user says.",
+    `- Helper folder: the user's notes folder "${brainPath ?? "the notes folder"}" by default; for a named project, its folder ` +
+      "(e.g. projects/<name> inside the notes folder), or the path the user says; relative folders start in the notes folder.",
     "- The safety mode decides if the user is asked first; if the call is declined or blocked, say so in one line.",
   ].join("\n");
 }

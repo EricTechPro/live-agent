@@ -84,6 +84,8 @@ const say = (text: string): ModelEvent[] => [{ type: "text", text }];
 function configWith(on: Partial<Config["helpers"]>): Config {
   const config = defaultConfig();
   config.helpers = { ...config.helpers, geminiCli: false, ...on };
+  // Helper jobs with no folder start in the brain folder (ticket 21): here, the temp dir.
+  config.brainPath = dir;
   return config;
 }
 

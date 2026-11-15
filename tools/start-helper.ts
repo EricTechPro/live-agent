@@ -4,6 +4,7 @@
 // when the job ends, so the voice can announce it.
 // Which helper: the one the user named ("use Claude Code"), else the first one
 // turned on in the config (src/helpers/index.ts).
+import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineTool } from "../src/core/tool.ts";
 import { HELPER_IDS, pickHelper } from "../src/helpers/index.ts";
@@ -26,8 +27,8 @@ export default defineTool<{ task: string; folder?: string; helper?: string }>({
       folder: {
         type: "string",
         description:
-          "Project folder to work in: the user's notes folder, a project inside it, or a path the user said. " +
-          "Relative paths start in the working folder. Default: the working folder.",
+          "Project folder to work in: the user's notes folder, a project inside it (projects/<name>), or a path the user said. " +
+          "Relative paths start in the notes folder. Default: the user's notes folder.",
       },
       helper: {
         type: "string",
@@ -39,7 +40,7 @@ export default defineTool<{ task: string; folder?: string; helper?: string }>({
     },
     required: ["task"],
   },
-  async run({ task, folder, helper: asked }, { workDir, jobs, helpers }) {
+  async run({ task, folder, helper: asked }, { brainPath, jobs, helpers }) {
     if (!jobs || !helpers) throw new Error("helper jobs are not available in this session");
     const { geminiCli, codex = false, claudeCode = false, worktrees, ...paths } = helpers;
     // Off, or none on: a plain fix for the voice, and no job starts.
@@ -47,13 +48,20 @@ export default defineTool<{ task: string; folder?: string; helper?: string }>({
     // Not installed or not signed in: the same, before any worktree or branch is made.
     const status = await helper.status(paths);
     if (!status.ok) throw new Error(status.fix ?? `${helper.label} is not ready.`);
-    const project = resolve(workDir, folder ?? ".");
+    // Ticket 21: the brain folder, never the app's home (the core's working folder).
+    const project = resolve(brainPath, folder ?? ".");
+    if (!existsSync(project) || !statSync(project).isDirectory()) {
+      throw new Error(
+        `The folder ${project} does not exist. Leave the folder out to work in the notes folder, ` +
+          "use projects/<name> for a project inside it, or say the full path.",
+      );
+    }
     // Worktrees on: the helper works on its own branch, never in the user's checkout.
     // Not a git project: createWorktree throws a plain fix, and no job starts.
     const worktree = worktrees ? createWorktree({ folder: project, task, root: paths.worktreesRoot }) : undefined;
-    const spec = helper.job({ task, cwd: worktree?.cwd ?? project, ...paths });
+    const spec = { ...helper.job({ task, cwd: worktree?.cwd ?? project, ...paths }), folder: project };
     const jobId = jobs.submit(worktree ? inWorktree(spec, worktree) : spec);
     const job = jobs.list().find((j) => j.id === jobId)!;
-    return { jobId, helper: helper.id, state: job.state, ...(job.worktree ? { worktree: job.worktree } : {}) };
+    return { jobId, helper: helper.id, state: job.state, folder: project, ...(job.worktree ? { worktree: job.worktree } : {}) };
   },
 });

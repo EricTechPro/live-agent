@@ -58,6 +58,8 @@ const helperHome = join(dir, "helper-home");
 function session(script: ScriptEntry[], bin: string, extra: Partial<SessionOptions> = {}) {
   return startSession({
     model: scriptedModel(script), tools, mode: "bypass", workDir: dir,
+    // Helper jobs with no folder start in the brain folder (ticket 21): here, the temp dir.
+    config: { ...defaultConfig(), brainPath: dir },
     helpers: { geminiCliBin: bin, geminiCliHome: helperHome, geminiApiKey: "secret-test-key", cancelGraceMs: 200 }, ...extra,
   });
 }
@@ -169,6 +171,7 @@ describe("job states", () => {
 
   test("with max-at-once 1, a second job waits in queued until the first ends", async () => {
     const config = defaultConfig();
+    config.brainPath = dir;
     config.helpers.maxAtOnce = 1;
     const s = await session(
       [[startHelper("c1", "first"), startHelper("c2", "second")], say("Started two."), say("one"), say("two")],
@@ -189,6 +192,7 @@ describe("job states", () => {
 
   test("with max-at-once 2, two jobs run side by side", async () => {
     const config = defaultConfig();
+    config.brainPath = dir;
     config.helpers.maxAtOnce = 2;
     const s = await session(
       [[startHelper("c1", "first"), startHelper("c2", "second")], say("Started two."), say("one"), say("two")],
@@ -248,6 +252,7 @@ describe("cancelling", () => {
 
   test("cancelling a queued job removes it before it runs", async () => {
     const config = defaultConfig();
+    config.brainPath = dir;
     config.helpers.maxAtOnce = 1;
     const s = await session(
       [[startHelper("c1", "first"), startHelper("c2", "second")], say("Started."), say("x"), say("y"), say("z")],
