@@ -7,7 +7,7 @@
 //   GET  /session  a short-lived LiveKit room token for the mic
 //   POST /text     a typed turn
 //   GET/POST /mode the safety mode; POST /jobs/:id/cancel the board's cancel button
-//   POST /setup    start the setup chat (ticket 12)
+//   GET  /setup, POST /setup/pick-folder|scan|save   the setup wizard (works before a key)
 //   POST /chat/new end this chat (note + tidy job) and start the next
 // Every call carries the per-launch token. Each command gets one small method
 // here, so the rest of the window never builds URLs.
@@ -15,6 +15,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AgentEvent } from "../../src/core/events.ts";
 import type { SafetyMode } from "../../src/core/safety.ts";
+import type { Config } from "../../src/config/index.ts";
+import type { SetupAnswers } from "../../src/setup/index.ts";
+import type { FolderTree, Part, PartChoice } from "./wizard-flow.ts";
 
 export interface CoreInfo {
   url: string;
@@ -43,8 +46,6 @@ export interface CoreClient {
   setMode(mode: SafetyMode | "cycle"): Promise<void>;
   /** The job board's cancel button. The board updates from the job's `job.state` events. */
   cancelJob(id: string): Promise<void>;
-  /** Start the setup chat. `ifNeeded`: only on a first launch (the core checks for a config file). */
-  startSetup(ifNeeded: boolean): Promise<void>;
   /** New chat: the core saves this chat to the brain, tidies it on the job board, and starts fresh. */
   newChat(): Promise<void>;
 }
@@ -79,6 +80,54 @@ export async function sendKey(info: CoreInfo, key: string): Promise<void> {
   });
   if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? `core /key: ${res.status}`);
 }
+
+export interface SetupStatus {
+  /** No config file yet: a first launch. */
+  needed: boolean;
+  /** No Gemini key yet: the wizard shows its key step. */
+  keyNeeded: boolean;
+  configPath: string;
+  /** The config now (defaults on a first launch), to prefill the wizard. */
+  current: Config;
+}
+
+// The setup wizard's calls. They need only the launch token, not a running chat.
+async function setupCall<T>(info: CoreInfo, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${info.url}${path}`, {
+    method: body === undefined ? "GET" : "POST",
+    headers: { Authorization: `Bearer ${info.launchToken}`, "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `core ${path}: ${res.status}`);
+  return data;
+}
+
+/** Is setup needed (first launch, or no key)? And the config now. */
+export const getSetup = (info: CoreInfo) => setupCall<SetupStatus>(info, "/setup");
+
+/** The native macOS folder picker. Resolves null when cancelled. */
+export async function pickFolder(info: CoreInfo): Promise<string | null> {
+  const r = await setupCall<{ path?: string; cancelled?: boolean }>(info, "/setup/pick-folder", {});
+  return r.path ?? null;
+}
+
+/**
+ * The picker for one brain part: opens in the notes folder and resolves with the
+ * pick relative to it (e.g. `notes/wiki`), or null when cancelled. Rejects for a
+ * folder outside the notes folder.
+ */
+export async function pickPartFolder(info: CoreInfo, within: string): Promise<string | null> {
+  const r = await setupCall<{ relative?: string; cancelled?: boolean }>(info, "/setup/pick-folder", { within });
+  return r.relative ?? null;
+}
+
+/** A folder's top-level folders and counts (names only), and the brain parts they map to. */
+export const scanFolder = (info: CoreInfo, path: string) =>
+  setupCall<{ tree: FolderTree; parts: Record<Part, PartChoice> }>(info, "/setup/scan", { path });
+
+/** Save the wizard's typed answers. Rejects with the core's plain reason (e.g. a missing folder). */
+export const saveSetup = (info: CoreInfo, answers: SetupAnswers) => setupCall<{ config: Config }>(info, "/setup/save", answers);
 
 /** The key screen's link: Rust opens Google AI Studio's key page in the browser (a fixed URL). */
 export function openKeyPage(): Promise<void> {
@@ -145,14 +194,6 @@ export function connectCore(info: CoreInfo): CoreClient {
     async cancelJob(id) {
       const res = await fetch(`${info.url}/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST", headers: auth });
       if (!res.ok) throw new Error(`core cancel ${id}: ${res.status}`);
-    },
-    async startSetup(ifNeeded) {
-      const res = await fetch(`${info.url}/setup`, {
-        method: "POST",
-        headers: { ...auth, "Content-Type": "application/json" },
-        body: JSON.stringify({ ifNeeded }),
-      });
-      if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? `core /setup: ${res.status}`);
     },
     async newChat() {
       const res = await fetch(`${info.url}/chat/new`, { method: "POST", headers: auth });

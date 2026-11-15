@@ -25,7 +25,9 @@
 //   The setup wizard (these work before a key too, so the wizard can run first):
 //   GET  /setup    -> { needed, keyNeeded, configPath, current }: no config file yet? no key yet?
 //                     `current` is the config now (defaults on a first launch), to prefill the wizard
-//   POST /setup/pick-folder -> { path } or { cancelled: true }: the native macOS folder picker
+//   POST /setup/pick-folder -> { within? } in, { path, relative? } or { cancelled: true } out: the
+//                     native macOS folder picker. With `within` (the notes folder) it opens there and
+//                     answers the pick relative to it, or 400 when the pick is outside it
 //   POST /setup/scan -> { path } in, { tree, parts } out: the folder's top-level folders and file
 //                     counts (names only, never contents) and the brain parts they map to
 //   POST /setup/save -> the wizard's answers in (src/setup SetupAnswers), { config } out, or
@@ -46,6 +48,7 @@ import { ConfigError, defaultConfigPath } from "./config/index.ts";
 import { brainRoot } from "./brain/index.ts";
 import { currentConfig, saveSetup, type SetupAnswers } from "./setup/index.ts";
 import { detectParts, pickFolder as macPickFolder, scanFolder, type FolderPicker } from "./setup/folders.ts";
+import { insideBrain } from "./setup/parts.ts";
 import { joinVoiceRoom } from "./voice/livekit-bridge.ts";
 // `type: "text"` embeds the file in the compiled binary; bun-types calls *.html an HTMLBundle.
 import checkPage from "./voice/check-page.html" with { type: "text" };
@@ -248,10 +251,17 @@ export async function startApp(options: AppOptions): Promise<App> {
         }
       },
 
-      async "POST /setup/pick-folder"() {
+      async "POST /setup/pick-folder"(req) {
+        const { within } = await readBody(req);
+        const root = typeof within === "string" && within.trim() ? brainRoot(within.trim()) : undefined;
         try {
-          const path = await (pickFolder ?? macPickFolder)();
-          return json(path ? { path } : { cancelled: true });
+          const path = await (pickFolder ?? macPickFolder)(root);
+          if (!path) return json({ cancelled: true });
+          if (!root) return json({ path });
+          // A part's folder: anywhere inside the notes folder, stored relative to it.
+          const relative = insideBrain(root, path);
+          if (!relative) return json({ error: "Pick a folder inside your notes folder." }, 400);
+          return json({ path, relative });
         } catch (err) {
           return json({ error: `Could not open the folder picker: ${errorMessage(err)}` }, 500);
         }

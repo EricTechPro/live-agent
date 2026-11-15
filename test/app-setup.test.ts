@@ -21,6 +21,7 @@ writeFileSync(join(notes, "03 Notes", "b.md"), "x");
 writeFileSync(join(notes, "03 Notes", "c.md"), "x");
 
 let picked: string | null = notes;
+let startedAt: (string | undefined)[] = [];
 let app: App;
 const events: AgentEvent[] = [];
 beforeAll(async () => {
@@ -29,7 +30,10 @@ beforeAll(async () => {
     livekitPort: await freeLiveKitPort(),
     tools: [],
     configPath,
-    pickFolder: async () => picked,
+    pickFolder: async (startAt) => {
+      startedAt.push(startAt);
+      return picked;
+    },
   });
   // Listen on the event stream like the window does.
   const res = await fetch(`${app.url}/events?token=${app.launchToken}`);
@@ -61,6 +65,21 @@ describe("setup wizard, as the window sees it", () => {
     expect(await (await post("/setup/pick-folder")).json()).toEqual({ path: notes });
     picked = null;
     expect(await (await post("/setup/pick-folder")).json()).toEqual({ cancelled: true });
+  });
+
+  test("a part's own pick opens in the notes folder and comes back relative to it", async () => {
+    startedAt = [];
+    picked = join(notes, "03 Notes");
+    expect(await (await post("/setup/pick-folder", { within: notes })).json()).toEqual({ path: picked, relative: "03 Notes" });
+    expect(startedAt).toEqual([notes]);
+
+    picked = join(dir, "elsewhere");
+    const outside = await post("/setup/pick-folder", { within: notes });
+    expect(outside.status).toBe(400);
+    expect(((await outside.json()) as { error: string }).error).toContain("inside your notes folder");
+
+    picked = notes; // the notes folder itself is not a part
+    expect((await post("/setup/pick-folder", { within: notes })).status).toBe(400);
   });
 
   test("the scan lists top-level folders with counts and maps them to parts, by name only", async () => {

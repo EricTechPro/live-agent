@@ -24,7 +24,11 @@
         "mode": {
           "description": "Safety mode. ask-me: only reads run on their own. auto-edits: reads and edits run, commands and helpers ask. bypass: everything runs.",
           "type": "string",
-          "enum": ["ask-me", "auto-edits", "bypass"],
+          "enum": [
+            "ask-me",
+            "auto-edits",
+            "bypass"
+          ],
           "default": "auto-edits"
         },
         "overrides": {
@@ -32,7 +36,11 @@
           "type": "object",
           "additionalProperties": {
             "type": "string",
-            "enum": ["allow", "ask", "block"]
+            "enum": [
+              "allow",
+              "ask",
+              "block"
+            ]
           },
           "default": {}
         }
@@ -80,11 +88,16 @@
     "tone": {
       "description": "How the agent talks. short: answer first, few plain words, one idea per line. casual: relaxed, like texting a friend. friendly: warm and upbeat. pro: polite and precise.",
       "type": "string",
-      "enum": ["short", "casual", "friendly", "pro"],
+      "enum": [
+        "short",
+        "casual",
+        "friendly",
+        "pro"
+      ],
       "default": "short"
     },
     "brainFolders": {
-      "description": "The folder inside brainPath that plays each part of the brain. Lets an existing notes folder keep its own names (e.g. _inbox for raw). Missing folders are created by setup.",
+      "description": "The folder inside brainPath that plays each part of the brain: a name (e.g. _inbox) or a relative path (e.g. notes/wiki). Lets an existing notes folder keep its own names. Missing folders are created by setup.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -92,24 +105,24 @@
           "description": "Where quick notes land (the agent writes chat notes and 'remember this' here).",
           "type": "string",
           "minLength": 1,
-          "pattern": "^(?!\\.\\.?$)[^/\\\\]+$",
-          "patternMessage": "must be one folder name inside the brain (no slashes, not . or ..)",
+          "pattern": "^(?!\\.\\.?(?:/|$))(?!.*/\\.\\.?(?:/|$))[^/\\\\]+(?:/[^/\\\\]+)*$",
+          "patternMessage": "must be a folder inside the brain: a name or a relative path like notes/wiki (no .., not absolute)",
           "default": "raw"
         },
         "wiki": {
           "description": "Tidy pages, one topic each. Answers come from here, and the tidy job writes only here.",
           "type": "string",
           "minLength": 1,
-          "pattern": "^(?!\\.\\.?$)[^/\\\\]+$",
-          "patternMessage": "must be one folder name inside the brain (no slashes, not . or ..)",
+          "pattern": "^(?!\\.\\.?(?:/|$))(?!.*/\\.\\.?(?:/|$))[^/\\\\]+(?:/[^/\\\\]+)*$",
+          "patternMessage": "must be a folder inside the brain: a name or a relative path like notes/wiki (no .., not absolute)",
           "default": "wiki"
         },
         "projects": {
           "description": "One page per project. Answers come from here too.",
           "type": "string",
           "minLength": 1,
-          "pattern": "^(?!\\.\\.?$)[^/\\\\]+$",
-          "patternMessage": "must be one folder name inside the brain (no slashes, not . or ..)",
+          "pattern": "^(?!\\.\\.?(?:/|$))(?!.*/\\.\\.?(?:/|$))[^/\\\\]+(?:/[^/\\\\]+)*$",
+          "patternMessage": "must be a folder inside the brain: a name or a relative path like notes/wiki (no .., not absolute)",
           "default": "projects"
         }
       }

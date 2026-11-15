@@ -6,6 +6,7 @@ import type { LiveConnectParameters, LiveServerMessage } from "@google/genai";
 import { defaultConfig } from "../src/config/index.ts";
 import { startSession } from "../src/core/agent.ts";
 import type { AgentEvent } from "../src/core/events.ts";
+import { systemInstruction } from "../src/core/tone.ts";
 import { geminiLiveModel } from "../src/models/gemini-live.ts";
 
 type FakeSocket = {
@@ -71,6 +72,18 @@ describe("Gemini Live connection", () => {
     });
 
     expect(live.sockets[0]!.params.config?.speechConfig).toEqual({ voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } });
+    await session.close();
+  });
+
+  test("sends the tone's system instruction (short by default)", async () => {
+    const live = fakeLive();
+    const session = await startSession({
+      model: geminiLiveModel({ apiKey: "test", connect: live.connect }),
+      config: defaultConfig(),
+      tools: [], chatEndNote: false,
+    });
+
+    expect(live.sockets[0]!.params.config?.systemInstruction).toBe(systemInstruction("short"));
     await session.close();
   });
 

@@ -97,9 +97,9 @@ describe("config file", () => {
     expect(loadConfig(mapped)).toMatchObject({ tone: "pro", brainFolders: { raw: "_inbox", wiki: "03 Notes", projects: "projects" } });
 
     expect(() => loadConfig(writeConfig({ tone: "rude" }))).toThrow("tone must be one of");
-    // A slot is one folder name inside the brain: never a path out of it.
-    expect(() => loadConfig(writeConfig({ brainFolders: { raw: "../outside" } }))).toThrow("brainFolders.raw must be one folder name");
-    expect(() => loadConfig(writeConfig({ brainFolders: { wiki: ".." } }))).toThrow("brainFolders.wiki must be one folder name");
+    // A part is a folder inside the brain (a name or a nested path): never a path out of it.
+    expect(() => loadConfig(writeConfig({ brainFolders: { raw: "../outside" } }))).toThrow("brainFolders.raw must be a folder inside the brain");
+    expect(() => loadConfig(writeConfig({ brainFolders: { wiki: ".." } }))).toThrow("brainFolders.wiki must be a folder inside the brain");
     expect(() => loadConfig(writeConfig({ brainFolders: { projects: "" } }))).toThrow("brainFolders.projects must not be empty");
   });
 

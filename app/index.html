@@ -3,8 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>live-agent</title>
+    <title>Jett</title>
     <link rel="stylesheet" href="/src/style.css" />
+    <link rel="stylesheet" href="/src/wizard.css" />
     <script type="module" src="/src/main.ts"></script>
   </head>
   <body>
@@ -21,7 +22,7 @@
           <button id="talk" class="talk" type="button" disabled>Start talking</button>
           <div class="quiet-buttons">
             <button id="new-chat" class="setup" type="button" disabled title="Save this chat to your brain and start a fresh one">New chat</button>
-            <button id="setup" class="setup" type="button" disabled title="Run the setup chat again">Setup</button>
+            <button id="setup" class="setup" type="button" disabled title="Open setup again">Setup</button>
             <button id="show-log" class="setup" type="button" title="Show the core's log file in Finder">Show log</button>
             <button id="mini" class="setup" type="button" disabled title="Shrink to a small floating orb">Mini</button>
           </div>
@@ -36,20 +37,121 @@
       <footer id="bar" class="bar" aria-label="Status"></footer>
     </main>
     <!--
-      First launch with no Gemini key (ticket 19). The key passes through here
-      once, to the core, which checks and saves it. It is never shown again.
+      The setup wizard (Jett setup): first launch (no config file, or no Gemini key) and the
+      Setup button. Typed answers go to the core (POST /setup/save); no model is involved.
+      The key passes through here once, to the core, which checks and saves it.
     -->
-    <section id="key-screen" class="key-screen" hidden aria-labelledby="key-title">
-      <form id="key-form" class="key-card">
-        <h1 id="key-title">Paste your Gemini key</h1>
-        <p>live-agent talks with Google Gemini. Get a free key at
-          <a id="key-link" href="https://aistudio.google.com/apikey">aistudio.google.com/apikey</a>,
-          then paste it here.</p>
-        <input id="key-input" type="password" autocomplete="off" spellcheck="false" placeholder="AQ.… or AIza…" aria-label="Gemini key" />
-        <button id="key-save" class="talk" type="submit">Save and start</button>
-        <p id="key-error" class="key-error" role="alert"></p>
-        <p class="key-note">It is saved in your live-agent folder (in <code>.env</code>, readable only by you). The window never shows it again.</p>
-      </form>
-    </section>
+    <div id="wizard" hidden>
+      <div class="pf win" role="dialog" aria-label="Jett setup">
+        <aside class="stage">
+          <p class="pf say" id="w-say" aria-live="polite"></p>
+          <span class="tail" aria-hidden="true"></span>
+          <canvas id="w-orb" width="352" height="352" aria-hidden="true"></canvas>
+          <div class="pad" aria-hidden="true"></div>
+        </aside>
+
+        <main class="panel">
+          <ol class="progress" id="w-progress" aria-label="Setup progress"></ol>
+
+          <section class="step" data-name="welcome" data-next="Let's go">
+            <h1>Hi, I'm Jett.</h1>
+            <p class="lead">I talk with you and look after your notes. Setup takes about a minute.</p>
+            <div class="pf box">
+              <h2 id="w-voice-h">My voice</h2>
+              <p class="note" style="margin:2px 0 0">Pick one. You hear it in the last step. Change it any time.</p>
+              <div class="chips" role="radiogroup" aria-labelledby="w-voice-h" id="w-voices"></div>
+            </div>
+          </section>
+
+          <section class="step" data-name="key" data-next="Continue" hidden>
+            <h1>Give me a brain</h1>
+            <p class="lead">Paste a free Gemini key. I check it right away.</p>
+            <div class="label-row"><label for="w-key-input">Gemini key</label><button class="link" type="button" id="w-get-key">Get a free key</button></div>
+            <form class="field-row" id="w-key-form">
+              <span class="pf field"><input id="w-key-input" type="password" placeholder="Paste your key (AQ.… or AIza…)" autocomplete="off" spellcheck="false"></span>
+              <button class="pf btn go" type="submit" id="w-key-check">Check</button>
+            </form>
+            <p class="msg" id="w-key-msg" role="status"></p>
+            <p class="note">Saved on this Mac only. Nobody else sees it.</p>
+          </section>
+
+          <section class="step" data-name="mic" data-next="Continue" data-skip="1" hidden>
+            <h1>Let me hear you</h1>
+            <p class="lead">Only on while you talk to me.</p>
+            <ul class="rows">
+              <li class="pf row" id="w-mic-row"><div><h2>Microphone</h2><p id="w-mic-sub">So you can talk to me.</p></div><span id="w-mic-side"></span></li>
+            </ul>
+            <p class="note">Rather type? Skip this. Typing always works.</p>
+          </section>
+
+          <section class="step" data-name="notes" data-next="Continue" hidden>
+            <h1>Where are your notes?</h1>
+            <p class="lead">I read and write notes in one folder.</p>
+            <div class="choices" role="radiogroup" aria-label="Notes folder">
+              <button class="pf pick" type="button" role="radio" aria-checked="false" data-notes="sample"><span>Try sample notes</span><span class="led"></span><small>Play first. Switch later.</small></button>
+              <button class="pf pick" type="button" role="radio" aria-checked="false" data-notes="folder"><span>Use my folder</span><span class="led"></span><small id="w-folder-sub">Opens Finder on your Mac.</small></button>
+            </div>
+            <p class="msg" id="w-notes-msg" role="status"></p>
+            <div class="pf brain" id="w-brain" hidden>
+              <div class="brain-head"><h2>Your brain</h2><span class="note" id="w-brain-src"></span></div>
+              <ul class="slots" id="w-slots"></ul>
+              <p class="note">I create the missing folders when you continue.</p>
+            </div>
+          </section>
+
+          <section class="step" data-name="tone" data-next="Continue" hidden>
+            <h1>How should I talk?</h1>
+            <p class="lead">Pick the way I speak to you.</p>
+            <div class="choices" role="radiogroup" aria-label="Tone">
+              <button class="pf pick" type="button" role="radio" aria-checked="true" data-tone="short"><span>Short</span><span class="led"></span><small>Answer first. Few words.<br>"Done. 3 files fixed."</small><span class="tag">Default</span></button>
+              <button class="pf pick" type="button" role="radio" aria-checked="false" data-tone="casual"><span>Casual</span><span class="led"></span><small>"Yo, done. Want more?"</small></button>
+              <button class="pf pick" type="button" role="radio" aria-checked="false" data-tone="friendly"><span>Friendly</span><span class="led"></span><small>"All done! Anything else?"</small></button>
+              <button class="pf pick" type="button" role="radio" aria-checked="false" data-tone="pro"><span>Professional</span><span class="led"></span><small>"The task is complete."</small></button>
+            </div>
+          </section>
+
+          <section class="step" data-name="safety" data-next="Continue" hidden>
+            <h1>How careful should I be?</h1>
+            <p class="lead">Reading is always fine.</p>
+            <div class="choices three" role="radiogroup" aria-label="Safety">
+              <button class="pf pick" type="button" role="radio" aria-checked="false" data-mode="ask-me"><span>Ask first</span><span class="led"></span><small>I ask before changes.</small></button>
+              <button class="pf pick" type="button" role="radio" aria-checked="true" data-mode="auto-edits"><span>Auto</span><span class="led"></span><small>I edit notes, ask for big stuff.</small><span class="tag">Best</span></button>
+              <button class="pf pick" type="button" role="radio" aria-checked="false" data-mode="bypass"><span>Full access</span><span class="led"></span><small>I never ask.</small></button>
+            </div>
+            <p class="note">Switch any time: Shift+Tab.</p>
+          </section>
+
+          <section class="step" data-name="test" data-next="Done" hidden>
+            <h1>Say hi!</h1>
+            <p class="lead">Tap Talk and say anything. Try "Hi, what can you do?"</p>
+            <div class="pf talkbox">
+              <button class="pf btn go" type="button" id="w-talk">Talk</button>
+              <span class="meter" id="w-meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+              <span class="msg wait" id="w-talk-msg" style="margin:0">Mic is off</span>
+              <button class="link" type="button" id="w-type-open">or type it</button>
+            </div>
+            <form class="field-row type-row" id="w-type-row" hidden>
+              <span class="pf field"><input id="w-type-input" placeholder="Type a message" aria-label="Type a message" autocomplete="off" maxlength="300"></span>
+              <button class="pf btn ghost" type="submit">Send</button>
+            </form>
+            <div class="heard" id="w-heard" aria-live="polite"></div>
+            <dl class="pf recap" id="w-recap"></dl>
+          </section>
+
+          <section class="step" data-name="end" hidden>
+            <h1>All set!</h1>
+            <p class="lead">Talk or type any time. Press Setup to change these.</p>
+            <button class="pf btn go" type="button" id="w-open">Open Jett</button>
+          </section>
+
+          <footer class="nav" id="w-nav">
+            <button class="btn bare" type="button" id="w-back">Back</button>
+            <span class="spacer"></span>
+            <button class="pf btn ghost" type="button" id="w-skip" hidden>Skip for now</button>
+            <button class="pf btn go" type="button" id="w-next">Let's go</button>
+          </footer>
+        </main>
+      </div>
+    </div>
   </body>
 </html>

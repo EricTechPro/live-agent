@@ -32,13 +32,7 @@ export function addToTranscript(t: Transcript, event: AgentEvent): Transcript {
     // New chat: the last chat is in the brain now, so the screen starts clean.
     case "chat.started":
       return { lines: [{ role: "note", text: "New chat. The last one was saved to your brain." }], open: false };
-    // The setup chat (ticket 12): a note before the questions and after the save.
-    case "setup.started": {
-      const text = event.firstRun
-        ? "Setup: a few quick questions. Say skip to keep the default."
-        : "Setup again: change what you like, skip the rest.";
-      return { lines: [...t.lines, { role: "note", text }], open: false };
-    }
+    // The setup wizard saved: say so once, under the chat.
     case "setup.saved": {
       const text = `Setup saved to ${event.configPath}. The new settings are in use now.`;
       return { lines: [...t.lines, { role: "note", text }], open: false };

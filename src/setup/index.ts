@@ -105,6 +105,12 @@ export function saveSetup(configPath: string, answers: SetupAnswers): { config: 
   if (new Set(folders.map((f) => f.toLowerCase())).size !== folders.length) {
     throw new ConfigError("raw, wiki and projects need three different folders.");
   }
+  const lower = Object.entries(config.brainFolders).map(([part, f]) => [part, f.toLowerCase()] as const);
+  for (const [outer, o] of lower) {
+    for (const [inner, i] of lower) {
+      if (inner !== outer && i.startsWith(`${o}/`)) throw new ConfigError(`The ${inner} folder cannot sit inside the ${outer} folder.`);
+    }
+  }
 
   // Keys in the schema's order, so the file reads the same way every time.
   const file: Record<string, unknown> = raw.$schema ? { $schema: raw.$schema } : {};

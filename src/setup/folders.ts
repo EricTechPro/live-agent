@@ -11,30 +11,19 @@
 import { spawn } from "node:child_process";
 import { readdir, stat } from "node:fs/promises";
 import { basename } from "node:path";
-import type { BrainFolders } from "../config/index.ts";
 
-export type Part = keyof BrainFolders;
-export const PARTS: Part[] = ["raw", "wiki", "projects"];
-
-/** Folder names (after `normName`) that mean each part. */
-export const PART_WORDS: Record<Part, string[]> = {
-  raw: ["raw", "inbox", "sources", "source", "clippings", "clips", "imports", "import", "capture", "captures", "fleeting"],
-  wiki: ["wiki", "notes", "context", "knowledge", "kb", "zettel", "zettelkasten", "permanent", "resources"],
-  projects: ["projects", "project", "work", "active"],
-};
-
-/** A name as the matcher sees it: no case, no leading `_`, `.`, digits or dashes, no inner spaces/dashes/underscores. */
-export function normName(name: string): string {
-  return name.toLowerCase().replace(/^[\s_.\d-]+/, "").replace(/[\s_-]+/g, "");
-}
+export { detectParts, normName, PART_WORDS, PARTS, type Part, type PartMap } from "./parts.ts";
 
 export interface FolderTree {
   /** The folder's own name, e.g. `notes`. */
   name: string;
   /** Its full path. */
   path: string;
-  /** Top-level folders, by name, with how many files are inside (counted two levels deep). */
-  folders: { name: string; files: number }[];
+  /**
+   * Every top-level folder, by name, with how many files are inside (counted two
+   * levels deep). `capped`: its count stopped at its share of the cap, so it is a floor.
+   */
+  folders: { name: string; files: number; capped?: boolean }[];
   /** How many `.md` files the walk saw. */
   notes: number;
   /** True when the walk stopped at the cap: the counts are a floor. */
@@ -57,73 +46,75 @@ export async function scanFolder(path: string, options: ScanOptions = {}): Promi
   const maxEntries = options.maxEntries ?? 4000;
   if (!(await stat(path)).isDirectory()) throw new Error(`${path} is not a folder`);
   const tree: FolderTree = { name: basename(path), path, folders: [], notes: 0, capped: false };
-  let seen = 0;
 
-  async function count(dir: string, depth: number, top: boolean): Promise<number> {
+  // Count files under `dir`, spending at most `budget` entries. Returns [files, entries used].
+  async function count(dir: string, depth: number, budget: number): Promise<[number, number]> {
     let files = 0;
+    let used = 0;
     let entries;
     try {
       entries = await readdir(dir, { withFileTypes: true });
     } catch {
-      return 0; // unreadable (permissions): counts as empty
+      return [0, 0]; // unreadable (permissions): counts as empty
     }
     for (const entry of entries) {
       if (skipped(entry.name)) continue;
-      if (++seen > maxEntries) {
+      if (used >= budget) {
         tree.capped = true;
-        return files;
+        break;
       }
+      used++;
       if (entry.isFile()) {
         files++;
         if (/\.md$/i.test(entry.name)) tree.notes++;
-      } else if (entry.isDirectory()) {
-        const inside = depth < maxDepth ? await count(`${dir}/${entry.name}`, depth + 1, false) : 0;
+      } else if (entry.isDirectory() && depth < maxDepth) {
+        const [inside, spent] = await count(`${dir}/${entry.name}`, depth + 1, budget - used);
         files += inside;
-        if (top) tree.folders.push({ name: entry.name, files: inside });
+        used += spent;
       }
     }
-    return files;
+    return [files, used];
   }
 
-  await count(path, 0, true);
+  // Every top-level folder is listed, whatever its size: the map needs all the names.
+  // The budget is shared, so one huge folder (assets, a photo library) cannot starve the rest.
+  const top = (await readdir(path, { withFileTypes: true })).filter((e) => !skipped(e.name));
+  const dirs = top.filter((e) => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name));
+  for (const file of top.filter((e) => e.isFile())) if (/\.md$/i.test(file.name)) tree.notes++;
+  const share = Math.max(1, Math.floor((maxEntries - top.length) / Math.max(1, dirs.length)));
+  for (const dir of dirs) {
+    const before = tree.capped;
+    tree.capped = false;
+    const [files] = await count(`${path}/${dir.name}`, 1, share);
+    tree.folders.push({ name: dir.name, files, ...(tree.capped ? { capped: true } : {}) });
+    tree.capped ||= before;
+  }
   tree.folders.sort((a, b) => a.name.localeCompare(b.name));
   return tree;
 }
 
-export type PartMap = Record<Part, { folder: string; found: boolean }>;
-
 /**
- * Map top-level folders onto the brain's parts by name. A folder is used for
- * one part at most; when several match, the one with most files wins.
- * `folder: ""` means no match: setup creates the part's own folder.
+ * Shows the folder picker (opening at `startAt` when given) and resolves with
+ * the chosen path, or null when cancelled.
  */
-export function detectParts(folders: { name: string; files: number }[]): PartMap {
-  const used = new Set<string>();
-  const map = {} as PartMap;
-  for (const part of PARTS) {
-    const hit = folders
-      .filter((f) => !used.has(f.name) && PART_WORDS[part].includes(normName(f.name)))
-      .sort((a, b) => b.files - a.files)[0];
-    map[part] = hit ? { folder: hit.name, found: true } : { folder: "", found: false };
-    if (hit) used.add(hit.name);
-  }
-  return map;
-}
-
-/** Shows the folder picker and resolves with the chosen path, or null when cancelled. */
-export type FolderPicker = () => Promise<string | null>;
-
-// `activate` first: run from the app's background core, the dialog would
-// otherwise open behind the window.
-const PICK_SCRIPT = [
-  "tell current application to activate",
-  'POSIX path of (choose folder with prompt "Pick your notes folder")',
-];
+export type FolderPicker = (startAt?: string) => Promise<string | null>;
 
 /** The native macOS folder picker, via osascript. Cancel resolves null. */
-export const pickFolder: FolderPicker = () =>
+export const pickFolder: FolderPicker = (startAt) =>
   new Promise((resolve, reject) => {
-    const child = spawn("osascript", PICK_SCRIPT.flatMap((line) => ["-e", line]), { stdio: ["ignore", "pipe", "pipe"] });
+    // `activate` first: run from the app's background core, the dialog would
+    // otherwise open behind the window. The start folder goes in as an argument
+    // (`item 1 of argv`), never pasted into the script.
+    const script = [
+      "on run argv",
+      "tell current application to activate",
+      startAt
+        ? 'return POSIX path of (choose folder with prompt "Pick a folder in your notes" default location (POSIX file (item 1 of argv)))'
+        : 'return POSIX path of (choose folder with prompt "Pick your notes folder")',
+      "end run",
+    ];
+    const args = [...script.flatMap((line) => ["-e", line]), ...(startAt ? [startAt] : [])];
+    const child = spawn("osascript", args, { stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
     let err = "";
     child.stdout.on("data", (d) => (out += d));

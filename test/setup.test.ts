@@ -12,6 +12,7 @@ import { systemInstruction } from "../src/core/tone.ts";
 import { scriptedModel } from "../src/models/scripted.ts";
 import { detectParts, normName, scanFolder } from "../src/setup/folders.ts";
 import { saveSetup } from "../src/setup/index.ts";
+import { insideBrain, sortForPart } from "../src/setup/parts.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "live-agent-setup-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -69,7 +70,7 @@ describe("saving the wizard's answers", () => {
     const configPath = freshPath();
     const brain = freshFolder();
     expect(() => saveSetup(configPath, { brainPath: brain, tone: "rude" as never })).toThrow("tone must be one of");
-    expect(() => saveSetup(configPath, { brainPath: brain, brainFolders: { raw: "../escape" } })).toThrow("one folder name");
+    expect(() => saveSetup(configPath, { brainPath: brain, brainFolders: { raw: "../escape" } })).toThrow("must be a folder inside the brain");
     expect(existsSync(configPath)).toBe(false);
   });
 
@@ -78,6 +79,15 @@ describe("saving the wizard's answers", () => {
     const brain = freshFolder("notes");
     expect(() => saveSetup(configPath, { brainPath: brain, brainFolders: { raw: "notes", wiki: "notes" } })).toThrow(
       "three different folders",
+    );
+  });
+
+  test("a part can be a nested folder, but never one inside another part", () => {
+    const brain = freshFolder("notes/wiki", "notes/inbox");
+    const { config } = saveSetup(freshPath(), { brainPath: brain, brainFolders: { raw: "notes/inbox", wiki: "notes/wiki" } });
+    expect(config.brainFolders).toEqual({ raw: "notes/inbox", wiki: "notes/wiki", projects: "projects" });
+    expect(() => saveSetup(freshPath(), { brainPath: brain, brainFolders: { raw: "notes/inbox", wiki: "notes" } })).toThrow(
+      "cannot sit inside",
     );
   });
 
@@ -146,6 +156,38 @@ describe("the notes folder: scan and part mapping", () => {
     const capped = await scanFolder(big, { maxEntries: 10 });
     expect(capped.capped).toBe(true);
     expect(capped.notes).toBeLessThan(10);
+  });
+
+  test("a huge first folder never hides the later ones: every top-level folder is listed and mapped", async () => {
+    const big = freshFolder("_assets", "_context", "projects", "_raw");
+    for (let i = 0; i < 60; i++) writeFileSync(join(big, "_assets", `${i}.png`), "x");
+    writeFileSync(join(big, "_context", "a.md"), "x");
+    writeFileSync(join(big, "projects", "b.md"), "x");
+
+    const tree = await scanFolder(big, { maxEntries: 20 });
+    expect(tree.folders.map((f) => f.name)).toEqual(["_assets", "_context", "_raw", "projects"]);
+    expect(tree.folders.find((f) => f.name === "_context")?.files).toBe(1);
+    expect(tree.capped).toBe(true);
+    expect(detectParts(tree.folders)).toEqual({
+      raw: { folder: "_raw", found: true },
+      wiki: { folder: "_context", found: true },
+      projects: { folder: "projects", found: true },
+    });
+  });
+
+  test("each dropdown lists likely matches first, then the rest alphabetically", () => {
+    const names = ["ai-ambition", "projects", "_context", "_raw", "_hiring", "03 Notes"];
+    expect(sortForPart("wiki", names)).toEqual(["_context", "03 Notes", "_hiring", "_raw", "ai-ambition", "projects"]);
+    expect(sortForPart("projects", names)[0]).toBe("projects");
+    expect(sortForPart("raw", names)[0]).toBe("_raw");
+  });
+
+  test("a picked part folder is kept relative to the notes folder; outside it is refused", () => {
+    expect(insideBrain("/u/notes", "/u/notes/a/wiki/")).toBe("a/wiki");
+    expect(insideBrain("/u/notes/", "/u/notes/_raw")).toBe("_raw");
+    expect(insideBrain("/u/notes", "/u/notes")).toBeNull();
+    expect(insideBrain("/u/notes", "/u/notes-old/wiki")).toBeNull();
+    expect(insideBrain("/u/notes", "/u/other")).toBeNull();
   });
 
   test("a path that is not a folder fails the scan", async () => {
