@@ -71,20 +71,23 @@ export function createToolCalls(deps: ToolCallsDeps): ToolCalls {
   const watchByJob = new Map<string, Watch>();
 
   const approvals = createApprovals({
-    approve(calls) {
+    approve(calls, reason = "the user said yes") {
       for (const call of calls) {
         const tool = byName.get(call.name)!;
         const { mode } = deps.gate();
         deps.emit({
           type: "safety.verdict", id: call.id, name: call.name, risk: tool.risk, mode,
-          verdict: "allow", reason: "the user said yes",
+          verdict: "allow", reason,
         });
         run(call, tool);
       }
     },
     // Silent: the model hears it together with the user's words, and answers both at once.
-    decline(calls, reason) {
-      for (const call of calls) respond(call, "declined", { status: "declined", reason }, { scheduling: "silent" });
+    // A click (speak) has no words with it, so the model answers the decline itself.
+    decline(calls, reason, speak = false) {
+      for (const call of calls) {
+        respond(call, "declined", { status: "declined", reason }, speak ? {} : { scheduling: "silent" });
+      }
     },
   });
 

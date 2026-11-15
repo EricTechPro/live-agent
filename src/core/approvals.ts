@@ -5,6 +5,7 @@
 //   approvals.openTurn();             // the user's next turn begins: it answers them
 //   approvals.hear("yes, go ahead");  // a yes runs them (true), anything else keeps listening
 //   approvals.closeTurn(true);        // the turn is over: the user spoke but said no yes -> declined
+//   approvals.answer("c1", true);     // the window's approve / deny card (ticket 28): one call by id
 //
 // Why "hear" can be called many times: a spoken answer arrives in pieces
 // ("Yes, " then "go ahead."), so the core feeds it the words so far. A typed
@@ -28,6 +29,12 @@ export interface Approvals {
   hear(words: string): boolean;
   /** The turn is over. If the user spoke without a yes, the calls are declined; else they keep waiting. */
   closeTurn(userSpoke: boolean, reason?: string): void;
+  /**
+   * The window's card answered one call by id: yes runs it, no declines it (and
+   * the model is told at once, so it says so). False if no call with that id is
+   * waiting (unknown, or already answered by voice, text or an earlier click).
+   */
+  answer(id: string, yes: boolean): boolean;
   /** The model took a call back: forget it. Returns it, if it was waiting. */
   drop(id: string): ToolCall | undefined;
   /** Forget every waiting call (the model is on a new connection). Returns them. */
@@ -35,10 +42,13 @@ export interface Approvals {
 }
 
 export interface ApprovalActions {
-  /** Run these calls: the user said yes. */
-  approve(calls: ToolCall[]): void;
-  /** Tell the model these calls will not run. */
-  decline(calls: ToolCall[], reason: string): void;
+  /** Run these calls: the user said yes (`reason` goes on the allow verdict). */
+  approve(calls: ToolCall[], reason?: string): void;
+  /**
+   * Tell the model these calls will not run. `speak`: the model answers it on its
+   * own (a click has no words of the user's to answer together with).
+   */
+  decline(calls: ToolCall[], reason: string, speak?: boolean): void;
 }
 
 export function createApprovals({ approve, decline }: ApprovalActions): Approvals {
@@ -63,6 +73,15 @@ export function createApprovals({ approve, decline }: ApprovalActions): Approval
       const unanswered = answering.splice(0);
       if (userSpoke) decline(unanswered, reason);
       else waiting.unshift(...unanswered);
+    },
+    answer(id, yes) {
+      const call = [...waiting, ...answering].find((c) => c.id === id);
+      if (!call) return false;
+      waiting = waiting.filter((c) => c.id !== id);
+      answering = answering.filter((c) => c.id !== id);
+      if (yes) approve([call], "the user approved in the window");
+      else decline([call], "the user declined in the window", true);
+      return true;
     },
     drop(id) {
       const call = [...waiting, ...answering].find((c) => c.id === id);

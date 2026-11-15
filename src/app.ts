@@ -299,11 +299,28 @@ export async function startApp(options: AppOptions): Promise<App> {
       },
     };
 
-    // The job board's cancel button (ticket 10): the one route with a value in its path.
+    // The job board's cancel button (ticket 10): a route with a value in its path.
     function cancelJob({ session }: Chat, id: string) {
       if (!session.jobs.list().some((job) => job.id === id)) return json({ error: `no job ${id}` }, 404);
       // false = it had already ended; the board already shows how.
       return json({ cancelled: session.jobs.cancel(id) });
+    }
+
+    // The approve / deny card (ticket 28): same as a spoken yes or no for that one call.
+    // Unknown or already answered (by voice, text or an earlier click): 404, nothing happens.
+    function answerCall({ session }: Chat, id: string, approve: boolean) {
+      if (!session.answer(id, approve)) return json({ error: `no call ${id} is waiting for an answer` }, 404);
+      return json({ answered: true, approve });
+    }
+
+    // Routes with a value in their path: POST /jobs/:id/cancel, POST /approvals/:id/approve|decline.
+    function pathRoute(req: Request, url: URL): Route | undefined {
+      if (req.method !== "POST") return undefined;
+      const cancel = url.pathname.match(/^\/jobs\/([^/]+)\/cancel$/);
+      if (cancel) return (chat) => cancelJob(chat, decodeURIComponent(cancel[1]!));
+      const answer = url.pathname.match(/^\/approvals\/([^/]+)\/(approve|decline)$/);
+      if (answer) return (chat) => answerCall(chat, decodeURIComponent(answer[1]!), answer[2] === "approve");
+      return undefined;
     }
 
     async function handle(req: Request, url: URL): Promise<Response> {
@@ -322,11 +339,10 @@ export async function startApp(options: AppOptions): Promise<App> {
       if (name === "POST /key") return takeKey(req);
       const setupRoute = setupRoutes[name];
       if (setupRoute) return setupRoute(req);
-      const route = routes[name];
-      const cancel = req.method === "POST" ? url.pathname.match(/^\/jobs\/([^/]+)\/cancel$/) : null;
-      if (!route && !cancel) return json({ error: "not found" }, 404);
+      const route = routes[name] ?? pathRoute(req, url);
+      if (!route) return json({ error: "not found" }, 404);
       if (!chat) return json({ error: "No Gemini key yet: paste it in the window." }, 503);
-      return route ? route(chat, req) : cancelJob(chat, decodeURIComponent(cancel![1]!));
+      return route(chat, req);
     }
 
     const server = Bun.serve({

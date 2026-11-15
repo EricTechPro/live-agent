@@ -219,3 +219,65 @@ describe("window commands: cancel a job, switch the mode", () => {
     expect((await fetch(`${cmd.url}/mode`)).status).toBe(401);
   });
 });
+
+describe("window commands: approve or decline a waiting call (ticket 28)", () => {
+  const made: string[] = [];
+  const touch = defineTool<{ name: string }>({
+    name: "touch_file",
+    description: "make a file",
+    risk: "edit",
+    parameters: { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
+    run: ({ name }) => {
+      made.push(name);
+      return { made: name };
+    },
+  });
+  let gate: App;
+  beforeAll(async () => {
+    gate = await startApp({
+      model: scriptedModel([
+        [{ type: "tool.call", id: "c1", name: "touch_file", args: { name: "a.md" } }],
+        [{ type: "text", text: "May I?" }],
+        [{ type: "text", text: "Made it." }],
+        [{ type: "tool.call", id: "c2", name: "touch_file", args: { name: "b.md" } }],
+        [{ type: "text", text: "May I?" }],
+        [{ type: "text", text: "Okay, I won't." }],
+      ]),
+      livekitPort: await freeLiveKitPort(),
+      tools: [touch],
+      mode: "ask-me",
+    });
+  });
+  afterAll(() => gate.stop());
+  const post = (path: string, token = gate.launchToken) =>
+    fetch(`${gate.url}${path}`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+  const say = (text: string) =>
+    fetch(`${gate.url}/text`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${gate.launchToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+
+  test("POST /approvals/:id/approve runs the call; answered or unknown ids are a 404", async () => {
+    await say("make a.md");
+    expect((await post("/approvals/nope/approve")).status).toBe(404);
+    const res = await post("/approvals/c1/approve");
+    expect(await res.json()).toEqual({ answered: true, approve: true });
+    for (let i = 0; i < 100 && !made.length; i++) await Bun.sleep(20);
+    expect(made).toEqual(["a.md"]);
+    expect((await post("/approvals/c1/decline")).status).toBe(404);
+  });
+
+  test("POST /approvals/:id/decline declines it; nothing runs", async () => {
+    await Bun.sleep(100); // let "Made it." finish its turn
+    await say("make b.md");
+    const res = await post("/approvals/c2/decline");
+    expect(await res.json()).toEqual({ answered: true, approve: false });
+    expect(made).toEqual(["a.md"]);
+    expect((await post("/approvals/c2/approve")).status).toBe(404);
+  });
+
+  test("the approval routes need the per-launch token", async () => {
+    expect((await post("/approvals/c1/approve", "guess")).status).toBe(401);
+  });
+});

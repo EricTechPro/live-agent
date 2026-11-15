@@ -92,6 +92,13 @@ export interface AgentSession {
    * job board's cancel button), list them. State changes arrive as `job.state` events.
    */
   jobs: Pick<Jobs, "submit" | "cancel" | "list">;
+  /**
+   * The window's approve / deny card (ticket 28): answer one call the gate asked
+   * about, by its id. Yes: a `safety.verdict` allow, then it runs. No: a
+   * `tool.result` declined, and the model says so. Returns false (and does
+   * nothing) if no call with that id is waiting, e.g. it was already answered.
+   */
+  answer(id: string, approve: boolean): boolean;
   /** The safety mode the gate uses right now. */
   mode(): SafetyMode;
   /**
@@ -446,6 +453,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       return () => audioListeners.delete(listener);
     },
     jobs: { submit: jobs.submit, cancel: jobs.cancel, list: jobs.list },
+    answer: (id, approve) => !closed && approvals.answer(id, approve),
     mode: () => mode,
     setMode,
     cycleMode() {
