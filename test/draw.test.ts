@@ -87,9 +87,12 @@ const bad: [string, unknown, string][] = [
     [{ say: "a", marks: [{ kind: "check", id: "p1", x: 10, y: 10 }] }, { say: "b", marks: [{ kind: "cross", id: "p1", x: 20, y: 20 }] }],
     "p1 is used twice",
   ],
-  ["off the board", [{ say: "x", marks: [{ kind: "box", id: "p1", x: 900, y: 10, w: 200, h: 50 }] }], "off the board"],
-  ["negative coordinate", [{ say: "x", marks: [{ kind: "text", id: "p1", x: -5, y: 10, text: "hi" }] }], "x"],
-  ["ring off the board", [{ say: "x", marks: [{ kind: "circle", id: "p1", x: 20, y: 300, r: 50 }] }], "off the board"],
+  ["loose mark with no place", [{ say: "x", marks: [{ kind: "circle", id: "p1", r: 50 }] }], "give on (a card id) or x, y"],
+  ["ink on a card that is not there", [{ say: "x", marks: [{ kind: "circle", id: "p1", on: "p9" }] }], "p9, which is not a card"],
+  ["arrow with no ends", [{ say: "x", marks: [{ kind: "arrow", id: "p1", on: "p2" }] }], "to_card"],
+  ["timeline with one item", [{ say: "x", marks: [{ kind: "timeline", id: "p1", items: [{ label: "1901" }] }] }], "at least 2"],
+  ["bar with no value", [{ say: "x", marks: [{ kind: "bars", id: "p1", items: [{ label: "a" }] }] }], "value"],
+  ["table with one column", [{ say: "x", marks: [{ kind: "table", id: "p1", columns: ["a"], items: [{ label: "r" }] }] }], "2 to 4 columns"],
   ["no beats", [], "beat"],
   ["empty say", [{ say: " ", marks: [{ kind: "check", id: "p1", x: 10, y: 10 }] }], "say"],
 ];
@@ -103,6 +106,37 @@ for (const [name, args, hint] of bad) {
     expect(result.error).toContain(hint);
   });
 }
+
+test("board hints are rough: off-board or negative coordinates are clamped, never refused (layout places things)", async () => {
+  const events = await oneCall([{ say: "x", marks: [
+    { kind: "box", id: "p1", x: 900, y: 10, w: 200, h: 50 },
+    { kind: "text", id: "p2", x: -5, y: 10, text: "hi" },
+    { kind: "circle", id: "p3", x: 20, y: 300, r: 50 },
+  ] }]);
+  const [b] = beats(events);
+  expect(b!.marks[0]).toMatchObject({ x: 900, w: 200 });
+  expect(b!.marks[1]).toMatchObject({ x: 0 });
+});
+
+test("cards carry content only, and ink can sit on a card drawn earlier in the same call", async () => {
+  const events = await oneCall([
+    { say: "First the life.", marks: [{ kind: "timeline", id: "p1", title: "timeline", items: [{ label: "1901", note: "Born" }, { label: "1948", note: "Killed" }] }] },
+    { say: "Then the legacy.", marks: [
+      { kind: "list", id: "p2", title: "his legacy", heading: "Union leader", items: [{ label: "Higher wages" }, { label: "Paid leave" }] },
+      { kind: "circle", id: "p3", on: "p2", item: 1 },
+      { kind: "arrow", id: "p4", on: "p1", to_card: "p2" },
+    ] },
+  ]);
+  expect(beats(events).flatMap((b) => b.marks.map((m) => m.kind))).toEqual(["timeline", "list", "circle", "arrow"]);
+  expect(events).toContainEqual(expect.objectContaining({ type: "tool.result", id: "d1", status: "ok" }));
+});
+
+test("the draw tool tells the model to pick card kinds, not coordinates", () => {
+  const tool = tools.find((t) => t.name === "draw")!;
+  expect(tool.description).toContain("pick a card kind");
+  const schema = JSON.stringify(tool.parameters);
+  for (const k of ["timeline", "list", "flow", "bars", "table", "diagram", "to_card", "items"]) expect(schema).toContain(`"${k}"`);
+});
 
 test("ids stay unique on the canvas across calls; a new chat starts a clean board", async () => {
   const mark = { kind: "check", id: "p1", x: 10, y: 10 };

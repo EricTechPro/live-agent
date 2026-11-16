@@ -109,7 +109,7 @@ const refused: [string, Record<string, unknown>, string][] = [
   ["nothing to change", { edits: [{ id: "p2" }] }, "nothing to change"],
   ["no edits and no erase", {}, "edits or erase"],
   ["a label on a mark that has none", { edits: [{ id: "p4", label: "ok" }] }, "p4 is a check: it has no label"],
-  ["a move off the board", { edits: [{ id: "p2", x: 900 }] }, "off the board"],
+  ["an unknown id given as the only edit", { edits: [{ id: "p5", label: "x" }] }, "p5 is not on the canvas"],
   ["a colour that is not a pen", { edits: [{ id: "p2", color: "pink" }] }, "color"],
 ];
 

@@ -39,7 +39,6 @@ test("draw accepts a diagram mark and emits it in canvas.beat, source and title 
 const bad: [string, Record<string, unknown>, string][] = [
   ["empty source", { ...card, source: "  " }, "source"],
   ["no source", { ...card, source: undefined }, "source"],
-  ["off the board", { ...card, x: 700 }, "off the board"],
   ["too small to read", { ...card, w: 40, h: 30 }, "w"],
 ];
 for (const [name, mark, hint] of bad) {
@@ -59,18 +58,21 @@ test("the draw schema stays flat and lists the diagram fields", () => {
   expect(schema).toContain('"title"');
 });
 
-test("edit_canvas can retitle, recolour and move a diagram card", async () => {
+test("edit_canvas can retitle and recolour a diagram card; moving a card is refused (the window places cards)", async () => {
   const s = await startSession({
     model: scriptedModel([
       [call("d1", "draw", { beats: [{ say: "Here.", marks: [card] }] })], [{ type: "text", text: "ok" }],
-      [call("e1", "edit_canvas", { edits: [{ id: "p1", label: "The flow", color: "blue", x: 300 }] })], [{ type: "text", text: "ok" }],
+      [call("e1", "edit_canvas", { edits: [{ id: "p1", label: "The flow", color: "blue" }] })], [{ type: "text", text: "ok" }],
+      [call("e2", "edit_canvas", { edits: [{ id: "p1", x: 300 }] })], [{ type: "text", text: "ok" }],
     ]),
     tools, mode: "bypass", chatEndNote: false,
   });
   await s.sendText("draw");
   const events = await s.sendText("retitle it");
   const edit = events.find((e): e is EventOf<"canvas.edit"> => e.type === "canvas.edit")!;
-  expect(edit.mark).toEqual({ ...card, title: "The flow", color: "blue", x: 300 } as Mark);
+  expect(edit.mark).toEqual({ ...card, title: "The flow", color: "blue" } as Mark);
+  const moved = await s.sendText("move it");
+  expect(result(moved, "e2")).toMatchObject({ status: "error", error: expect.stringContaining("placed for you") });
   await s.close();
 });
 

@@ -1,13 +1,18 @@
-// The sketch canvas's marks (ticket 31): small shapes on a fixed virtual board.
+// The sketch canvas's marks (tickets 31, 35; drawing v2): what the model may draw.
 //
 //   const beats = parseBeats(args.beats);   // throws a plain message on any bad mark
 //   for (const beat of beats) emit({ type: "canvas.beat", ... });
 //
-// Why Zod: marks come from the model, and the window draws them as-is. Every
-// mark is checked here (kind, id, coordinates on the board), so a bad call is
-// a tool error the model hears and nothing half-drawn reaches the window.
-// Why a fixed board: the model thinks in one coordinate space, the window
-// scales it to whatever size the Canvas tab has.
+// Why Zod: marks come from the model. Every mark is checked here (kind, id,
+// content sizes), so a bad call is a tool error the model hears and nothing
+// half-drawn reaches the window.
+//
+// Drawing v2: the model says WHAT to show, code decides WHERE. Cards (timeline,
+// list, flow, bars, table, diagram) carry content only; the window lays them out
+// in columns with no overlap (app/src/layout.ts). Free-ink marks (circle, arrow,
+// check ...) either sit `on` a card (and an `item` of it) or carry x / y on the
+// 1000 x 600 board as rough hints. Hints are clamped onto the board, never
+// refused: the layout pass moves things anyway.
 import { z } from "zod";
 
 export const BOARD = { width: 1000, height: 600 } as const;
@@ -15,48 +20,96 @@ export const BOARD = { width: 1000, height: 600 } as const;
 /** Colours a mark may use. "ink" is the default pen. */
 export const COLORS = ["ink", "red", "blue", "green", "orange", "purple"] as const;
 
-const X = z.number().min(0).max(BOARD.width);
-const Y = z.number().min(0).max(BOARD.height);
+const clampTo = (max: number) => z.number().transform((v) => Math.min(max, Math.max(0, v)));
+const X = clampTo(BOARD.width);
+const Y = clampTo(BOARD.height);
 const point = z.object({ x: X, y: Y });
 const id = z.string().regex(/^p[1-9]\d*$/, "ids look like p1, p2, p3");
 const color = z.enum(COLORS).optional();
 const label = z.string().trim().min(1).max(60).optional();
+const size = (max: number) => z.number().positive().transform((v) => Math.min(max, v));
 
-const box = z.object({ kind: z.literal("box"), id, x: X, y: Y, w: z.number().positive(), h: z.number().positive(), label, color });
-const text = z.object({ kind: z.literal("text"), id, x: X, y: Y, text: z.string().trim().min(1).max(80), size: z.number().min(8).max(96).optional(), color });
-const arrow = z.object({ kind: z.literal("arrow"), id, from: point, to: point, label, color });
-const line = z.object({ kind: z.literal("line"), id, from: point, to: point, color });
-const circle = z.object({ kind: z.literal("circle"), id, x: X, y: Y, r: z.number().positive(), color });
-const underline = z.object({ kind: z.literal("underline"), id, x: X, y: Y, w: z.number().positive(), color });
-const check = z.object({ kind: z.literal("check"), id, x: X, y: Y, size: z.number().positive().max(200).optional(), color });
-const cross = z.object({ kind: z.literal("cross"), id, x: X, y: Y, size: z.number().positive().max(200).optional(), color });
-const step = z.object({ kind: z.literal("step"), id, x: X, y: Y, n: z.number().int().min(1).max(99), label, color });
+/** Where a free-ink mark goes: on a card (by id), optionally on one of its items (1 = first). */
+const on = id.optional();
+const item = z.number().int().min(1).max(12).optional();
+const target = { on, item };
 
-// A Mermaid card (ticket 35): the old draw_diagram, as a mark placed on the board.
-// The window renders the source (bundled Mermaid, strict) and shows parse errors in the card.
+const box = z.object({ kind: z.literal("box"), id, x: X.optional(), y: Y.optional(), w: size(BOARD.width).optional(), h: size(BOARD.height).optional(), label, color, ...target });
+const text = z.object({ kind: z.literal("text"), id, x: X.optional(), y: Y.optional(), text: z.string().trim().min(1).max(80), size: z.number().min(8).max(96).optional(), color, ...target });
+const arrow = z.object({ kind: z.literal("arrow"), id, from: point.optional(), to: point.optional(), label, color, on, to_card: id.optional() });
+const line = z.object({ kind: z.literal("line"), id, from: point.optional(), to: point.optional(), color, on, to_card: id.optional() });
+const circle = z.object({ kind: z.literal("circle"), id, x: X.optional(), y: Y.optional(), r: size(BOARD.height / 2).optional(), color, ...target });
+const underline = z.object({ kind: z.literal("underline"), id, x: X.optional(), y: Y.optional(), w: size(BOARD.width).optional(), color, ...target });
+const check = z.object({ kind: z.literal("check"), id, x: X.optional(), y: Y.optional(), size: size(200).optional(), color, ...target });
+const cross = z.object({ kind: z.literal("cross"), id, x: X.optional(), y: Y.optional(), size: size(200).optional(), color, ...target });
+const step = z.object({ kind: z.literal("step"), id, x: X.optional(), y: Y.optional(), n: z.number().int().min(1).max(99), label, color, ...target });
+
+// ---- cards (drawing v2): content only, placed by the window ----------------------
+
+const title = z.string().trim().min(1).max(40).optional();
+const words = (max: number) => z.string().trim().min(1).max(max);
+/** One entry of a card: a timeline event, a list line, a flow step, a bar or a table row. */
+const entry = z.object({
+  label: words(60),
+  note: words(90).optional(),
+  value: z.number().finite().optional(),
+  cells: z.array(z.string().trim().max(40)).max(4).optional(),
+});
+const entries = (min: number, max: number, what: string) =>
+  z.array(entry).min(min, `a ${what} needs at least ${min} items`).max(max, `a ${what} takes at most ${max} items`);
+
+const timeline = z.object({ kind: z.literal("timeline"), id, title, items: entries(2, 8, "timeline"), color });
+const list = z.object({ kind: z.literal("list"), id, title, heading: words(60).optional(), numbered: z.boolean().optional(), items: entries(1, 8, "list"), color });
+const flow = z.object({ kind: z.literal("flow"), id, title, items: entries(2, 6, "flow"), color });
+const bars = z.object({ kind: z.literal("bars"), id, title, unit: z.string().trim().max(8).optional(), items: entries(1, 8, "bar chart"), color })
+  .superRefine((m, ctx) => {
+    m.items.forEach((it, i) => {
+      if (it.value === undefined || it.value < 0) ctx.addIssue({ code: "custom", path: ["items", i, "value"], message: "every bar needs a value of 0 or more" });
+    });
+  });
+const table = z.object({ kind: z.literal("table"), id, title, columns: z.array(words(24)).min(2, "a table needs 2 to 4 columns").max(4, "a table needs 2 to 4 columns"), items: entries(1, 8, "table"), color });
+
+// A Mermaid card (ticket 35). x / y / w / h are old hints, kept so older calls still parse.
 const diagram = z.object({
-  kind: z.literal("diagram"), id, x: X, y: Y,
-  w: z.number().min(120, "a diagram card is at least 120 wide").max(BOARD.width),
-  h: z.number().min(80, "a diagram card is at least 80 tall").max(BOARD.height),
+  kind: z.literal("diagram"), id, x: X.optional(), y: Y.optional(),
+  w: z.number().min(120, "a diagram card is at least 120 wide").max(BOARD.width).optional(),
+  h: z.number().min(80, "a diagram card is at least 80 tall").max(BOARD.height).optional(),
   source: z.string({ message: "source is the Mermaid diagram" }).trim().min(1, "source is empty: send Mermaid source").max(4000),
-  title: z.string().trim().min(1).max(60).optional(),
+  title,
   color,
 });
 
+const NEEDS_SPOT: Record<string, string[]> = {
+  box: ["x", "y", "w", "h"], text: ["x", "y"], circle: ["x", "y", "r"], underline: ["x", "y", "w"],
+  check: ["x", "y"], cross: ["x", "y"], step: ["x", "y"],
+};
+
 const mark = z
-  .discriminatedUnion("kind", [box, text, arrow, line, circle, underline, check, cross, step, diagram])
+  .discriminatedUnion("kind", [box, text, arrow, line, circle, underline, check, cross, step, diagram, timeline, list, flow, bars, table])
   .superRefine((m, ctx) => {
-    // Shapes with a size must fit on the board too, not only their corner.
-    const off =
-      ((m.kind === "box" || m.kind === "diagram") && (m.x + m.w > BOARD.width || m.y + m.h > BOARD.height)) ||
-      (m.kind === "circle" && (m.x - m.r < 0 || m.y - m.r < 0 || m.x + m.r > BOARD.width || m.y + m.r > BOARD.height)) ||
-      (m.kind === "underline" && m.x + m.w > BOARD.width);
-    if (off) ctx.addIssue({ code: "custom", message: `${m.id} goes off the board (${BOARD.width} x ${BOARD.height})` });
+    // A free mark needs a place: a card to sit on, or board hints.
+    const r = m as Record<string, unknown>;
+    if (m.kind === "arrow" || m.kind === "line") {
+      if (!(m.on && m.to_card) && !(m.from && m.to))
+        ctx.addIssue({ code: "custom", message: `${m.id}: give on + to_card (card ids) or from + to (board points)` });
+      return;
+    }
+    const need = NEEDS_SPOT[m.kind];
+    if (!need || r.on) return;
+    const missing = need.filter((k) => r[k] === undefined);
+    if (missing.length) ctx.addIssue({ code: "custom", message: `${m.id}: give on (a card id) or ${missing.join(", ")}` });
   });
 
-export const MARK_KINDS = ["box", "text", "arrow", "line", "circle", "underline", "check", "cross", "step", "diagram"] as const;
+export const CARD_KINDS = ["timeline", "list", "flow", "bars", "table", "diagram"] as const;
+export const INK_KINDS = ["box", "text", "arrow", "line", "circle", "underline", "check", "cross", "step"] as const;
+export const MARK_KINDS = [...CARD_KINDS, ...INK_KINDS] as const;
 export const MAX_BEATS = 8;
 export const MAX_MARKS_PER_BEAT = 12;
+/** Cards on screen at once; the window closes the oldest to make room. */
+export const MAX_CARDS = 4;
+
+export type CardKind = (typeof CARD_KINDS)[number];
+export const isCard = (m: { kind: string }): boolean => (CARD_KINDS as readonly string[]).includes(m.kind);
 
 const beat = z.object({ say: z.string().trim().min(1, "say is empty"), marks: z.array(mark).min(1).max(MAX_MARKS_PER_BEAT) });
 const beats = z
@@ -116,31 +169,33 @@ export function parseEdits(input: unknown): { edits: MarkEdit[]; erase: string[]
   return { edits: result.data.edits ?? [], erase: erase.some((e) => e.toLowerCase() === "all") ? "all" : erase };
 }
 
-const onBoard = (p: { x: number; y: number }) => p.x >= 0 && p.y >= 0 && p.x <= BOARD.width && p.y <= BOARD.height;
+
+const r = (m: Mark) => m as Record<string, unknown>;
 
 /**
- * The mark with one change applied, checked again (it must still fit the board).
- * A move puts the mark's anchor at x / y: a box's corner, a ring's centre, an
- * arrow's or line's start (its end moves with it). `label` is the words of a
- * text mark, the title of a diagram card, and the label of a box, arrow or step. Throws a plain message.
+ * The mark with one change applied, checked again.
+ * A move puts a loose mark's anchor hint at x / y: a box's corner, a ring's centre, an
+ * arrow's or line's start (its end moves with it). Cards and marks on cards are placed
+ * by the window, so they refuse a move. `label` is the words of a text mark, the title
+ * of a card, and the label of a box, arrow or step. Throws a plain message.
  */
 export function applyEdit(m: Mark, change: MarkChange): Mark {
   const next: Record<string, unknown> = { ...m };
   if (change.color) next.color = change.color;
   if (change.label !== undefined) {
     if (m.kind === "text") next.text = change.label;
-    else if (m.kind === "diagram") next.title = change.label;
+    else if (isCard(m)) next.title = change.label;
     else if (m.kind === "box" || m.kind === "arrow" || m.kind === "step") next.label = change.label;
     else throw new Error(`${m.id} is a ${m.kind}: it has no label`);
   }
   if (change.x !== undefined || change.y !== undefined) {
-    if (m.kind === "arrow" || m.kind === "line") {
+    if (isCard(m) || r(m).on) {
+      throw new Error(`${m.id} is placed for you (cards and marks on cards never overlap): it cannot be moved by x / y`);
+    } else if (m.kind === "arrow" || m.kind === "line") {
+      if (!m.from || !m.to) throw new Error(`${m.id} joins two cards: it cannot be moved by x / y`);
       const dx = (change.x ?? m.from.x) - m.from.x;
       const dy = (change.y ?? m.from.y) - m.from.y;
-      const from = { x: m.from.x + dx, y: m.from.y + dy };
-      const to = { x: m.to.x + dx, y: m.to.y + dy };
-      if (!onBoard(from) || !onBoard(to)) throw new Error(`${m.id} goes off the board (${BOARD.width} x ${BOARD.height})`);
-      Object.assign(next, { from, to });
+      Object.assign(next, { from: { x: m.from.x + dx, y: m.from.y + dy }, to: { x: m.to.x + dx, y: m.to.y + dy } });
     } else {
       if (change.x !== undefined) next.x = change.x;
       if (change.y !== undefined) next.y = change.y;

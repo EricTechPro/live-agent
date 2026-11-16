@@ -6,7 +6,7 @@
 // Risk class "read": it changes nothing on disk. Like every tool it runs
 // NON_BLOCKING, so the voice keeps talking while the window draws.
 // Idea from Roamies (AGPL): idea only, no code.
-import { BOARD, COLORS, MARK_KINDS, MAX_BEATS, MAX_MARKS_PER_BEAT, parseBeats } from "../src/core/canvas.ts";
+import { COLORS, MARK_KINDS, MAX_BEATS, MAX_CARDS, MAX_MARKS_PER_BEAT, parseBeats } from "../src/core/canvas.ts";
 import { defineTool } from "../src/core/tool.ts";
 
 const num = (description: string) => ({ type: "number", description });
@@ -19,6 +19,8 @@ const point = (description: string) => ({
 
 // One flat mark schema (Gemini Live takes a plain OpenAPI subset, no oneOf).
 // Which fields a kind needs is in the descriptions; Zod checks it for real.
+// Drawing v2: cards carry content only and the window places them (no overlap,
+// ever); free-ink marks sit on a card or carry rough board hints.
 const markSchema = {
   type: "object",
   properties: {
@@ -26,25 +28,52 @@ const markSchema = {
       type: "string",
       enum: [...MARK_KINDS],
       description:
-        "box: x,y (top-left), w,h, label. text: x,y, text. arrow / line: from, to (arrow may have a label). " +
-        "circle: a ring at x,y (centre) with radius r. underline: x,y, w. check / cross: x,y (centre), size. " +
-        "step: a numbered dot at x,y with n and a label. " +
-        "diagram: a Mermaid card at x,y (top-left), w,h, with source and an optional title, for flows or structures with many parts.",
+        "CARDS (prefer these; the app places them, never give coordinates): " +
+        "timeline: items in time order (label = year or event, note = a few words). " +
+        "list: items (label each line), optional heading, numbered=true for steps. " +
+        "flow: 2 to 6 items, each one step of a process, drawn as boxes joined by arrows. " +
+        "bars: items with label and value (and an optional unit) for a quick comparison. " +
+        "table: columns (2 to 4 headers) and items whose cells are the row's values. " +
+        "diagram: Mermaid source for a structure with branches. " +
+        "INK (to point things out): circle, underline, check, cross, box, step: put on a card id, and item (1 = first) to mark one line of it. " +
+        "arrow: on = the card it starts at, to_card = the card it points at, label optional. " +
+        "Only for a loose sketch with no card: x,y on the 1000 x 600 board as rough hints (box: x,y,w,h; circle: x,y,r; arrow/line: from,to; text: x,y,text).",
     },
     id: { type: "string", description: "p1, p2, p3 ... unique on the canvas; later turns refer to it." },
-    x: num("Left edge (box) or centre, 0 to 1000."),
-    y: num("Top edge (box) or centre, 0 to 600."),
-    w: num("Width (box, underline, diagram)."),
-    h: num("Height (box, diagram)."),
-    r: num("Radius (circle)."),
+    title: { type: "string", description: "Cards: one to three words, e.g. 'timeline', 'his legacy', 'how it works'." },
+    items: {
+      type: "array",
+      description: "Cards: the entries (timeline events, list lines, flow steps, bars, table rows). Short words, at most 8.",
+      items: {
+        type: "object",
+        properties: {
+          label: { type: "string", description: "The main words, one to five." },
+          note: { type: "string", description: "Optional second line, a few words (timeline, list)." },
+          value: { type: "number", description: "bars: the number." },
+          cells: { type: "array", items: { type: "string" }, description: "table: the row's values, one per column." },
+        },
+        required: ["label"],
+      },
+    },
+    heading: { type: "string", description: "list: an optional bigger first line." },
+    numbered: { type: "boolean", description: "list: true numbers the lines (steps)." },
+    unit: { type: "string", description: "bars: unit after each value, e.g. %, ms." },
+    columns: { type: "array", items: { type: "string" }, description: "table: 2 to 4 column headers." },
+    source: { type: "string", description: "diagram: Mermaid source, e.g. 'flowchart LR' with short labels, about 15 nodes at most." },
+    on: { type: "string", description: "Ink: the card id this mark sits on (or an arrow starts at)." },
+    item: { type: "integer", description: "Ink on a card: which item it marks, 1 = first." },
+    to_card: { type: "string", description: "arrow / line: the card id it points at." },
+    x: num("Loose sketch only: rough x hint, 0 to 1000."),
+    y: num("Loose sketch only: rough y hint, 0 to 600."),
+    w: num("Loose sketch only: width (box, underline)."),
+    h: num("Loose sketch only: height (box)."),
+    r: num("Loose sketch only: radius (circle)."),
     size: num("Size (check, cross, text font size)."),
     n: { type: "integer", description: "The step number (step)." },
     text: { type: "string", description: "The words (text). Short." },
     label: { type: "string", description: "A short label (box, arrow, step). One to four words." },
-    from: point("Start (arrow, line)."),
-    to: point("End (arrow, line)."),
-    source: { type: "string", description: "Mermaid source (diagram), e.g. 'flowchart LR' with short labels, about 15 nodes at most." },
-    title: { type: "string", description: "Two to five words naming the diagram (diagram)." },
+    from: point("Loose sketch only: start (arrow, line)."),
+    to: point("Loose sketch only: end (arrow, line)."),
     color: { type: "string", enum: [...COLORS], description: "Pen colour. Default ink." },
   },
   required: ["kind", "id"],
@@ -53,7 +82,10 @@ const markSchema = {
 export default defineTool<{ beats: unknown }>({
   name: "draw",
   description:
-    `Sketch on the user's canvas while you talk. The board is ${BOARD.width} wide and ${BOARD.height} tall (x right, y down). ` +
+    "Explain visually while you talk: cards float on the user's screen and the app lays them out (never overlapping), " +
+    "so pick a card kind and give its content, not coordinates. " +
+    "Usually one card per beat (a timeline, then a list ...), with circle / underline / check / arrow marks on cards to point things out. " +
+    `At most ${MAX_CARDS} cards stay up; older ones close. ` +
     "Send beats: each beat is one short line you say plus the marks drawn while you say it. " +
     `Keep it to a few marks per beat (at most ${MAX_MARKS_PER_BEAT}) and at most ${MAX_BEATS} beats. ` +
     "Give every mark a new id (p1, p2, ...). Say the beats' lines out loud in order; do not read the marks.",

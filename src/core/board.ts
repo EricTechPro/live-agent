@@ -17,7 +17,7 @@
 // core already has for the voice (Gemini Live's output transcription arrives
 // as the words are spoken). A line counts as started once its first few words
 // are heard. The window paces the pen to these signals (app/src/pen.ts).
-import { applyEdit, type Beat, type Mark, type MarkChange, type MarkEdit } from "./canvas.ts";
+import { applyEdit, isCard, type Beat, type Mark, type MarkChange, type MarkEdit } from "./canvas.ts";
 import type { AgentEvent } from "./events.ts";
 
 export interface CanvasChange {
@@ -78,6 +78,16 @@ export function createBoard(emit: (event: AgentEvent) => void): Board {
             `(the canvas has ${[...marks.keys()].join(", ")}).`,
         );
       }
+      // Ink placed on a card needs that card: drawn earlier in this call or already on the canvas.
+      const cards = new Set([...marks.values()].filter(isCard).map((m) => m.id));
+      const missing: string[] = [];
+      for (const b of beats)
+        for (const m of b.marks) {
+          if (isCard(m)) cards.add(m.id);
+          const r = m as { on?: string; to_card?: string };
+          for (const ref of [r.on, r.to_card]) if (ref && !cards.has(ref)) missing.push(`${m.id} is on ${ref}, which is not a card drawn before it`);
+        }
+      if (missing.length) throw new Error(`Nothing was drawn. ${missing.slice(0, 3).join("; ")}.`);
       for (const b of beats) for (const m of b.marks) marks.set(m.id, m);
       beats.forEach(({ say, marks: drawn }, beat) => emit({ type: "canvas.beat", id: callId, beat, say, marks: drawn }));
       if (!pending.length) heard = "";
