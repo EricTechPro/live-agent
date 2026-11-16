@@ -393,8 +393,16 @@ fn add_tray(app: &tauri::App) -> tauri::Result<()> {
     let menu = Menu::with_items(app, &[&open, &new_chat, &toggle, &shortcuts, &quit_item])?;
     *app.state::<TrayToggle>().0.lock().unwrap() = Some(toggle.clone());
     let mut tray = TrayIconBuilder::with_id("jett").tooltip("Jett").menu(&menu).show_menu_on_left_click(false);
-    if let Some(icon) = app.default_window_icon() {
-        tray = tray.icon(icon.clone());
+    // Ticket 40: Jett's own menu-bar icon, a ring of dots and the wave in black on
+    // transparent (app/scripts/make-icon.ts). As a template image macOS paints it to suit
+    // a light or a dark menu bar. 36 px is the @2x of the 18 pt menu-bar size.
+    match tauri::image::Image::from_bytes(include_bytes!("../icons/tray-template@2x.png")) {
+        Ok(icon) => tray = tray.icon(icon).icon_as_template(true),
+        Err(_) => {
+            if let Some(icon) = app.default_window_icon() {
+                tray = tray.icon(icon.clone());
+            }
+        }
     }
     tray.on_menu_event(|app, event| match event.id.as_ref() {
         "open" => open_panel(app),
