@@ -6,7 +6,7 @@
 // Risk class "read": it changes nothing on disk. Like every tool it runs
 // NON_BLOCKING, so the voice keeps talking while the window draws.
 // Idea from Roamies (AGPL): idea only, no code.
-import { COLORS, MARK_KINDS, MAX_BEATS, MAX_CARDS, MAX_MARKS_PER_BEAT, parseBeats } from "../src/core/canvas.ts";
+import { CARD_SIZES, COLORS, MARK_KINDS, MAX_BEATS, MAX_CARDS, MAX_MARKS_PER_BEAT, parseBeats } from "../src/core/canvas.ts";
 import { defineTool } from "../src/core/tool.ts";
 
 const num = (description: string) => ({ type: "number", description });
@@ -75,6 +75,11 @@ const markSchema = {
     from: point("Loose sketch only: start (arrow, line)."),
     to: point("Loose sketch only: end (arrow, line)."),
     color: { type: "string", enum: [...COLORS], description: "Pen colour. Default ink." },
+    card_size: {
+      type: "string",
+      enum: [...CARD_SIZES],
+      description: "Cards only, optional: how big it opens. normal is the default; large for a card the user should read closely; full fills the screen (the user presses Esc to restore it), only when asked to show something big.",
+    },
   },
   required: ["kind", "id"],
 };
