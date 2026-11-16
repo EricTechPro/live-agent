@@ -289,6 +289,12 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
             audio: { data: bytes.toString("base64"), mimeType: `audio/pcm;rate=${sampleRate}` },
           });
         },
+        sendImage(data, mimeType) {
+          // Screen awareness: a screenshot goes in as one video frame. Live takes frames on
+          // its realtime video input and treats them as what it sees right now.
+          const base64 = Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString("base64");
+          send((socket) => socket.sendRealtimeInput({ video: { data: base64, mimeType } }));
+        },
         sendToolResponse({ id, name, response, scheduling, willContinue }) {
           // The connection that asked gets the answer; if it is gone, so is the call.
           const link = callLink.get(id) ?? live;

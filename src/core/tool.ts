@@ -50,6 +50,11 @@ export interface ToolContext {
   jobs?: Pick<Jobs, "submit" | "cancel" | "list">;
   /** Helper settings: which helpers are on (config `helpers`) and where their CLIs are. */
   helpers?: HelperSettings;
+  /**
+   * Jett's eyes (src/screen): `look` sends one screenshot of the screen into the model and
+   * answers with what it is. Missing when the session has no eyes (tests, non-macOS).
+   */
+  screen?: { look(): Promise<Record<string, unknown>> };
 }
 
 export interface HelperSettings extends HelperPaths {

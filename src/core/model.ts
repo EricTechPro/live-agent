@@ -69,6 +69,8 @@ export interface ToolResponse {
 export type ModelInput =
   | { type: "text"; text: string }
   | { type: "audio"; data: Int16Array; sampleRate: number }
+  /** A still image (a screenshot) for the model to see; it answers the text that comes with it. */
+  | { type: "image"; data: Uint8Array; mimeType: string }
   | ({ type: "tool.response" } & ToolResponse);
 
 /** What the model is told about a tool, so it knows it can call it. */
@@ -88,6 +90,12 @@ export interface ModelSession {
    * There is no "end of turn" call: the model hears when the user stops talking.
    */
   sendAudio(data: Int16Array, sampleRate: number): void;
+  /**
+   * Show the model a still image (a JPEG screenshot). It gets no reply of its own: the text
+   * or tool answer sent right after it is what the model answers. Optional: a model without
+   * eyes leaves it out.
+   */
+  sendImage?(data: Uint8Array, mimeType: string): void;
   /** Answer a `tool.call`. Replies (if any) arrive through `onEvent`. */
   sendToolResponse(response: ToolResponse): void;
   /** No network (ticket 40): stop waiting out the backoff and try to connect now. */

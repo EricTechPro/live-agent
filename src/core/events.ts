@@ -11,6 +11,7 @@ import type { Mark, MarkChange } from "./canvas.ts";
 import type { JobInfo } from "./jobs.ts";
 import type { SafetyMode, Verdict } from "./safety.ts";
 import type { RiskClass } from "./tool.ts";
+import type { ShotMap } from "../screen/geometry.ts";
 
 export type AgentEvent =
   /** Something said in the chat. Model text arrives in chunks: join them in order. */
@@ -100,6 +101,14 @@ export type AgentEvent =
    */
   | { type: "connection"; state: "reconnecting"; attempt: number; retryInMs: number; message: string }
   | { type: "connection"; state: "connected" }
+  /**
+   * Screen awareness: a screenshot went into the model. `look` = the model asked to see the
+   * screen; `circle` = the user circled something while holding Ctrl+Option (`text` says where).
+   * `map` turns the shot's pixels back into global screen points.
+   */
+  | { type: "screen.shot"; reason: "look" | "circle"; width: number; height: number; map: ShotMap; text?: string }
+  /** Screen Recording is off: Jett cannot see. The window shows how to turn it on. */
+  | { type: "screen.permission"; granted: boolean; message?: string }
   /** The model finished its reply. `reply` is the whole reply, joined for you. */
   | { type: "turn.done"; reply: string }
   /** Something went wrong in the session. The session may still be usable. */

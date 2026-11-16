@@ -41,6 +41,11 @@
 //   GET  /brain/file?path=wiki/x.md -> { path, text }: one note, read only. 400 for anything
 //                     outside the three part folders (.., absolute, a symlink out), 404 when gone
 //   GET  /brain/chats -> { chats: [{ path, title, date }] }: past chats (chat-end notes in raw), newest first
+//   Screen awareness (needs `eyes`; 404 { error } without them):
+//   POST /screen/release -> { stroke?: [{x,y}], cursor?: {x,y}, holdMs? } in (global points), { sent, circled }
+//                     out: Ctrl+Option was let go; a closed loop sends the circled crop with the ink
+//   GET  /screen/permission -> { granted }: is Screen Recording on for Jett?
+//   POST /screen/permission -> { granted }: ask macOS for it and open the Settings pane
 //
 // Why HTTP + SSE (not a WebSocket): the window only reads the stream, and
 // fetch/EventSource exist in every webview with no library.
@@ -59,6 +64,7 @@ import { currentConfig, saveSetup, type SetupAnswers } from "./setup/index.ts";
 import { detectParts, pickFolder as macPickFolder, scanFolder, type FolderPicker } from "./setup/folders.ts";
 import { insideBrain } from "./setup/parts.ts";
 import { joinVoiceRoom } from "./voice/livekit-bridge.ts";
+import type { Pt } from "./screen/geometry.ts";
 // `type: "text"` embeds the file in the compiled binary; bun-types calls *.html an HTMLBundle.
 import checkPage from "./voice/check-page.html" with { type: "text" };
 import { startLiveKit, type LiveKitServer } from "./voice/livekit-runner.ts";
@@ -276,6 +282,32 @@ export async function startApp(options: AppOptions): Promise<App> {
           if (err instanceof BrainFileMissing) return json({ error: err.message }, 404);
           throw err;
         }
+      },
+
+      async "POST /screen/release"({ session }, req) {
+        if (!session.screen) return json({ error: "no screen helper" }, 404);
+        const body = await readBody(req);
+        const pt = (v: unknown) =>
+          v && typeof v === "object" && Number.isFinite((v as Pt).x) && Number.isFinite((v as Pt).y)
+            ? { x: (v as Pt).x, y: (v as Pt).y }
+            : undefined;
+        const stroke = Array.isArray(body.stroke) ? body.stroke.slice(0, 2000).map(pt).filter((p): p is Pt => !!p) : [];
+        const holdMs = typeof body.holdMs === "number" && body.holdMs > 0 ? Math.min(body.holdMs, 120_000) : 0;
+        try {
+          return json(await session.screen.release({ stroke, cursor: pt(body.cursor), holdMs }));
+        } catch (err) {
+          return json({ error: errorMessage(err) }, 500);
+        }
+      },
+
+      async "GET /screen/permission"({ session }) {
+        if (!session.screen) return json({ error: "no screen helper" }, 404);
+        return json({ granted: await session.screen.permission().catch(() => false) });
+      },
+
+      async "POST /screen/permission"({ session }) {
+        if (!session.screen) return json({ error: "no screen helper" }, 404);
+        return json({ granted: await session.screen.requestPermission().catch(() => false) });
       },
 
       "GET /events"({ session }) {
