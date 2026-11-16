@@ -25,9 +25,9 @@ describe("the quick type field", () => {
     expect(nextQuick(open, { type: "open" })).toEqual({ quick: open });
   });
 
-  test("Enter sends the trimmed text and closes; focus goes back", () => {
+  test("Enter sends the trimmed text and stays open, empty, to read the reply (voice stays muted)", () => {
     const step = nextQuick({ open: true, text: "  what's on today?  " }, { type: "key", key: "Enter", shift: false });
-    expect(step).toEqual({ quick: quickClosed, send: "what's on today?", focus: "give" });
+    expect(step).toEqual({ quick: { open: true, text: "" }, send: "what's on today?" });
   });
 
   test("Enter on nothing sends nothing; Shift+Enter is a new line (the field handles it)", () => {
@@ -82,10 +82,11 @@ describe("where it goes", () => {
   });
 });
 
-test("words: the placeholder in both languages, the button's tooltip and a line on the Shortcuts card", () => {
+test("words: the placeholder in both languages, the orb's tooltip and a line on the Shortcuts card", () => {
   expect(UI.en.typeHere).toBe("Type to Jett…");
   expect(UI.zh.typeHere).toBe("输入给 Jett…");
   expect(UI.en.quickType).toBe("Type");
-  expect(SHORTCUTS.en).toContainEqual({ keys: "⌃⌥T", what: "Type to Jett" });
-  expect(SHORTCUTS.zh).toContainEqual({ keys: "⌃⌥T", what: "打字给 Jett" });
+  expect(UI.en.closeTyping).toBe("Close typing");
+  expect(SHORTCUTS.en).toContainEqual({ keys: "Click orb · ⌃⌥T", what: "Type to Jett (voice muted)" });
+  expect(SHORTCUTS.zh).toContainEqual({ keys: "点光球 · ⌃⌥T", what: "打字给 Jett（静音）" });
 });

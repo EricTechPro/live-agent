@@ -42,28 +42,30 @@
         <p id="cap-model" class="cap model" hidden></p>
       </div>
 
-      <!-- The orb: grip to drag it, the menu button, the orb itself, its state words, the call buttons. -->
+      <!-- The orb: minimise on hover, the orb itself (drag to move, click to type, right-click
+           for the menu), words only when you must act, one call button. -->
       <div id="dock" class="dock" data-hit data-look="starting">
         <div class="dock-top">
           <button id="hide" class="ib glass-ib hide-btn" type="button" aria-label="Hide Jett" data-tip="Hide" data-key="⌃⌥S" data-icon="minus" data-size="12"></button>
-          <button id="orb-new-chat" class="ib glass-ib newchat-btn" type="button" aria-label="New chat" data-tip="New chat" data-key="⌘N" data-icon="newChat" data-size="12"></button>
-          <button id="grip" class="grip" type="button" aria-label="Move Jett (arrow keys)" data-tip="Drag to move" data-key="← ↑ → ↓"><span aria-hidden="true"></span></button>
-          <button id="quick-btn" class="ib glass-ib quick-btn" type="button" aria-label="Type" data-tip="Type" data-key="⌃⌥T" data-icon="keyboard" data-size="12"></button>
-          <button id="open-center" class="ib glass-ib menu-btn" type="button" aria-controls="popover" aria-expanded="false" aria-label="Chats, jobs and brain" data-tip="Chats, jobs, brain" data-icon="center" data-size="14"></button>
         </div>
         <div class="orb-wrap">
-          <button id="orb" class="orb" type="button" aria-label="Start call" data-state="connecting" data-tip="Talk · double-click to minimise" data-key="Space"><canvas id="orb-canvas" width="352" height="352" aria-hidden="true"></canvas></button>
+          <button id="orb" class="orb" type="button" aria-label="Type to Jett" aria-controls="quick" aria-expanded="false" data-state="connecting" data-tip="Type · right-click for more" data-key="⌃⌥T"><canvas id="orb-canvas" width="352" height="352" aria-hidden="true"></canvas></button>
           <button id="following" class="following-badge" type="button" hidden aria-label="Stop following my pointer" data-tip="Stop following my pointer" data-icon="mini" data-size="12"></button>
           <span id="muted-badge" class="muted-badge" data-icon="micOff" data-size="14" aria-hidden="true" hidden></span>
           <button id="jobs-toggle" class="jobs-badge" type="button" aria-controls="popover" aria-label="Jobs" data-tip="Jobs"><span data-icon="jobs" data-size="12"></span><b id="jobs-count" class="badge" data-count="0" aria-hidden="true">0</b></button>
         </div>
-        <p class="orb-label" aria-live="polite"><span id="orb-label">Starting…</span><button id="orb-retry" class="retry-link" type="button" hidden>Retry</button></p>
+        <p class="orb-label" aria-live="polite"><span id="orb-label">Starting…</span><button id="orb-retry" class="retry-link" type="button" hidden>Retry</button><button id="orb-setup" class="retry-link" type="button" hidden>Finish setup</button></p>
         <p id="orb-hint" class="orb-hint" hidden></p>
         <div class="controls">
+          <!-- One call button: Start call, or a red Hang up while a call is joining or live. -->
           <button id="talk" class="ib call talk" type="button" disabled aria-label="Start call" data-tip="Start call" data-key="Space" data-icon="mic" data-size="20"></button>
-          <button id="mute" class="ib call mute" type="button" hidden aria-pressed="false" aria-label="Mute" data-tip="Mute" data-key="Space" data-icon="mic" data-size="20"></button>
-          <button id="hangup" class="ib call hangup" type="button" hidden aria-label="Hang up" data-tip="Hang up" data-key="⌘." data-icon="hangup" data-size="20"></button>
         </div>
+      </div>
+
+      <!-- The orb's right-click menu: what the old hover row held besides minimise. -->
+      <div id="orb-menu" class="orb-menu" data-hit role="menu" aria-label="Jett" hidden>
+        <button id="menu-new-chat" class="orb-menu-item" type="button" role="menuitem" tabindex="-1"><span data-icon="newChat" data-size="12" aria-hidden="true"></span><span class="orb-menu-text">New chat</span><kbd>⌘N</kbd></button>
+        <button id="menu-center" class="orb-menu-item" type="button" role="menuitem" tabindex="-1" aria-controls="popover"><span data-icon="center" data-size="12" aria-hidden="true"></span><span class="orb-menu-text">Chats, jobs, brain</span></button>
       </div>
 
       <!--
@@ -83,7 +85,7 @@
       </div>
 
       <!-- Quick typing (ticket 40): a small glass field under the orb, or beside the pill. -->
-      <form id="quick" class="quick" data-hit hidden>
+      <form id="quick" class="quick" data-hit hidden aria-label="Type to Jett. Voice is muted while this is open.">
         <textarea id="quick-input" rows="1" placeholder="Type to Jett…" aria-label="Type to Jett" autocomplete="off" spellcheck="false"></textarea>
       </form>
 
@@ -161,15 +163,16 @@
       The key passes through here once, to the core, which checks and saves it.
     -->
     <div id="wizard" hidden>
-      <div class="pf win" role="dialog" aria-label="Jett setup">
-        <aside class="stage">
+      <div class="pf win" role="dialog" aria-modal="true" aria-label="Jett setup">
+        <button class="pf w-close" type="button" id="w-close" aria-label="Close setup (Esc)" data-icon="close" data-size="14"></button>
+        <aside class="w-stage">
           <p class="pf say" id="w-say" aria-live="polite"></p>
           <span class="tail" aria-hidden="true"></span>
           <canvas id="w-orb" width="352" height="352" aria-hidden="true"></canvas>
           <div class="pad" aria-hidden="true"></div>
         </aside>
 
-        <main class="panel">
+        <main class="w-panel">
           <ol class="progress" id="w-progress" aria-label="Setup progress"></ol>
 
           <section class="step" data-name="welcome" data-next="Let's go">
