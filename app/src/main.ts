@@ -36,6 +36,7 @@ import { UI, type UiKey } from "./ui-words.ts";
 import { dockPill, hoverPill, migrateDot, morph, MORPH_MS, parsePill, PILL, pillActions, pillAt, pillBars, pillFlyout, placePill, type PillAction, type PillSpot } from "./pill.ts";
 import { runWizard } from "./wizard.ts";
 import { isQuickTypeStart, nextQuick, quickClosed, quickPlace, type Quick, type QuickAction } from "./quick-type.ts";
+import { createScreenInk, type ScreenInk } from "./screen-ink.ts";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 // Icon buttons (ticket 26): pixel icons from icons.ts, one shared tooltip.
@@ -385,6 +386,8 @@ showFollow();
  * cursor is, push to talk (hold Ctrl+Option), and following the pointer if chosen.
  */
 let ptt: Ptt = pttIdle;
+// Screen awareness (slice 2): ink while Ctrl+Option is held (app/src/screen-ink.ts).
+let screenInk: ScreenInk | undefined;
 function startOverlayPoll() {
   if (!inTauri()) return; // a browser preview has no window to make click-through
   document.documentElement.dataset.polled = "1"; // hover comes from here, not DOM :hover
@@ -400,8 +403,8 @@ function startOverlayPoll() {
       const point = poll.point ? { x: poll.point[0], y: poll.point[1] } : undefined;
       const step = pttStep(ptt, poll.talkKeys && !!wizardEl.hidden, performance.now());
       ptt = step.ptt;
-      if (step.act === "talk") pushToTalk(true);
-      if (step.act === "release") pushToTalk(false);
+      if (step.act === "talk") pushToTalk(true), screenInk?.start();
+      if (step.act === "release") pushToTalk(false), screenInk?.finish();
       // Hover from the cursor, not DOM hover: WebKit sends none while another app is in front.
       const h = pollHover(dock.classList.contains("hover"), mini ? undefined : point, { ...orbAt, ...dockSize() });
       if (h.hover !== dock.classList.contains("hover")) {
@@ -1123,6 +1126,10 @@ async function boot() {
     return;
   }
   coreRef = core;
+  if (inTauri()) {
+    screenInk = createScreenInk(core.info);
+    core.onEvent((event) => screenInk?.onEvent(event));
+  }
   // The shell restarts a core that dies (onCoreRestarting above); core-down means it gave up.
   void onCoreRestarting(() => void endCall()).catch(() => {});
   onCoreDown((reason) => {
