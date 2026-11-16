@@ -1,9 +1,10 @@
 // The drawing on the screen (tickets 32 to 36, drawing v2). Paints the core's
 // `canvas.*` marks as HUD cards floating on the desktop, drawn by a glowing pen.
 //
-//   const sketch = mountSketch(core, stage, { onCaption });
+//   const sketch = mountSketch(core, stage);
 //   sketch.setObstacles([orbRect], "left");   // cards keep clear of these
 //   sketch.clearAll();                         // Esc, or the "Clear all · N" chip
+//   sketch.setCaption({ who, text });           // the caption bar: what is being said now
 //
 // Pure parts do the thinking: layout.ts places every card (no overlap, ever),
 // motion.ts says how each mark draws step by step, pen.ts paces the marks to the
@@ -17,7 +18,8 @@ import { mountCards, type DiagramBody } from "./card-view.ts";
 import type { CoreClient } from "./core-client.ts";
 import { BOTTOM_FREE, CHROME, layoutScene, MARGIN, toScreen, ZOOM, type Layout, type Owned, type PlacedCard, type Prim, type Rect, type Tone } from "./layout.ts";
 import { easeInOut, handDrawn, stepAt, typed, unitPlan, type UnitPlan } from "./motion.ts";
-import { emptyPen, penAddBeat, penInterrupt, penSpeak, slotOf, VOICE, type Pen } from "./pen.ts";
+import { tailChars } from "./captions.ts";
+import { emptyPen, penAddBeat, penInterrupt, penSpeak, slotOf, type Pen } from "./pen.ts";
 import { isCard } from "../../src/core/card-kinds.ts";
 import { overlayOrigin } from "./screen-origin.ts";
 import { addCanvasEvent, emptyScene, INK_COLORS, partialPoints, type Pt, type Scene } from "./sketch.ts";
@@ -38,8 +40,8 @@ const FONT = '"Martian Mono", ui-monospace, monospace';
 /** Doto, the dot-matrix display face, for headings. */
 const DISPLAY = '"Doto", "Martian Mono", ui-monospace, monospace';
 const LEAVE_MS = 250;
-/** The caption stays this long after the beat's last mark. */
-const CAPTION_HOLD_MS = 1800;
+/** The caption bar's widest box and its side padding (sketch.css `.sketch-caption`). */
+const CAPTION = { maxW: 760, pad: 36, font: 13 } as const;
 /** The pen tip lingers this long after the last mark. */
 const TIP_HOLD_MS = 600;
 
@@ -77,12 +79,16 @@ export interface SketchApi {
   openCount(): number;
   /** `busy`: words and controls on the app under the cards (soft: cards take the emptiest spot). */
   setObstacles(rects: Rect[], from?: "left" | "right", busy?: Rect[]): void;
-  captionActive(): boolean;
+  /**
+   * The caption bar, bottom centre: what is being said now (captions.ts `barLine`), or
+   * nothing. One line; a long one keeps its newest words.
+   */
+  setCaption(line?: { who: "user" | "model"; text: string }): void;
 }
 
 const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement, opts: { onCaption?: (active: boolean) => void } = {}): SketchApi {
+export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement): SketchApi {
   const canvas = Object.assign(document.createElement("canvas"), { className: "sketch-ink" });
   canvas.setAttribute("role", "img");
   canvas.setAttribute("aria-label", "Drawing");
@@ -118,7 +124,6 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
   const diagrams = new Map<string, { w: number; h: number }>();
   let dpr = 1;
   let frame = 0;
-  let captionOn = false;
   const cardUis = new Map<string, CardUi>();
   /** Per-card state the user sets: pinned cards stay, zoom is the card's own scale. */
   let pinned = new Set<string>();
@@ -163,7 +168,7 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
   function relayout() {
     const view = { width: innerWidth, height: innerHeight };
     // The caption bar and the clear chip sit bottom centre: cards keep off them too.
-    const bottomBand = { x: view.width / 2 - 320, y: view.height - 104, w: 640, h: 104 };
+    const bottomBand = { x: (view.width - CAPTION.maxW) / 2, y: view.height - 104, w: CAPTION.maxW, h: 104 };
     const before = new Map(layout.cards.map((c) => [c.id, c]));
     const now0 = performance.now();
     // A waiting mark joins the layout once the pen has a time for it and that time has come.
@@ -468,17 +473,14 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
     clearBtn.textContent = `Clear all · ${n}`;
   }
 
-  /** The line being drawn now: the latest beat that has started, until a moment after its last mark. */
-  function currentLine(now: number): string | undefined {
-    for (let i = beats.length - 1; i >= 0; i--) {
-      const b = beats[i]!;
-      const slots = b.ids.map((id) => slotOf(pen, id)).filter((s): s is Slot => !!s);
-      if (!slots.length) continue;
-      const start = Math.min(...slots.map((s) => s.start));
-      const end = Math.max(...slots.map((s) => s.end), start + (b.say ? 0 : 0));
-      if (start <= now) return now <= Math.max(end, start + VOICE.minBeatMs) + CAPTION_HOLD_MS ? b.say : undefined;
-    }
-    return undefined;
+  /** The caption bar shows one line: as many characters as its widest box holds here. */
+  function setCaption(line?: { who: "user" | "model"; text: string }) {
+    const fits = Math.floor((Math.min(CAPTION.maxW, innerWidth - 32) - CAPTION.pad) / ((charW ?? 0.62) * CAPTION.font));
+    const text = line ? tailChars(line.text, Math.max(12, fits - (line.who === "user" ? 5 : 0))) : "";
+    caption.hidden = !text;
+    if (!text) return;
+    caption.dataset.who = line!.who;
+    if (captionText.textContent !== text) captionText.textContent = text;
   }
 
   // ---- painting ----
@@ -530,15 +532,6 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
       drawTip(tip.at, tip.alpha, now);
     }
 
-    const line = currentLine(now);
-    if (line !== undefined) busy = true;
-    const on = line !== undefined && line.length > 0;
-    if (on && captionText.textContent !== line) captionText.textContent = line;
-    caption.hidden = !on;
-    if (on !== captionOn) {
-      captionOn = on;
-      opts.onCaption?.(on);
-    }
     syncUi(now);
     if (!layout.cards.length && !layout.screen.length && !leaving.length) delete host.dataset.view;
     if (busy) kick();
@@ -987,7 +980,7 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
       from = side;
       relayout();
     },
-    captionActive: () => captionOn,
+    setCaption,
   };
   return api;
 }
