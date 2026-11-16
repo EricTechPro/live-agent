@@ -144,3 +144,11 @@ export function saveVoice(configPath: string, change: { voice?: string; voiceSty
   writeConfig(configPath, raw, config);
   return { config };
 }
+
+/** Save the Gemini Live model (the window's model picker); nothing else changes. Throws ConfigError like saveVoice. */
+export function saveLiveModel(configPath: string, liveModel: string): { config: Config } {
+  const raw = readRaw(configPath);
+  const config = checkConfig({ ...raw, liveModel });
+  writeConfig(configPath, raw, config);
+  return { config };
+}

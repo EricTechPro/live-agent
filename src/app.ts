@@ -41,6 +41,11 @@
 //   GET  /brain/file?path=wiki/x.md -> { path, text }: one note, read only. 400 for anything
 //                     outside the three part folders (.., absolute, a symlink out), 404 when gone
 //   GET  /brain/chats -> { chats: [{ path, title, date }] }: past chats (chat-end notes in raw), newest first
+//   POST /brain/chats/delete -> { path } in, { deleted }: delete one past chat's note (400 for any other path)
+//   GET  /model    -> { model, models: [{ id, label }] }: the Gemini Live model saved, and the ones supported
+//   POST /model    -> { model } in, { model, applied }: save it; applied at once only on an empty chat
+//   GET  /voice    -> { voice, voices: [{ id, label }] }: Jett's voice now, and the choices
+//   POST /voice    -> { voice } in (a name or label), { voice, style, applied }: the set_voice path
 //   Screen awareness (needs `eyes`; 404 { error } without them):
 //   POST /screen/release -> { stroke?: [{x,y}], cursor?: {x,y}, holdMs? } in (global points), { sent, circled }
 //                     out: Ctrl+Option was let go; a closed loop sends the circled crop with the ink
@@ -63,7 +68,9 @@ import { errorMessage } from "./errors.ts";
 import { ConfigError, defaultConfigPath } from "./config/index.ts";
 import { brainRoot } from "./brain/index.ts";
 import { BrainFileMissing, BrainPathError, brainTree, readBrainFile } from "./brain/tree.ts";
-import { pastChats } from "./brain/chats.ts";
+import { ChatPathError, deleteChat, pastChats } from "./brain/chats.ts";
+import { LIVE_MODELS } from "./models/gemini-live.ts";
+import { VOICES, findVoice } from "./core/voices.ts";
 import { currentConfig, saveSetup, type SetupAnswers } from "./setup/index.ts";
 import { detectParts, pickFolder as macPickFolder, scanFolder, type FolderPicker } from "./setup/folders.ts";
 import { insideBrain } from "./setup/parts.ts";
@@ -278,6 +285,42 @@ export async function startApp(options: AppOptions): Promise<App> {
       async "GET /brain/chats"({ session }) {
         const { root, folders } = session.brain();
         return json({ chats: await pastChats(root, folders) });
+      },
+
+      // The panel's per-row delete: one chat-end note out of raw. 400 for anything else.
+      async "POST /brain/chats/delete"({ session }, req) {
+        const body = await readBody(req);
+        if (typeof body.path !== "string") return json({ error: "send { path: <a past chat's path> }" }, 400);
+        const { root, folders } = session.brain();
+        try {
+          return json({ deleted: await deleteChat(root, body.path, folders) });
+        } catch (err) {
+          if (err instanceof ChatPathError) return json({ error: err.message }, 400);
+          throw err;
+        }
+      },
+
+      // The Gemini Live model (the panel's picker): the saved one and the ones the code supports.
+      "GET /model"({ session }) {
+        return json({ model: session.liveModel(), models: LIVE_MODELS });
+      },
+      async "POST /model"({ session }, req) {
+        const body = await readBody(req);
+        if (!LIVE_MODELS.some((m) => m.id === body.model)) {
+          return json({ error: `send { model: ${LIVE_MODELS.map((m) => `"${m.id}"`).join(" | ")} }` }, 400);
+        }
+        return session.setLiveModel(body.model as string).then((r) => json(r), refused);
+      },
+
+      // Jett's voice (the panel's picker): the set_voice path, so the window and the tool agree.
+      "GET /voice"({ session }) {
+        return json({ voice: session.voice(), voices: VOICES.map(({ id, label }) => ({ id, label })) });
+      },
+      async "POST /voice"({ session }, req) {
+        const body = await readBody(req);
+        const voice = typeof body.voice === "string" ? findVoice(body.voice) : undefined;
+        if (!voice) return json({ error: `send { voice: ${VOICES.map((v) => `"${v.id}"`).join(" | ")} }` }, 400);
+        return session.setVoice(voice.id).then((r) => json(r), refused);
       },
 
       async "GET /brain/file"({ session }, req) {

@@ -36,14 +36,11 @@
         </div>
       </div>
 
-      <!-- The orb: minimise on hover, the orb itself (drag to move, click to type, right-click
-           for the menu), words only when you must act, one call button. -->
+      <!-- The orb itself (drag to move, click to type, double-click to minimise, right-click
+           for the menu; no tooltip), words only when you must act, one call button. -->
       <div id="dock" class="dock" data-hit data-look="starting">
-        <div class="dock-top">
-          <button id="hide" class="ib glass-ib hide-btn" type="button" aria-label="Hide Jett" data-tip="Hide" data-key="⌃⌥S" data-icon="minus" data-size="12"></button>
-        </div>
         <div class="orb-wrap">
-          <button id="orb" class="orb" type="button" aria-label="Type to Jett" aria-controls="quick" aria-expanded="false" data-state="connecting" data-tip="Type · right-click for more" data-key="⌃⌥T"><canvas id="orb-canvas" width="352" height="352" aria-hidden="true"></canvas></button>
+          <button id="orb" class="orb" type="button" aria-label="Type to Jett" aria-controls="quick" aria-expanded="false" data-state="connecting"><canvas id="orb-canvas" width="352" height="352" aria-hidden="true"></canvas></button>
           <button id="following" class="following-badge" type="button" hidden aria-label="Stop following my pointer" data-tip="Stop following my pointer" data-icon="mini" data-size="12"></button>
           <span id="muted-badge" class="muted-badge" data-icon="micOff" data-size="14" aria-hidden="true" hidden></span>
           <button id="jobs-toggle" class="jobs-badge" type="button" aria-controls="popover" aria-label="Jobs" data-tip="Jobs"><span data-icon="jobs" data-size="12"></span><b id="jobs-count" class="badge" data-count="0" aria-hidden="true">0</b></button>
@@ -56,7 +53,7 @@
         </div>
       </div>
 
-      <!-- The orb's right-click menu: what the old hover row held besides minimise. -->
+      <!-- The orb's right-click menu: New chat, and the panel. -->
       <div id="orb-menu" class="orb-menu" data-hit role="menu" aria-label="Jett" hidden>
         <button id="menu-new-chat" class="orb-menu-item" type="button" role="menuitem" tabindex="-1"><span data-icon="newChat" data-size="12" aria-hidden="true"></span><span class="orb-menu-text">New chat</span><kbd>⌘N</kbd></button>
         <button id="menu-center" class="orb-menu-item" type="button" role="menuitem" tabindex="-1" aria-controls="popover"><span data-icon="center" data-size="12" aria-hidden="true"></span><span class="orb-menu-text">Chats, jobs, brain</span></button>
@@ -78,15 +75,17 @@
         <button id="pill-hangup" class="ib pill-act hangup" type="button" aria-label="Hang up" data-tip="Hang up" data-key="⌘." data-side="left" data-icon="hangup" data-size="14" hidden></button>
       </div>
 
-      <!-- Quick typing (ticket 40): a small glass field under the orb, or beside the pill. -->
+      <!-- Quick typing (ticket 40): a small glass field under the orb, or beside the pill.
+           "/" lists the slash commands (slash.ts) under the field. -->
       <form id="quick" class="quick" data-hit hidden aria-label="Type to Jett. Voice is muted while this is open.">
-        <textarea id="quick-input" rows="1" placeholder="Type to Jett…" aria-label="Type to Jett" autocomplete="off" spellcheck="false"></textarea>
+        <textarea id="quick-input" rows="1" placeholder="Type to Jett…" aria-label="Type to Jett" autocomplete="off" spellcheck="false" aria-autocomplete="list" aria-controls="quick-slash"></textarea>
+        <ul id="quick-slash" class="slash-list" role="listbox" aria-label="Commands" hidden></ul>
       </form>
 
       <!-- A short note by the orb (ticket 39): "New chat". -->
       <p id="toast" class="toast" role="status" hidden></p>
 
-      <!-- The Shortcuts card (ticket 38), from the popover's "?" or the menu-bar item. -->
+      <!-- The Shortcuts card (ticket 38), from Settings, the ? key or the menu-bar item. -->
       <section id="shortcuts" class="shortcuts" data-hit tabindex="-1" aria-labelledby="shortcuts-title" hidden>
         <header class="shortcuts-head">
           <h2 id="shortcuts-title">Shortcuts</h2>
@@ -98,7 +97,7 @@
       <!-- Approve / deny cards (ticket 28), next to the orb. -->
       <ul id="approvals" class="approvals" data-hit aria-label="Waiting for your yes" aria-live="polite" hidden></ul>
 
-      <!-- The popover (ticket 36): one view at a time, icon tabs. -->
+      <!-- The popover (ticket 36): one view at a time, icon tabs; the gear swaps in Settings. -->
       <section id="popover" class="popover" data-hit aria-label="Jett" hidden>
         <header class="pop-head">
           <div class="tabs" role="tablist" aria-label="Views">
@@ -107,21 +106,24 @@
             <button id="tab-brain" class="ib tab" role="tab" type="button" aria-controls="panel-brain" aria-selected="false" tabindex="-1" aria-label="Brain" data-tip="Chats and notes" data-icon="brain" data-size="16"></button>
           </div>
           <span class="spacer"></span>
-          <button id="follow" class="ib" type="button" aria-pressed="false" aria-label="Follow my pointer" data-tip="Follow my pointer" data-icon="mini" data-size="16"></button>
-          <button id="new-chat" class="ib" type="button" disabled aria-label="New chat" data-tip="New chat" data-key="⌘N" data-icon="newChat" data-size="16"></button>
-          <button id="setup" class="ib" type="button" disabled aria-label="Setup" data-tip="Setup" data-icon="gear" data-size="16"></button>
-          <button id="show-log" class="ib" type="button" aria-label="Show log" data-tip="Show log in Finder" data-icon="log" data-size="16"></button>
-          <button id="open-shortcuts" class="ib" type="button" aria-controls="shortcuts" aria-label="Shortcuts" data-tip="Shortcuts" data-key="?" data-icon="help" data-size="16"></button>
+          <button id="setup" class="ib head-btn" type="button" aria-controls="panel-settings" aria-pressed="false" aria-label="Settings" data-tip="Settings" data-icon="gear" data-size="16"></button>
           <button id="close-center" class="ib" type="button" aria-controls="popover" aria-label="Close" data-tip="Close" data-key="Esc" data-side="left" data-icon="close" data-size="14"></button>
         </header>
         <section id="panel-chat" class="view" role="tabpanel" aria-labelledby="tab-chat">
           <ol id="transcript" class="transcript" aria-label="Transcript" aria-live="polite"></ol>
           <div class="composer-wrap">
             <ul id="mode-menu" class="pf mode-menu" hidden></ul>
+            <div id="model-menu" class="pf mode-menu model-menu" role="menu" aria-label="Model and voice" hidden></div>
             <form id="type" class="composer type">
-              <button id="mode-pill" class="pill" type="button" disabled></button>
-              <input id="type-input" type="text" placeholder="Type to Jett…" aria-label="Message Jett" autocomplete="off" disabled />
-              <button id="send" class="ib send" type="submit" disabled aria-label="Send" data-tip="Send" data-key="Enter" data-icon="send" data-size="16"></button>
+              <div class="composer-row">
+                <input id="type-input" type="text" placeholder="Type to Jett…" aria-label="Message Jett" autocomplete="off" disabled />
+                <button id="send" class="ib send" type="submit" disabled aria-label="Send" data-tip="Send" data-key="Enter" data-icon="send" data-size="16"></button>
+              </div>
+              <div class="composer-chips">
+                <!-- The safety mode ("Auto" = auto-edits), then the Gemini Live model and the voice. -->
+                <button id="mode-pill" class="pill" type="button" disabled></button>
+                <button id="model-chip" class="pill model-chip" type="button" aria-haspopup="menu" aria-controls="model-menu" aria-expanded="false" disabled><span class="pill-label" id="model-chip-label">…</span></button>
+              </div>
             </form>
           </div>
           <footer id="bar" class="bar" aria-label="Status"></footer>
@@ -131,6 +133,7 @@
         </section>
         <section id="panel-brain" class="view" role="tabpanel" aria-labelledby="tab-brain" hidden>
           <div id="brain-lists" class="brain-lists">
+            <button id="new-chat" class="new-chat-btn" type="button" disabled><span data-icon="plus" data-size="12" aria-hidden="true"></span><span id="new-chat-text">New chat</span><kbd>⌘N</kbd></button>
             <h2 class="side-title" id="chats-title">Past chats</h2>
             <ul id="chat-list" class="chat-list" aria-labelledby="chats-title"></ul>
             <p id="chats-empty" class="side-empty">Past chats show here.</p>
@@ -147,6 +150,29 @@
               <button id="close-reader" class="ib" type="button" aria-label="Close note" data-tip="Back" data-key="Esc" data-side="left" data-icon="close" data-size="14"></button>
             </header>
             <pre id="reader-text" class="reader-text" tabindex="0"></pre>
+          </section>
+        </section>
+        <!-- Settings (the gear): model, voice, the window, help. Not a tab: picking a tab leaves it. -->
+        <section id="panel-settings" class="view settings" aria-labelledby="settings-title" hidden>
+          <h2 class="sr-only" id="settings-title">Settings</h2>
+          <section class="set-group" aria-labelledby="set-model-title">
+            <h3 class="side-title" id="set-model-title">Model</h3>
+            <p class="set-note" id="set-model-note">Gemini Live runs the conversation and calls the helpers.</p>
+            <div class="set-choices" id="set-models" role="radiogroup" aria-labelledby="set-model-title"></div>
+          </section>
+          <section class="set-group" aria-labelledby="set-voice-title">
+            <h3 class="side-title" id="set-voice-title">Voice</h3>
+            <div class="set-choices two" id="set-voices" role="radiogroup" aria-labelledby="set-voice-title"></div>
+          </section>
+          <section class="set-group" aria-labelledby="set-window-title">
+            <h3 class="side-title" id="set-window-title">Window</h3>
+            <button id="follow" class="set-row" type="button" role="switch" aria-checked="false"><span data-icon="mini" data-size="12" aria-hidden="true"></span><span class="set-row-text" id="follow-text">Follow my pointer</span><span class="set-switch" aria-hidden="true"></span></button>
+          </section>
+          <section class="set-group" aria-labelledby="set-help-title">
+            <h3 class="side-title" id="set-help-title">Help</h3>
+            <button id="set-shortcuts" class="set-row" type="button" aria-controls="shortcuts"><span data-icon="help" data-size="12" aria-hidden="true"></span><span class="set-row-text" id="set-shortcuts-text">Shortcuts and commands</span><kbd>?</kbd></button>
+            <button id="set-setup" class="set-row" type="button" disabled><span data-icon="gear" data-size="12" aria-hidden="true"></span><span class="set-row-text" id="set-setup-text">Run setup again</span></button>
+            <button id="show-log" class="set-row" type="button"><span data-icon="log" data-size="12" aria-hidden="true"></span><span class="set-row-text" id="show-log-text">Show log in Finder</span></button>
           </section>
         </section>
       </section>

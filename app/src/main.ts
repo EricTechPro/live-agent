@@ -38,6 +38,8 @@ import { dockPill, hoverPill, migrateDot, morph, MORPH_MS, parsePill, PILL, pill
 import { runWizard } from "./wizard.ts";
 import { isQuickTypeStart, nextQuick, quickClosed, quickPlace, type Quick, type QuickAction } from "./quick-type.ts";
 import { createScreenInk, type ScreenInk } from "./screen-ink.ts";
+import { COMMANDS, moveActive, parseSlash, suggest, type Suggestion } from "./slash.ts";
+import { mountSettings, type SettingsApi } from "./settings-view.ts";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 // Icon buttons (ticket 26): pixel icons from icons.ts, one shared tooltip.
@@ -63,6 +65,8 @@ const approvalsEl = $("approvals");
 const stage = $("stage");
 /** The drawing on the screen (drawing v2), once the core is up. */
 let sketch: SketchApi | undefined;
+/** The model and voice pickers (Settings and the composer's chip), once the core is up. */
+let settings: SettingsApi | undefined;
 const wizardEl = $("wizard");
 /** The UI language: the one you last spoke (lang.ts); every label and tooltip follows it. */
 let lang: Lang = "en";
@@ -203,7 +207,6 @@ async function setMini(on: boolean, save = true, animate = true) {
     if (animate && was) void animateMorph(false);
   }
 }
-$<HTMLButtonElement>("hide").onclick = () => void setMini(true);
 
 // ---- dragging (tickets 38, 39): press and move drags the orb or the pill; a press
 // without movement is still a click (overlay.ts `isDrag`). ----
@@ -323,7 +326,7 @@ function placeFloaters() {
   const left = orbAt.x + orbRect.width / 2 > innerWidth / 2;
   cuesEl.dataset.side = left ? "left" : "right";
   cuesEl.style.left = `${left ? orbAt.x - 6 : orbAt.x + orbRect.width + 6}px`;
-  cuesEl.style.top = `${orbAt.y + 26 + 56}px`;
+  cuesEl.style.top = `${orbAt.y + orbEl.offsetTop + orbEl.offsetHeight / 2}px`;
   // Drawing cards (drawing v2) lay themselves out on the screen, clear of the orb, its
   // cues and any open popover; they fill columns from the side away from the orb.
   const box = (el: HTMLElement) => {
@@ -370,10 +373,9 @@ function showFollow() {
   followingBtn.hidden = !following;
   followingBtn.dataset.tip = UI[lang].stopFollowing;
   followingBtn.setAttribute("aria-label", UI[lang].stopFollowing);
-  followBtn.setAttribute("aria-pressed", String(following));
-  followBtn.dataset.tip = UI[lang][following ? "stay" : "follow"];
-  followBtn.setAttribute("aria-label", UI[lang].follow);
-  tips.refresh(followBtn);
+  // Settings' switch (it was a header icon before the panel polish).
+  followBtn.setAttribute("aria-checked", String(following));
+  $("follow-text").textContent = UI[lang].follow;
 }
 function setFollowing(on: boolean) {
   following = on;
@@ -466,12 +468,21 @@ function feedPanel(action: PanelAction, focusTab = false) {
 function renderPanel() {
   for (const tab of TABS) {
     const on = tab === panel.tab;
-    tabBtns[tab].setAttribute("aria-selected", String(on));
+    // Settings swaps in for the tab's view; no tab shows selected meanwhile.
+    tabBtns[tab].setAttribute("aria-selected", String(on && !panel.settings));
     tabBtns[tab].tabIndex = on ? 0 : -1;
-    $(`panel-${tab}`).hidden = !on;
+    $(`panel-${tab}`).hidden = !on || !!panel.settings;
   }
-  if (panel.tab === "chat") transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  $("panel-settings").hidden = !panel.settings;
+  setupBtn.setAttribute("aria-pressed", String(!!panel.settings));
+  if (panel.tab === "chat" && !panel.settings) transcriptEl.scrollTop = transcriptEl.scrollHeight;
 }
+/** Open the panel on Settings (/model, and coming back from help or setup opened there). */
+function showSettings() {
+  feedPanel({ type: "panel.settings", open: true });
+  setLayer("open");
+}
+setupBtn.onclick = () => feedPanel({ type: "panel.settings" });
 for (const tab of TABS) tabBtns[tab].onclick = () => feedPanel({ type: "panel.select", tab });
 tabBtns.chat.parentElement!.addEventListener("keydown", (e) => {
   const tab = tabForKey(panel.tab, e.key);
@@ -489,13 +500,21 @@ renderPanel();
 
 // ---- the Shortcuts card (ticket 38): from the popover's "?", the ? key or the menu bar ----
 const shortcutsEl = $("shortcuts");
-function showShortcuts(on: boolean) {
+/** Help opened from Settings: closing it goes back there, not to the bare orb. */
+let shortcutsFromPanel = false;
+function showShortcuts(on: boolean, fromPanel = false) {
+  if (on) shortcutsFromPanel = fromPanel;
+  if (!on && !shortcutsEl.hidden && shortcutsFromPanel) {
+    shortcutsFromPanel = false;
+    shortcutsEl.hidden = true;
+    return showSettings();
+  }
   if (on) {
     if (mini) void setMini(false);
     setLayer("close");
     $("shortcuts-title").textContent = SHORTCUTS_TITLE[lang];
     $("shortcuts-list").replaceChildren(
-      ...SHORTCUTS[lang].flatMap((s) => {
+      ...[...SHORTCUTS[lang], ...COMMANDS.map((c) => ({ keys: c.usage, what: c.what[lang] }))].flatMap((s) => {
         const dt = document.createElement("dt");
         dt.append(Object.assign(document.createElement("kbd"), { textContent: s.keys }));
         return [dt, Object.assign(document.createElement("dd"), { textContent: s.what })];
@@ -511,7 +530,7 @@ function showShortcuts(on: boolean) {
     shortcutsEl.focus();
   }
 }
-$<HTMLButtonElement>("open-shortcuts").onclick = () => showShortcuts(true);
+$<HTMLButtonElement>("set-shortcuts").onclick = () => showShortcuts(true, true);
 $<HTMLButtonElement>("close-shortcuts").onclick = () => showShortcuts(false);
 
 
@@ -612,8 +631,6 @@ function render() {
   // The orb opens the typing box; its name says the state too, since no words are printed.
   orbEl.setAttribute("aria-label", `${quick.open ? UI[lang].closeTyping : UI[lang].typeHere.replace("…", "")} · ${v.label}`);
   orbEl.disabled = talkBtn.disabled;
-  orbEl.dataset.tip = `${quick.open ? UI[lang].closeTyping : UI[lang].quickType} · ${UI[lang].moreTip}`;
-  tips.refresh(orbEl);
   applyLang();
   updateControls();
 }
@@ -642,10 +659,16 @@ retryBtn.onclick = async () => {
 };
 // One UI language (ticket 39): every static tooltip and label follows the language you last spoke.
 const UI_IDS: [string, UiKey][] = [
-  ["hide", "hide"], ["new-chat", "newChat"], ["jobs-toggle", "jobs"],
-  ["pill", "showJett"], ["pill-expand", "expand"], ["tab-chat", "chat"], ["tab-jobs", "jobs"], ["tab-brain", "brain"], ["setup", "setup"],
-  ["show-log", "showLog"], ["open-shortcuts", "shortcuts"], ["close-center", "close"], ["close-shortcuts", "close"], ["clear-canvas", "hideDrawing"],
+  ["jobs-toggle", "jobs"],
+  ["pill", "showJett"], ["pill-expand", "expand"], ["tab-chat", "chat"], ["tab-jobs", "jobs"], ["tab-brain", "brain"], ["setup", "settings"],
+  ["close-center", "close"], ["close-shortcuts", "close"], ["clear-canvas", "hideDrawing"],
   ["send", "send"], ["close-reader", "back"],
+];
+/** Words shown as text (not tooltips): Settings' titles and rows, the New chat button. */
+const TEXT_IDS: [string, UiKey][] = [
+  ["new-chat-text", "newChat"], ["settings-title", "settings"], ["set-model-title", "model"], ["set-voice-title", "voice"],
+  ["set-window-title", "window"], ["set-help-title", "help"], ["set-shortcuts-text", "helpCommands"], ["set-setup-text", "runSetup"],
+  ["show-log-text", "showLog"],
 ];
 let wordsLang: Lang | undefined;
 function applyLang() {
@@ -660,6 +683,8 @@ function applyLang() {
     el.setAttribute("aria-label", words[key]);
     tips.refresh(el);
   }
+  for (const [id, key] of TEXT_IDS) $(id).textContent = words[key];
+  settings?.render();
   typeInput.placeholder = words.typeHere;
   quickInput.placeholder = words.typeHere;
   quickInput.setAttribute("aria-label", words.typeHere);
@@ -895,6 +920,8 @@ let quick: Quick = quickClosed;
 function placeQuick() {
   if (quickEl.hidden) return;
   const by = mini ? pillRect() : { ...orbAt, ...dockSize() };
+  // With the command list open the box is taller; quickPlace flips it above the orb when
+  // the screen ends first, so the list never covers the orb.
   const at = quickPlace(by, { width: quickEl.offsetWidth, height: quickEl.offsetHeight }, view(), mini ? pillSpot.side : undefined);
   quickEl.style.left = `${at.x}px`;
   quickEl.style.top = `${at.y}px`;
@@ -917,7 +944,85 @@ function feedQuick(action: QuickAction) {
   }
   if (!quick.open && wasOpen) quickInput.blur();
   if (step.focus && inTauri()) void quickTypeFocus(step.focus === "take").catch(() => {});
-  if (step.send) void sendTyped(step.send);
+  renderSlash();
+  // A slash command runs here; it never goes to Gemini as text.
+  if (step.send && !runSlash(step.send)) void sendTyped(step.send);
+}
+
+// ---- slash commands (slash.ts): "/" in the type box lists them under the field ----
+const slashEl = $<HTMLUListElement>("quick-slash");
+let slashRows: Suggestion[] = [];
+let slashActive = 0;
+/** Esc hid the list for this text; typing brings it back. */
+let slashHiddenFor: string | undefined;
+/** /help: the whole list stays up, titled, until you type. */
+let slashHelp = false;
+function renderSlash() {
+  const text = quick.open ? quick.text : "";
+  slashRows = slashHelp ? suggest("/", lang) : text === slashHiddenFor ? [] : suggest(text, lang, settings?.voices());
+  slashActive = Math.min(slashActive, Math.max(0, slashRows.length - 1));
+  slashEl.hidden = !slashRows.length;
+  quickInput.setAttribute("aria-expanded", String(!!slashRows.length));
+  slashEl.replaceChildren(
+    ...(slashHelp ? [Object.assign(document.createElement("li"), { className: "slash-head", role: "presentation", textContent: UI[lang].commands })] : []),
+    ...slashRows.map((row, i) => {
+      const li = document.createElement("li");
+      li.id = `slash-${i}`;
+      li.className = "slash-row";
+      li.setAttribute("role", "option");
+      li.setAttribute("aria-selected", String(i === slashActive));
+      li.append(
+        Object.assign(document.createElement("span"), { className: "slash-cmd", textContent: row.label }),
+        Object.assign(document.createElement("span"), { className: "slash-what", textContent: row.detail }),
+      );
+      li.onpointerdown = (e) => e.preventDefault(); // keep the caret in the field
+      li.onclick = () => pickSlash(row);
+      return li;
+    }),
+  );
+  if (slashRows.length) quickInput.setAttribute("aria-activedescendant", `slash-${slashActive}`);
+  else quickInput.removeAttribute("aria-activedescendant");
+  placeQuick();
+}
+function pickSlash(row: Suggestion) {
+  slashHelp = false;
+  if (row.run) return feedQuick({ type: "input", text: "" }), void runSlash(row.insert);
+  quickInput.value = row.insert;
+  feedQuick({ type: "input", text: row.insert });
+  quickInput.setSelectionRange(row.insert.length, row.insert.length);
+}
+/** Run a slash command. False: not one, so the text goes to Jett as usual. */
+function runSlash(text: string, from: "quick" | "panel" = "quick"): boolean {
+  const parsed = parseSlash(text);
+  if (!parsed) return false;
+  slashHelp = false;
+  if ("unknown" in parsed) {
+    toast(`${parsed.unknown}: ${UI[lang].unknownCommand}`);
+  } else if (parsed.cmd === "clear") {
+    // Wipe the drawing now (also when a turn holds New chat back), then save this chat and start fresh.
+    sketch?.clearAll();
+    void startNewChat();
+  } else if (parsed.cmd === "voice") {
+    if (!parsed.arg && from === "panel") {
+      showSettings();
+    } else if (!parsed.arg) {
+      // No name yet: show the voices to pick from.
+      feedQuick({ type: "input", text: "/voice " });
+      quickInput.value = "/voice ";
+    } else {
+      void settings?.setVoice(parsed.arg).then((ok) => ok || toast(`${parsed.arg}: ${UI[lang].voiceUnknown}`));
+    }
+  } else if (parsed.cmd === "model") {
+    feedQuick({ type: "close" });
+    showSettings();
+    settings?.focusModel();
+  } else if (parsed.cmd === "help" && from === "panel") {
+    showShortcuts(true, true);
+  } else if (parsed.cmd === "help") {
+    slashHelp = true;
+    renderSlash();
+  }
+  return true;
 }
 /** A typed turn from the quick field: the reply shows in the bubble; the box stays open, so it is not spoken. */
 async function sendTyped(text: string) {
@@ -931,6 +1036,7 @@ async function sendTyped(text: string) {
   }
 }
 quickInput.addEventListener("input", () => {
+  slashHelp = false;
   feedQuick({ type: "input", text: quickInput.value });
   // Grow with the text, up to a few lines.
   quickInput.style.height = "auto";
@@ -938,6 +1044,28 @@ quickInput.addEventListener("input", () => {
 });
 quickInput.addEventListener("keydown", (e) => {
   if (e.isComposing) return; // an IME is still picking characters
+  // The command list first: arrows move, Tab or Enter picks, Esc hides it.
+  if (slashRows.length) {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      slashActive = moveActive(slashActive, slashRows.length, e.key);
+      return renderSlash();
+    }
+    const row = slashRows[slashActive];
+    // Enter on text that is already a whole command runs what was typed (e.g. "/voice calm").
+    const typedWhole = !!row && quick.text.trim().toLowerCase() === row.insert.trim().toLowerCase();
+    if (row && (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey && !typedWhole))) {
+      e.preventDefault();
+      return pickSlash(row);
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      slashHelp = false;
+      slashHiddenFor = quick.text;
+      return renderSlash();
+    }
+  }
   if (e.key === "Escape" || (e.key === "Enter" && !e.shiftKey)) {
     e.preventDefault();
     e.stopPropagation();
@@ -1226,7 +1354,7 @@ async function boot() {
     talkBtn.disabled = true;
     sendBtn.disabled = true;
     typeInput.disabled = true;
-    setupBtn.disabled = true;
+    $<HTMLButtonElement>("set-setup").disabled = true;
     newChatBtn.disabled = true;
   });
 
@@ -1266,7 +1394,15 @@ async function boot() {
     tree: $<HTMLUListElement>("brain-tree"), empty: $("brain-empty"), reader: $("reader"), readerName: $("reader-name"),
     readerPath: $("reader-path"), readerText: $("reader-text"), closeReader: $<HTMLButtonElement>("close-reader"), transcript: $("brain-lists"),
   });
-  mountChatView(core, reader, { list: $<HTMLUListElement>("chat-list"), empty: $("chats-empty") });
+  mountChatView(core, reader, { list: $<HTMLUListElement>("chat-list"), empty: $("chats-empty") }, (key) => UI[lang][key], showError);
+  settings = mountSettings(
+    core,
+    {
+      models: $("set-models"), voices: $("set-voices"), modelNote: $("set-model-note"),
+      chip: $<HTMLButtonElement>("model-chip"), chipLabel: $("model-chip-label"), menu: $("model-menu"),
+    },
+    { lang: () => lang, error: showError },
+  );
   sketch = mountSketch(core, stage);
   onFrontWindowMoved(placeFloaters);
   followFrontWindow(core);
@@ -1285,6 +1421,7 @@ async function boot() {
     const text = typeInput.value.trim();
     if (!text) return;
     typeInput.value = "";
+    if (runSlash(text, "panel")) return; // a command, not a message
     // The core echoes the text back as a user transcript event; nothing to draw here.
     feedOrb({ type: "turn.sent" });
     try {
@@ -1295,18 +1432,21 @@ async function boot() {
     }
   };
 
-  // Setup: the same wizard again, starting from the settings in use.
-  setupBtn.disabled = false;
-  setupBtn.onclick = async () => {
-    setupBtn.disabled = true;
+  // Setup: the same wizard again (from Settings), starting from the settings in use.
+  // Closing it comes back to Settings, where it was opened.
+  const setSetupBtn = $<HTMLButtonElement>("set-setup");
+  setSetupBtn.disabled = false;
+  setSetupBtn.onclick = async () => {
+    setSetupBtn.disabled = true;
     try {
       await endCall(); // the wizard's voice test needs the mic
       setLayer("close");
       await runWizard(core.info, await getSetup(core.info), core);
+      showSettings();
     } catch (err) {
       showError(`setup: ${errorText(err)}`);
     } finally {
-      setupBtn.disabled = false;
+      setSetupBtn.disabled = false;
     }
   };
 

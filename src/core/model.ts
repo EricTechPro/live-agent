@@ -117,6 +117,8 @@ export interface ConnectOptions {
   voice?: string;
   /** Who the model is and how it talks (built from config `tone`, see src/core/tone.ts). */
   systemInstruction?: string;
+  /** Which model to talk with (config `liveModel`). Unset: the adapter's own default. */
+  model?: string;
 }
 
 export interface Model {
