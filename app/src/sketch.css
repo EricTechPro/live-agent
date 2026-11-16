@@ -6,12 +6,26 @@
 .sketch-ink { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
 .sketch-ui { position: absolute; inset: 0; pointer-events: none; }
 
-/* A card's close button sits over the × the canvas draws in its title bar. */
-.sketch-x {
-  position: absolute; width: 22px; height: 22px; padding: 0; border: 0; background: transparent;
-  cursor: pointer; pointer-events: auto;
+/* A card's frame: sits over the card the canvas draws and takes the mouse there (the wheel
+   scrolls or zooms the card). Its buttons sit over the pin, full-screen and close icons the
+   canvas draws in the title bar; the grip over the corner steps. --k is the card's scale. */
+.sketch-frame { position: absolute; pointer-events: auto; --k: 1; }
+.sketch-frame[hidden] { display: none; }
+.sketch-btn {
+  position: absolute; top: calc(2px * var(--k)); width: calc(24px * var(--k)); height: calc(22px * var(--k));
+  padding: 0; border: 0; background: transparent; cursor: pointer;
 }
-.sketch-x:hover, .sketch-x:focus-visible { background: rgba(120, 255, 226, .14); outline: none; }
+.sketch-x { right: calc(2px * var(--k)); }
+.sketch-full { right: calc(28px * var(--k)); }
+.sketch-pin { right: calc(54px * var(--k)); }
+.sketch-btn:hover, .sketch-btn:focus-visible { background: rgba(120, 255, 226, .16); outline: none; }
+.sketch-btn:focus-visible { box-shadow: inset 0 0 0 1px #78ffe2; }
+.sketch-grip {
+  position: absolute; right: 0; bottom: 0; width: calc(18px * var(--k)); height: calc(18px * var(--k));
+  min-width: 12px; min-height: 12px; cursor: nwse-resize; touch-action: none;
+}
+.sketch-grip:hover { background: rgba(120, 255, 226, .16); }
+.sketch-grip[hidden] { display: none; }
 
 /* Stepped pixel chamfer, shared by the caption and the chip. */
 .sketch-caption, .sketch-clear {
@@ -36,6 +50,8 @@
   font: 400 13px/1.45 "Martian Mono", ui-monospace, monospace; overflow-wrap: anywhere;
 }
 .sketch-caption[hidden], .sketch-clear[hidden] { display: none; }
+/* Above the card frames, always reachable. */
+.sketch-caption, .sketch-clear { z-index: 2; }
 
 /* "Clear all · N": a solid teal chip with dark bold text, just above the caption. */
 .sketch-clear {

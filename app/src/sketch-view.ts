@@ -8,13 +8,15 @@
 // Pure parts do the thinking: layout.ts places every card (no overlap, ever),
 // motion.ts says how each mark draws step by step, pen.ts paces the marks to the
 // voice. This file only paints them on one full-screen canvas, plus a few HTML
-// bits: a close button per card, the "Clear all · N" chip, the caption bar and
-// Mermaid bodies (card-view.ts).
+// bits: each card's frame (its pin, full-screen and close buttons, the resize grip,
+// and the wheel: scroll a tall card, ctrl/⌘ + wheel or pinch to zoom it), the
+// "Clear all · N" chip, the caption bar and Mermaid bodies (card-view.ts).
+// There is no board pan or zoom: each card zooms on its own.
 // Idea from Roamies (AGPL): idea only, our own code.
 import { mountCards, type DiagramBody } from "./card-view.ts";
 import type { CoreClient } from "./core-client.ts";
-import { layoutScene, toScreen, type Layout, type Owned, type PlacedCard, type Prim, type Rect, type Tone } from "./layout.ts";
-import { easeInOut, stepAt, typed, unitPlan, type UnitPlan } from "./motion.ts";
+import { BOTTOM_FREE, CHROME, layoutScene, MARGIN, toScreen, ZOOM, type Layout, type Owned, type PlacedCard, type Prim, type Rect, type Tone } from "./layout.ts";
+import { easeInOut, handDrawn, stepAt, typed, unitPlan, type UnitPlan } from "./motion.ts";
 import { emptyPen, penAddBeat, penInterrupt, penSpeak, slotOf, VOICE, type Pen } from "./pen.ts";
 import { isCard } from "../../src/core/card-kinds.ts";
 import { overlayOrigin } from "./screen-origin.ts";
@@ -42,6 +44,8 @@ const CAPTION_HOLD_MS = 1800;
 const TIP_HOLD_MS = 600;
 
 interface Unit {
+  /** The mark id: seeds the hand that draws its strokes. */
+  owner: string;
   plan: UnitPlan;
   /** Card id it is drawn in (card-local coords), or undefined for screen px. */
   card?: string;
@@ -55,8 +59,21 @@ interface Leaving {
   at: number;
 }
 
+/** A card's HTML frame over the canvas: it takes the mouse (wheel, buttons, grip). */
+interface CardUi {
+  frame: HTMLDivElement;
+  pin: HTMLButtonElement;
+  full: HTMLButtonElement;
+  close: HTMLButtonElement;
+  grip: HTMLDivElement;
+}
+
 export interface SketchApi {
   clearAll(): void;
+  /** Leave full screen; false when no card was full screen. */
+  exitFull(): boolean;
+  /** For tests and screenshots: where each card is and its state. */
+  debugCards(): { id: string; rect: Rect; scale: number; pinned: boolean; full: boolean; scroll: number }[];
   openCount(): number;
   /** `busy`: words and controls on the app under the cards (soft: cards take the emptiest spot). */
   setObstacles(rects: Rect[], from?: "left" | "right", busy?: Rect[]): void;
@@ -102,7 +119,16 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
   let dpr = 1;
   let frame = 0;
   let captionOn = false;
-  const closeBtns = new Map<string, HTMLButtonElement>();
+  const cardUis = new Map<string, CardUi>();
+  /** Per-card state the user sets: pinned cards stay, zoom is the card's own scale. */
+  let pinned = new Set<string>();
+  let zoom = new Map<string, number>();
+  /** The card filling the screen, if any. */
+  let full: string | undefined;
+  /** The card being resized: it keeps its spot and the others make room. */
+  let lead: string | undefined;
+  /** How far a tall card's contents are scrolled, card-local px. */
+  const scroll = new Map<string, number>();
 
   // ---- size and font ----
   function resize() {
@@ -112,6 +138,17 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
     relayout();
   }
   addEventListener("resize", resize);
+  // Esc leaves full screen first (capture, and default prevented, so the window does not also clear the cards).
+  window.addEventListener(
+    "keydown",
+    (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || !full || e.defaultPrevented) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setFull(undefined);
+    },
+    true,
+  );
   resize();
   // Measure the real monospace advance once the font is in, so layout's text boxes are exact.
   void Promise.all([document.fonts?.load(`400 13px ${FONT}`), document.fonts?.load(`800 19px ${DISPLAY}`)]).then(() => {
@@ -142,8 +179,16 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
     const live = new Set(scene.marks.filter((m) => due(m.mark.id)).map(group));
     const shown = scene.marks.filter((m) => due(m.mark.id) || live.has(group(m)));
     for (const m of shown) waiting.delete(m.mark.id);
-    layout = layoutScene({ marks: shown, view, obstacles: [...obstacles, bottomBand], prev, closed, from, charW, displayW, diagrams, origin: overlayOrigin(), busy });
+    layout = layoutScene({ marks: shown, view, obstacles: [...obstacles, bottomBand], prev, closed, from, charW, displayW, diagrams, origin: overlayOrigin(), busy, zoom, pinned, lead });
     prev = new Map(layout.cards.map((c) => [c.id, { ...c.rect, scale: c.scale }]));
+    // Full screen: that card fills the screen (its old spot stays in `prev` for Esc).
+    if (full && !layout.cards.some((c) => c.id === full)) full = undefined;
+    if (full) layout = { ...layout, cards: layout.cards.map((c) => (c.id === full ? fillScreen(c, view) : c)) };
+    for (const [id, y] of scroll) {
+      const c = layout.cards.find((q) => q.id === id);
+      if (!c) scroll.delete(id);
+      else scroll.set(id, Math.max(0, Math.min(y, maxScroll(c))));
+    }
     // Cards that went (closed, evicted, erased) fade out.
     const now = performance.now();
     for (const [id, card] of before) if (!prev.has(id) && cardStarted(card, now)) leaving.push({ card, at: now });
@@ -153,6 +198,18 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
     syncUi(now);
     kick();
   }
+
+  /** The card scaled to fill the screen, centred, the caption band kept clear. */
+  function fillScreen(c: PlacedCard, view: { width: number; height: number }): PlacedCard {
+    const w = view.width - MARGIN * 4;
+    const h = view.height - MARGIN * 2 - BOTTOM_FREE;
+    const k = Math.min(w / c.w, h / c.h, ZOOM.max);
+    const rect = { x: (view.width - c.w * k) / 2, y: MARGIN + (h - c.h * k) / 2, w: c.w * k, h: c.h * k };
+    return { ...c, rect, scale: k };
+  }
+
+  /** How far a card's contents can scroll: its content height past its rect (a zoomed card taller than the screen). */
+  const maxScroll = (c: PlacedCard) => Math.max(0, c.h - c.rect.h / c.scale);
 
   function buildUnits(l: Layout): Map<string, Unit> {
     const out = new Map<string, Unit>();
@@ -164,12 +221,12 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
         // A mark card opens with its own unit; a sketch card opens with its first mark.
         const opens = owner === card.id || (card.kind === "sketch" && i === 0);
         const prims = byOwner.get(owner) ?? [];
-        out.set(owner, { plan: unitPlan(prims, map, opens ? { rect: card.rect } : undefined), card: card.id, opens, prims });
+        out.set(owner, { owner, plan: unitPlan(prims, map, opens ? { rect: card.rect } : undefined), card: card.id, opens, prims });
       });
     }
     const byOwner = new Map<string, Prim[]>();
     for (const o of l.screen) byOwner.set(o.owner, [...(byOwner.get(o.owner) ?? []), o.prim]);
-    for (const [owner, prims] of byOwner) out.set(owner, { plan: unitPlan(prims, (p) => p), prims });
+    for (const [owner, prims] of byOwner) out.set(owner, { owner, plan: unitPlan(prims, (p) => p), prims });
     return out;
   }
 
@@ -198,6 +255,9 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
       beats = [];
       closed = new Set();
       waiting = new Set();
+      pinned = new Set();
+      zoom = new Map();
+      full = undefined;
       relayout();
       return;
     }
@@ -206,7 +266,12 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
       kick();
       return;
     }
-    if (event.type === "canvas.beat") for (const m of event.marks) waiting.add(m.id);
+    if (event.type === "canvas.beat")
+      for (const m of event.marks) {
+        waiting.add(m.id);
+        // card_size full: this card opens filling the screen (Esc or its button restores it).
+        if ((m as { card_size?: string }).card_size === "full") full = m.id;
+      }
     // Diagram cards: measure the rendered Mermaid, then lay the card out to fit it.
     const drawnMarks = event.type === "canvas.beat" ? event.marks : event.type === "canvas.edit" ? [event.mark] : [];
     for (const m of drawnMarks)
@@ -239,7 +304,130 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
     if (!frame) frame = requestAnimationFrame(paint);
   }
 
-  // ---- HTML bits: close buttons, the clear chip, the caption, Mermaid bodies ----
+  // ---- a card's own controls: pin, full screen, close, the grip, the wheel ----
+  function closeCard(id: string) {
+    closed.add(id);
+    pinned.delete(id);
+    zoom.delete(id);
+    if (full === id) full = undefined;
+    relayout();
+  }
+  function setFull(id: string | undefined) {
+    full = id;
+    relayout();
+  }
+  /** Zoom a card to scale k (kept on the screen); the others make room. */
+  function zoomCard(id: string, k: number) {
+    zoom.set(id, Math.max(ZOOM.min, Math.min(ZOOM.max, k)));
+    lead = id;
+    relayout();
+    lead = undefined;
+    // Zoomed cards that made room keep the size they shrank to (no jump when the gesture ends).
+    for (const c of layout.cards) if (c.id !== id && zoom.has(c.id)) zoom.set(c.id, c.scale);
+  }
+  const cardOf = (id: string) => layout.cards.find((c) => c.id === id);
+
+  function makeButton(cls: string, onClick: () => void): HTMLButtonElement {
+    const b = Object.assign(document.createElement("button"), { className: `sketch-btn ${cls}`, type: "button" });
+    b.onclick = (e) => {
+      e.stopPropagation();
+      onClick();
+    };
+    return b;
+  }
+
+  function makeCardUi(id: string): CardUi {
+    const frame = Object.assign(document.createElement("div"), { className: "sketch-frame" });
+    frame.dataset.hit = "";
+    frame.dataset.card = id;
+    const pin = makeButton("sketch-pin", () => {
+      if (pinned.has(id)) pinned.delete(id);
+      else pinned.add(id);
+      relayout();
+    });
+    const fullBtn = makeButton("sketch-full", () => setFull(full === id ? undefined : id));
+    const close = makeButton("sketch-x", () => closeCard(id));
+    const grip = Object.assign(document.createElement("div"), { className: "sketch-grip" });
+    grip.setAttribute("role", "separator");
+    grip.setAttribute("aria-label", "Resize");
+    grip.dataset.tip = "Drag to resize";
+    for (const b of [pin, fullBtn, close]) b.dataset.side = "left";
+    frame.append(pin, fullBtn, close, grip);
+
+    // Drag the grip: the card's scale follows the pointer (its top-left stays put).
+    grip.addEventListener("pointerdown", (e) => {
+      const c = cardOf(id);
+      if (!c || full === id) return;
+      e.preventDefault();
+      e.stopPropagation();
+      grip.setPointerCapture(e.pointerId);
+      const start = { x: e.clientX, y: e.clientY, k: c.scale, w: c.rect.w, h: c.rect.h };
+      let queued = false;
+      let last = e;
+      const move = (ev: PointerEvent) => {
+        last = ev;
+        if (queued) return;
+        queued = true;
+        requestAnimationFrame(() => {
+          queued = false;
+          const grow = (start.w + start.h + (last.clientX - start.x) + (last.clientY - start.y)) / (start.w + start.h);
+          zoomCard(id, start.k * grow);
+        });
+      };
+      const up = () => {
+        grip.removeEventListener("pointermove", move);
+        grip.removeEventListener("pointerup", up);
+        grip.removeEventListener("pointercancel", up);
+      };
+      grip.addEventListener("pointermove", move);
+      grip.addEventListener("pointerup", up);
+      grip.addEventListener("pointercancel", up);
+    });
+
+    // The wheel: ctrl / ⌘ + wheel (and a trackpad pinch, which Chromium sends as ctrl + wheel) zooms
+    // this card; a plain wheel scrolls a card taller than the screen.
+    frame.addEventListener(
+      "wheel",
+      (e) => {
+        const c = cardOf(id);
+        if (!c) return;
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault();
+          if (full === id) return;
+          zoomCard(id, c.scale * Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.03 : 0.002)));
+          return;
+        }
+        const most = maxScroll(c);
+        if (!most) return;
+        e.preventDefault();
+        const step = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+        scroll.set(id, Math.max(0, Math.min(most, (scroll.get(id) ?? 0) + step / c.scale)));
+        syncUi(performance.now());
+        kick();
+      },
+      { passive: false },
+    );
+    // WebKit (the Tauri window on macOS) reports a trackpad pinch as gesture events instead.
+    let pinchFrom = 1;
+    frame.addEventListener("gesturestart", (e) => {
+      e.preventDefault();
+      pinchFrom = cardOf(id)?.scale ?? 1;
+    });
+    frame.addEventListener("gesturechange", (e) => {
+      e.preventDefault();
+      if (full !== id) zoomCard(id, pinchFrom * ((e as unknown as { scale: number }).scale || 1));
+    });
+    ui.append(frame);
+    return { frame, pin, full: fullBtn, close, grip };
+  }
+
+  function label(el: HTMLElement, text: string) {
+    if (el.getAttribute("aria-label") === text) return;
+    el.setAttribute("aria-label", text);
+    el.dataset.tip = text;
+  }
+
+  // ---- HTML bits: card frames, the clear chip, the caption, Mermaid bodies ----
   function syncUi(now: number) {
     const live = new Set<string>();
     const bodies: DiagramBody[] = [];
@@ -247,36 +435,36 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
       const s = slot(openerOf(card));
       const open = s.start <= now && stepAt(units.get(openerOf(card))!.plan, s, now).index >= 1;
       live.add(card.id);
-      let btn = closeBtns.get(card.id);
-      if (!btn) {
-        btn = Object.assign(document.createElement("button"), { className: "sketch-x", type: "button" });
-        btn.dataset.hit = "";
-        btn.setAttribute("aria-label", `Close ${card.title}`);
-        const id = card.id;
-        btn.onclick = () => {
-          closed.add(id);
-          relayout();
-        };
-        ui.append(btn);
-        closeBtns.set(card.id, btn);
-      }
-      btn.hidden = !open;
-      btn.style.left = `${card.rect.x + card.rect.w - 24}px`;
-      btn.style.top = `${card.rect.y + 2}px`;
+      const cu = cardUis.get(card.id) ?? makeCardUi(card.id);
+      cardUis.set(card.id, cu);
+      const isFull = full === card.id;
+      cu.frame.hidden = !open || (!!full && !isFull);
+      Object.assign(cu.frame.style, { left: `${card.rect.x}px`, top: `${card.rect.y}px`, width: `${card.rect.w}px`, height: `${card.rect.h}px` });
+      cu.frame.style.setProperty("--k", String(card.scale));
+      cu.frame.dataset.full = String(isFull);
+      cu.frame.dataset.scrolls = String(maxScroll(card) > 0);
+      const isPinned = pinned.has(card.id);
+      cu.pin.setAttribute("aria-pressed", String(isPinned));
+      label(cu.pin, isPinned ? `Unpin ${card.title}` : `Pin ${card.title}: keep it up`);
+      cu.full.setAttribute("aria-pressed", String(isFull));
+      label(cu.full, isFull ? `Restore ${card.title} (Esc)` : `Full screen ${card.title}`);
+      label(cu.close, `Close ${card.title}`);
+      cu.grip.hidden = isFull;
       const mark = scene.marks.find((m) => m.mark.id === card.id)?.mark;
       if (mark?.kind === "diagram" && card.body) {
         const titled = s.start <= now && stepAt(units.get(card.id)!.plan, s, now).index >= 3;
         bodies.push({ id: card.id, source: mark.source, title: mark.title, box: toScreen(card.body, card), shown: titled });
       }
     }
-    for (const [id, btn] of closeBtns) {
+    for (const [id, cu] of cardUis) {
       if (live.has(id)) continue;
-      btn.remove();
-      closeBtns.delete(id);
+      cu.frame.remove();
+      cardUis.delete(id);
     }
     cardsLayer.sync(bodies);
     const n = layout.cards.filter((c) => cardStarted(c, now)).length;
-    clearBtn.hidden = n < 2;
+    clearBtn.hidden = n < 1;
+    clearBtn.setAttribute("aria-label", `Clear all ${n} cards (Esc)`);
     clearBtn.textContent = `Clear all · ${n}`;
   }
 
@@ -313,11 +501,17 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
       ctx.restore();
     }
 
-    for (const card of layout.cards) if (drawCard(card, now, false)) busy = true;
+    // Full screen: the other cards wait under a dark veil; only that card shows.
+    const fullCard = full ? layout.cards.find((c) => c.id === full) : undefined;
+    if (fullCard) {
+      ctx.fillStyle = "rgba(2,10,12,0.72)";
+      ctx.fillRect(0, 0, innerWidth, innerHeight);
+    }
+    for (const card of layout.cards) if ((!fullCard || card === fullCard) && drawCard(card, now, false)) busy = true;
 
     // Ink in screen px (arrows between cards; later, marks on real UI).
     const screenOwners = [...new Set(layout.screen.map((o) => o.owner))];
-    for (const owner of screenOwners) {
+    for (const owner of fullCard ? [] : screenOwners) {
       const u = units.get(owner);
       if (!u) continue;
       const s = slot(owner);
@@ -366,13 +560,15 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
     ctx.save();
     ctx.translate(x, y);
     ctx.scale(k, k);
-    chrome(w / k, h / k, card.title, titleT);
+    chrome(w / k, h / k, card.title, titleT, { pinned: pinned.has(card.id), full: full === card.id, scroll: openT >= 1 ? scrollBar(card) : undefined });
     ctx.restore();
     if (st.index < 3 && !done) return true;
-    // Contents: every unit drawn in this card, in owner order.
+    // Contents: every unit drawn in this card, in owner order. A tall card scrolls under its title bar.
+    const sy = scroll.get(card.id) ?? 0;
+    const bar = maxScroll(card) > 0 ? CHROME.bar * k : 0;
     ctx.save();
     ctx.beginPath();
-    ctx.rect(x, y, card.rect.w, card.rect.h);
+    ctx.rect(x, y + bar, card.rect.w, card.rect.h - bar);
     ctx.clip();
     let busy = false;
     for (const owner of card.owners) {
@@ -387,6 +583,7 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
       ctx.save();
       ctx.translate(x, y);
       ctx.scale(k, k);
+      ctx.translate(0, -sy);
       drawUnit(u, us, now, false, cardColor(card));
       ctx.restore();
     }
@@ -396,19 +593,37 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
 
   const cardColor = (card: PlacedCard) => (card.color ? INK_COLORS[card.color as keyof typeof INK_COLORS] : LOOK.acc);
 
+  /** Where a tall card's scroll thumb sits: top and size, shares of the track. */
+  function scrollBar(card: PlacedCard): { at: number; size: number } | undefined {
+    const most = maxScroll(card);
+    if (!most) return undefined;
+    const size = card.rect.h / card.scale / card.h;
+    return { at: ((scroll.get(card.id) ?? 0) / most) * (1 - size), size };
+  }
+
   /** Draw a unit's prims up to `now`. Coordinates are already set up by the caller. */
   function drawUnit(u: Unit, s: Slot, now: number, screen: boolean, ink: string = LOOK.acc) {
     const st = stepAt(u.plan, s, now);
-    let primIndex = 0;
+    let n = 0;
     u.plan.steps.forEach((step, i) => {
       if (step.kind !== "prim") return;
-      primIndex++;
+      const seed = `${u.owner}:${n++}`;
       if (i > st.index) return;
       const t = i < st.index ? 1 : st.t;
       if (t <= 0) return;
-      drawPrim(step.prim, t, screen, ink);
+      drawPrim(step.prim, t, screen, ink, seed);
     });
-    void primIndex;
+  }
+
+  /** Each stroke's hand-drawn points, by seed; the same seed and points give the same hand. */
+  const hands = new Map<string, { src: Pt[]; out: Pt[] }>();
+  function hand(pts: Pt[], seed: string): Pt[] {
+    const got = hands.get(seed);
+    if (got?.src === pts) return got.out;
+    const out = handDrawn(pts, seed);
+    hands.set(seed, { src: pts, out });
+    if (hands.size > 2000) hands.delete(hands.keys().next().value!);
+    return out;
   }
 
   function toneColor(tone: Tone, ink: string): string {
@@ -416,9 +631,9 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
     return tone === "ink" ? ink : tone === "text" ? LOOK.text : tone === "dim" ? LOOK.dim : tone === "hot" ? LOOK.hot : LOOK.deep;
   }
 
-  function drawPrim(p: Prim, t: number, screen: boolean, ink: string) {
+  function drawPrim(p: Prim, t: number, screen: boolean, ink: string, seed: string) {
     if (p.t === "stroke" && p.tone === "wash") return drawWash(p.pts, p.width, t);
-    if (p.t === "stroke") return drawStroke(p.pts, p.width, toneColor(p.tone, ink), t);
+    if (p.t === "stroke") return drawStroke(hand(p.pts, seed), p.width, toneColor(p.tone, ink), t);
     if (p.t === "text" && p.chip) return drawChip(p, t, ink);
     if (p.t === "dot") {
       const r = p.r * (t >= 1 ? 1 : 0.4 + 0.9 * Math.sin((t * Math.PI) / 1.6));
@@ -464,7 +679,7 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
     ctx.stroke();
     ctx.shadowBlur = 0;
     // The wet leading edge burns bright while the pen is on it.
-    if (t < 1 && part.length > 2) {
+    if (t < 1 && part.length > 2 && !reducedMotion()) {
       const tail = part.slice(-Math.min(part.length, 4));
       ctx.strokeStyle = LOOK.hot;
       ctx.lineWidth = Math.max(1.5, width * 0.55);
@@ -576,7 +791,7 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
   }
 
   /** The HUD window: stepped corners, dark glass, glowing teal border, a glint, the title bar. */
-  function chrome(w: number, h: number, title: string, titleT: number) {
+  function chrome(w: number, h: number, title: string, titleT: number, state: { pinned: boolean; full: boolean; scroll?: { at: number; size: number } }) {
     const s = 3;
     const path = () => {
       ctx.beginPath();
@@ -613,41 +828,94 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
     ctx.lineTo(2 * s + 3 + Math.min(90, w * 0.35), 2);
     ctx.stroke();
     if (h >= 30) {
-      // Title bar: two little squares, the title, the close ×, a divider.
-      ctx.fillStyle = LOOK.acc;
-      ctx.fillRect(10, 11, 4, 4);
+      // Title bar: the title, then pin, full screen and close at the right (each one a real
+      // button over it, see syncUi), a divider. Nothing here is only decoration.
       ctx.fillStyle = LOOK.deep;
-      ctx.fillRect(17, 11, 4, 4);
-      ctx.fillStyle = LOOK.deep;
-      ctx.fillRect(1.5, 26, w - 3, 1);
-      if (w > 60) {
-        ctx.strokeStyle = LOOK.dim;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(w - 17, 9);
-        ctx.lineTo(w - 10, 16);
-        ctx.moveTo(w - 10, 9);
-        ctx.lineTo(w - 17, 16);
-        ctx.stroke();
+      ctx.fillRect(1.5, CHROME.bar, w - 3, 1);
+      if (w > 110) {
+        icon("pin", w - 66, 13, state.pinned);
+        icon(state.full ? "restore" : "full", w - 40, 13, state.full);
       }
+      if (w > 40) icon("close", w - 14, 13, false);
       if (titleT > 0) {
         const shown = typed([title], titleT);
         const text = shown.lines[0] ?? "";
         ctx.font = `500 10px ${FONT}`;
         ctx.textBaseline = "middle";
         const fullW = ctx.measureText(title).width;
-        const left = (w - fullW) / 2;
+        // Centred, but clear of the buttons on the right.
+        const left = Math.max(10, Math.min((w - fullW) / 2, w - 84 - fullW));
         const cool = text.slice(0, text.length - shown.hot);
         ctx.fillStyle = LOOK.dim;
         ctx.fillText(cool, left, 13.5);
+        const coolW = ctx.measureText(cool).width;
         if (shown.hot) {
           ctx.fillStyle = LOOK.hot;
-          ctx.fillText(text.slice(cool.length), left + ctx.measureText(cool).width, 13.5);
+          ctx.fillText(text.slice(cool.length), left + coolW, 13.5);
+        }
+        // A block cursor rides the typing, then goes.
+        if (titleT < 1) {
+          ctx.fillStyle = LOOK.acc;
+          ctx.fillRect(left + ctx.measureText(text).width + 1, 9, 5, 9);
         }
       }
-      // A pixel resize grip in the corner.
-      ctx.fillStyle = LOOK.deep;
-      for (const [gx, gy] of [[w - 8, h - 5], [w - 5, h - 8], [w - 5, h - 5]] as const) ctx.fillRect(gx, gy, 2, 2);
+      if (state.scroll) {
+        // A thin scroll thumb on the right edge of a card taller than the screen.
+        const top = CHROME.bar + 4;
+        const track = h - top - 14;
+        ctx.fillStyle = LOOK.deep;
+        ctx.fillRect(w - 6, top, 2, track);
+        ctx.fillStyle = LOOK.mid;
+        ctx.fillRect(w - 6.5, top + track * state.scroll.at, 3, Math.max(8, track * state.scroll.size));
+      }
+      // The resize grip: three pixel steps in the corner (the grip element over it drags).
+      if (!state.full) {
+        ctx.fillStyle = LOOK.mid;
+        for (const [gx, gy] of [[w - 8, h - 5], [w - 5, h - 8], [w - 5, h - 5], [w - 11, h - 5], [w - 5, h - 11]] as const) ctx.fillRect(gx, gy, 2, 2);
+      }
+    }
+    ctx.restore();
+  }
+
+  /** The title bar's pixel icons, centred on (cx, cy); `on` lights the icon's tile (pinned, full screen). */
+  function icon(kind: "pin" | "full" | "restore" | "close", cx: number, cy: number, on: boolean) {
+    ctx.save();
+    if (on) {
+      ctx.fillStyle = LOOK.acc;
+      ctx.fillRect(cx - 9, cy - 8, 18, 16);
+    }
+    const c = on ? "#03211f" : LOOK.dim;
+    ctx.fillStyle = c;
+    ctx.strokeStyle = c;
+    ctx.lineWidth = 1.5;
+    const px = (x: number, y: number, w = 1.5, h = 1.5) => ctx.fillRect(cx + x, cy + y, w, h);
+    if (kind === "close") {
+      ctx.beginPath();
+      ctx.moveTo(cx - 3.5, cy - 3.5);
+      ctx.lineTo(cx + 3.5, cy + 3.5);
+      ctx.moveTo(cx + 3.5, cy - 3.5);
+      ctx.lineTo(cx - 3.5, cy + 3.5);
+      ctx.stroke();
+    } else if (kind === "full") {
+      // Four corners pointing out.
+      for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+        px(sx > 0 ? 2.5 : -4, sy > 0 ? 2.5 : -4, 1.5, 1.5);
+        px(sx > 0 ? 2.5 : -4, sy > 0 ? 1 : -2.5, 1.5, 1.5);
+        px(sx > 0 ? 1 : -2.5, sy > 0 ? 2.5 : -4, 1.5, 1.5);
+      }
+    } else if (kind === "restore") {
+      // Four corners pointing in.
+      for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+        px(sx > 0 ? 1 : -2.5, sy > 0 ? 1 : -2.5, 1.5, 1.5);
+        px(sx > 0 ? 2.5 : -4, sy > 0 ? 1 : -2.5, 1.5, 1.5);
+        px(sx > 0 ? 1 : -2.5, sy > 0 ? 2.5 : -4, 1.5, 1.5);
+      }
+    } else {
+      // A pushpin: round head, a collar, the needle.
+      px(-2, -5, 4, 1.5);
+      px(-3, -3.5, 6, 3);
+      px(-4.5, -0.5, 9, 1.5);
+      px(-0.75, 1, 1.5, 4.5);
     }
     ctx.restore();
   }
@@ -695,8 +963,18 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
   const api: SketchApi = {
     clearAll() {
       for (const c of layout.cards) closed.add(c.id);
+      pinned = new Set();
+      zoom = new Map();
+      full = undefined;
       relayout();
     },
+    exitFull() {
+      if (!full) return false;
+      setFull(undefined);
+      return true;
+    },
+    debugCards: () =>
+      layout.cards.map((c) => ({ id: c.id, rect: { ...c.rect }, scale: c.scale, pinned: pinned.has(c.id), full: full === c.id, scroll: scroll.get(c.id) ?? 0 })),
     openCount: () => layout.cards.length,
     setObstacles(rects, side = "left", soft = []) {
       const sameList = (a: Rect[], b: Rect[]) => a.length === b.length && a.every((r, i) => {

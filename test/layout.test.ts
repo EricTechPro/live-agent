@@ -4,7 +4,7 @@
 // boxes, the caption strip at the bottom, and the obstacles (the orb, marks on real UI).
 import { expect, test } from "bun:test";
 import type { Mark } from "../src/core/canvas.ts";
-import { BOTTOM_FREE, GAP, inkHits, separateLoose, layoutCard, layoutScene, MARGIN, overlaps, placeCards, screenTextBoxes, toScreen, wrap, type Layout, type Rect } from "../app/src/layout.ts";
+import { BOTTOM_FREE, GAP, inkHits, separateLoose, layoutCard, layoutScene, MARGIN, overlaps, placeCards, screenTextBoxes, SIZE_SCALE, toScreen, wrap, type Layout, type Rect } from "../app/src/layout.ts";
 import type { SceneMark } from "../app/src/sketch.ts";
 
 const VIEW = { width: 1440, height: 900 };
@@ -272,6 +272,42 @@ test("closed cards free their room and their ink goes with them", () => {
 test("placeCards fills from the right when asked (the orb is on the left)", () => {
   const { rects } = placeCards([{ id: "a", w: 300, h: 200 }], VIEW, [], new Map(), "right");
   expect(rects.get("a")!.rect.x + 300).toBe(VIEW.width - MARGIN);
+});
+
+test("a zoomed card takes its scale and keeps its spot; past the screen's height its rect stops and the contents scroll", () => {
+  const prev = new Map([["a", { x: MARGIN, y: MARGIN, w: 300, h: 200, scale: 1 }]]);
+  const { rects } = placeCards([{ id: "a", w: 300, h: 200, k: 1.5 }], VIEW, [], prev);
+  expect(rects.get("a")).toEqual({ rect: { x: MARGIN, y: MARGIN, w: 450, h: 300 }, scale: 1.5 });
+  const tall = placeCards([{ id: "a", w: 300, h: 500, k: 2.5 }], VIEW, [], prev).rects.get("a")!;
+  expect(tall.scale).toBe(2.5);
+  expect(tall.rect.h).toBe(VIEW.height - MARGIN * 2 - BOTTOM_FREE);
+  // Never wider than the screen.
+  const wide = placeCards([{ id: "a", w: 900, h: 100, k: 3 }], VIEW, [], prev).rects.get("a")!;
+  expect(wide.rect.w).toBeLessThanOrEqual(VIEW.width - MARGIN * 2);
+});
+
+test("pinned cards never close to make room; the oldest unpinned one goes", () => {
+  const sizes = ["a", "b", "c", "d", "e"].map((id) => ({ id, w: 300, h: 200 }));
+  expect(placeCards(sizes, VIEW, [], new Map(), "left", 4).evicted).toEqual(["a"]);
+  expect(placeCards(sizes, VIEW, [], new Map(), "left", 4, [], { pinned: new Set(["a"]) }).evicted).toEqual(["b"]);
+});
+
+test("while a card is zoomed (lead), the others shrink to make room before any closes", () => {
+  const view = { width: 800, height: 600 };
+  const prev = new Map([["a", { x: MARGIN, y: MARGIN, w: 380, h: 250, scale: 1 }], ["b", { x: MARGIN, y: 274, w: 380, h: 250, scale: 1 }]]);
+  const sizes = [{ id: "a", w: 380, h: 250, k: 1.6 }, { id: "b", w: 380, h: 250 }];
+  const { rects, evicted } = placeCards(sizes, view, [], prev, "left", 6, [], { lead: "a" });
+  expect(evicted).toEqual([]);
+  expect(rects.get("a")!.scale).toBe(1.6);
+  expect(rects.get("b")!.scale).toBeLessThan(1);
+  expect(overlaps(rects.get("a")!.rect, rects.get("b")!.rect)).toBe(false);
+});
+
+test("card_size sets the scale a card opens at", () => {
+  const big = layoutScene({ marks: [sm({ ...list("p1"), card_size: "large" })], view: VIEW });
+  const small = layoutScene({ marks: [sm({ ...list("p1"), card_size: "small" })], view: VIEW });
+  expect(big.cards[0]!.scale).toBeCloseTo(SIZE_SCALE.large);
+  expect(small.cards[0]!.scale).toBeCloseTo(SIZE_SCALE.small);
 });
 
 test("many random overlapping calls: no overlap, ever (fuzz)", () => {
