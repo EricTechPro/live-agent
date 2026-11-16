@@ -10,6 +10,14 @@ import schema from "./config.schema.json" with { type: "json" };
 
 export type SafetyMode = "ask-me" | "auto-edits" | "bypass";
 export type Verdict = "allow" | "ask" | "block";
+export type Tone = "short" | "casual" | "friendly" | "pro";
+
+/** The folder (one name inside the brain) that plays each part of the brain. */
+export interface BrainFolders {
+  raw: string;
+  wiki: string;
+  projects: string;
+}
 
 export interface Config {
   brainPath: string;
@@ -17,6 +25,8 @@ export interface Config {
   helpers: { geminiCli: boolean; codex: boolean; claudeCode: boolean; maxAtOnce: number };
   worktrees: boolean;
   voice: string;
+  tone: Tone;
+  brainFolders: BrainFolders;
 }
 
 /** Where the config lives unless told otherwise. */
@@ -31,6 +41,9 @@ type SchemaNode = {
   enum?: unknown[];
   minimum?: number;
   minLength?: number;
+  pattern?: string;
+  /** Ours, not JSON Schema's: the plain words shown when `pattern` does not match. */
+  patternMessage?: string;
   default?: unknown;
 };
 
@@ -90,7 +103,7 @@ const show = (value: unknown) => JSON.stringify(value);
 // Check the file's value against one schema node, then lay it over the
 // defaults, so a file that only sets `safety.mode` still gets every other
 // default. A tiny hand validator: it covers exactly the keywords our schema
-// uses (type, enum, minimum, minLength, properties, additionalProperties).
+// uses (type, enum, minimum, minLength, pattern, properties, additionalProperties).
 function fill(node: SchemaNode, value: unknown, field: string): unknown {
   if (value === undefined) return defaultsOf(node);
   const name = field || "config";
@@ -136,6 +149,9 @@ function fill(node: SchemaNode, value: unknown, field: string): unknown {
   }
   if (node.minLength !== undefined && (value as string).length < node.minLength) {
     throw new ConfigError(`${name} must not be empty`);
+  }
+  if (node.pattern !== undefined && !new RegExp(node.pattern).test(value as string)) {
+    throw new ConfigError(`${name} ${node.patternMessage ?? `must match ${node.pattern}`} (got ${show(value)})`);
   }
   return value;
 }

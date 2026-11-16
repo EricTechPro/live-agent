@@ -58,6 +58,8 @@ const helperHome = join(dir, "helper-home");
 function session(script: ScriptEntry[], bin: string, extra: Partial<SessionOptions> = {}) {
   return startSession({
     model: scriptedModel(script), tools, mode: "bypass", workDir: dir,
+    // Helper jobs with no folder start in the brain folder (ticket 21): here, the temp dir.
+    config: { ...defaultConfig(), brainPath: dir },
     helpers: { geminiCliBin: bin, geminiCliHome: helperHome, geminiApiKey: "secret-test-key", cancelGraceMs: 200 }, ...extra,
   });
 }
@@ -169,6 +171,7 @@ describe("job states", () => {
 
   test("with max-at-once 1, a second job waits in queued until the first ends", async () => {
     const config = defaultConfig();
+    config.brainPath = dir;
     config.helpers.maxAtOnce = 1;
     const s = await session(
       [[startHelper("c1", "first"), startHelper("c2", "second")], say("Started two."), say("one"), say("two")],
@@ -189,6 +192,7 @@ describe("job states", () => {
 
   test("with max-at-once 2, two jobs run side by side", async () => {
     const config = defaultConfig();
+    config.brainPath = dir;
     config.helpers.maxAtOnce = 2;
     const s = await session(
       [[startHelper("c1", "first"), startHelper("c2", "second")], say("Started two."), say("one"), say("two")],
@@ -222,8 +226,33 @@ describe("cancelling", () => {
     await s.close();
   });
 
+  test("if the core dies hard (kill -9), the helper and everything it started stop too", async () => {
+    const crashDir = join(dir, "crash-run");
+    mkdirSync(crashDir);
+    const pidFile = join(crashDir, "hang.pid");
+    // A stand-in core: starts a helper job, then waits to be killed.
+    const core = Bun.spawn([
+      "bun", "-e", `
+        const { geminiCliJob } = await import(${JSON.stringify(join(import.meta.dir, "..", "src", "helpers", "gemini-cli.ts"))});
+        const job = geminiCliJob({ task: "x", cwd: ${JSON.stringify(crashDir)}, geminiCliBin: ${JSON.stringify(hangs)}, geminiCliHome: ${JSON.stringify(helperHome)}, geminiApiKey: "k" });
+        job.run({ signal: new AbortController().signal }).catch(() => {});
+        setInterval(() => {}, 1000);
+      `,
+    ], { stdout: "ignore", stderr: "ignore" });
+    while (!existsSync(pidFile) || readFileSync(pidFile, "utf8").trim().split(" ").length < 2) await Bun.sleep(10);
+    const pids = readFileSync(pidFile, "utf8").trim().split(" ").map(Number);
+    expect(pids.every(alive)).toBe(true);
+
+    core.kill("SIGKILL");
+    await core.exited;
+
+    for (let i = 0; i < 100 && pids.some(alive); i++) await Bun.sleep(50);
+    for (const pid of pids) expect(alive(pid)).toBe(false);
+  }, 10_000);
+
   test("cancelling a queued job removes it before it runs", async () => {
     const config = defaultConfig();
+    config.brainPath = dir;
     config.helpers.maxAtOnce = 1;
     const s = await session(
       [[startHelper("c1", "first"), startHelper("c2", "second")], say("Started."), say("x"), say("y"), say("z")],
@@ -277,26 +306,26 @@ describe("cancelling", () => {
 });
 
 describe("Gemini CLI missing or no key", () => {
-  test("a missing binary fails the job with how to install it", async () => {
-    const s = await session([[startHelper("c1")], say("Started."), say("It failed.")], join(dir, "no-such-gemini"));
-    const rec = recorder(s);
-    await s.sendText("Fix the bug.");
-    const end = (await rec.until(jobEnded("job-1"))) as EventOf<"job.state">;
-    expect(end.state).toBe("failed");
-    expect(end.message).toContain("npm install -g @google/gemini-cli");
+  test("a missing binary starts no job and says how to install it", async () => {
+    const s = await session([[startHelper("c1")], say("Install it first.")], join(dir, "no-such-gemini"));
+    const events = await s.sendText("Fix the bug.");
+    expect(events.some((e) => e.type === "job.state")).toBe(false);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "tool.result", id: "c1", status: "error", error: expect.stringContaining("npm install -g @google/gemini-cli"),
+    }));
     await s.close();
   });
 
-  test("with no Gemini key the job fails with where to get one, without running the CLI", async () => {
-    const s = await session([[startHelper("c1")], say("Started."), say("It failed.")], ok, {
+  test("with no Gemini key no job starts, the CLI does not run, and it says where to get one", async () => {
+    const s = await session([[startHelper("c1")], say("Add a key first.")], ok, {
       helpers: { geminiCliBin: ok, geminiCliHome: helperHome, geminiApiKey: "" },
     });
     rmSync(join(dir, "ok-args"), { force: true });
-    const rec = recorder(s);
-    await s.sendText("Fix the bug.");
-    const end = (await rec.until(jobEnded("job-1"))) as EventOf<"job.state">;
-    expect(end.state).toBe("failed");
-    expect(end.message).toContain("README.md#get-your-gemini-key");
+    const events = await s.sendText("Fix the bug.");
+    expect(events.some((e) => e.type === "job.state")).toBe(false);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "tool.result", id: "c1", status: "error", error: expect.stringContaining("README.md#get-your-gemini-key"),
+    }));
     expect(existsSync(join(dir, "ok-args"))).toBe(false);
     await s.close();
   });

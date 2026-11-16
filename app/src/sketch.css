@@ -1,0 +1,65 @@
+/* The drawing on the screen (drawing v2). sketch-view.ts paints the cards and ink on one
+   full-screen canvas; these are the HTML bits over it: each card's close button, the
+   "Clear all · N" chip, the caption bar, and Mermaid bodies inside diagram cards.
+   Look: teal ink #78ffe2 on near-opaque dark glass, stepped pixel corners, Martian Mono. */
+
+.sketch-ink { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+.sketch-ui { position: absolute; inset: 0; pointer-events: none; }
+
+/* A card's close button sits over the × the canvas draws in its title bar. */
+.sketch-x {
+  position: absolute; width: 22px; height: 22px; padding: 0; border: 0; background: transparent;
+  cursor: pointer; pointer-events: auto;
+}
+.sketch-x:hover, .sketch-x:focus-visible { background: rgba(120, 255, 226, .14); outline: none; }
+
+/* Stepped pixel chamfer, shared by the caption and the chip. */
+.sketch-caption, .sketch-clear {
+  clip-path: polygon(6px 0, calc(100% - 6px) 0, calc(100% - 6px) 3px, calc(100% - 3px) 3px, calc(100% - 3px) 6px, 100% 6px,
+    100% calc(100% - 6px), calc(100% - 3px) calc(100% - 6px), calc(100% - 3px) calc(100% - 3px), calc(100% - 6px) calc(100% - 3px), calc(100% - 6px) 100%,
+    6px 100%, 6px calc(100% - 3px), 3px calc(100% - 3px), 3px calc(100% - 6px), 0 calc(100% - 6px), 0 6px, 3px 6px, 3px 3px, 6px 3px);
+}
+
+/* The caption bar: the line being drawn, bottom centre. */
+.sketch-caption {
+  position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
+  max-width: min(640px, calc(100vw - 32px)); padding: 9px 18px 10px;
+  background: #78ffe2; /* the border: the glass sits 1.5px inside it */
+  animation: sketch-fade .25s ease-out;
+}
+.sketch-caption::before {
+  content: ""; position: absolute; inset: 1.5px; background: rgba(6, 22, 24, .94);
+  clip-path: inherit;
+}
+.sketch-caption p {
+  position: relative; margin: 0; color: #dcfff6; text-align: center;
+  font: 400 13px/1.45 "Martian Mono", ui-monospace, monospace; overflow-wrap: anywhere;
+}
+.sketch-caption[hidden], .sketch-clear[hidden] { display: none; }
+
+/* "Clear all · N": a solid teal chip with dark bold text, just above the caption. */
+.sketch-clear {
+  position: absolute; left: 50%; bottom: 74px; transform: translateX(-50%);
+  padding: 4px 11px 5px; border: 0; background: #78ffe2; color: #032722; cursor: pointer;
+  font: 700 11px/1.2 "Martian Mono", ui-monospace, monospace; pointer-events: auto;
+  filter: drop-shadow(0 3px 0 #0e5c60);
+}
+.sketch-clear:hover, .sketch-clear:focus-visible { background: #e6fffa; outline: none; }
+@keyframes sketch-fade { from { opacity: 0; } }
+
+/* Diagram cards: Mermaid's SVG inside the card body, styled like the pen. */
+.sketch-card {
+  position: absolute; display: flex; align-items: center; justify-content: center; overflow: hidden;
+  opacity: 0; transition: opacity .35s ease-out;
+}
+.sketch-card[data-shown="true"] { opacity: 1; }
+.sketch-card svg { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; }
+.sketch-card svg .node rect, .sketch-card svg .node polygon, .sketch-card svg .node circle { stroke-width: 1.5px !important; filter: drop-shadow(0 0 4px rgba(120, 255, 226, .45)); }
+.sketch-card svg .flowchart-link, .sketch-card svg .edgePath path { stroke-width: 2.5px !important; filter: drop-shadow(0 0 3px rgba(120, 255, 226, .6)); }
+.sketch-card svg .nodeLabel, .sketch-card svg .edgeLabel { font-family: "Martian Mono", ui-monospace, monospace !important; }
+.sketch-card-note, .sketch-card-error { margin: 0; font: 400 11px/1.45 "Martian Mono", ui-monospace, monospace; }
+.sketch-card-note { color: #8ab8b0; }
+.sketch-card-error { color: #ff8a7a; }
+.sketch-card[data-state="error"] { flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 4px; overflow: auto; pointer-events: auto; }
+.sketch-card-source { margin: 0; font: 400 10px/1.4 "Martian Mono", ui-monospace, monospace; color: #8ab8b0; white-space: pre-wrap; user-select: text; }
+@media (prefers-reduced-motion: reduce) { .sketch-card, .sketch-caption { transition: none; animation: none; } }

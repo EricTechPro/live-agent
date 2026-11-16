@@ -49,3 +49,4 @@ uses, Gemini Live answered "I cannot use external tools" (no tool calls at all, 
 check with a direct-key connection (`geminiLiveModel({ apiKey })`) called every tool, and all the
 checks above passed with it. So tools seem to be dropped on the v1alpha ephemeral-token path
 (`src/voice/token-service.ts` / `src/models/gemini-live.ts`); this needs its own fix.
+- 2026-11-14 review fix: a New chat button sits next to Setup; the transcript clears on `chat.started`, and the tidy job of the chat that ended shows on the board.

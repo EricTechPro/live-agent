@@ -5,18 +5,24 @@
 // (test/orb-state.test.ts) and the same rules drive voice and typed turns.
 //
 // Inputs are the core's AgentEvents plus a few things only the window knows:
-//   core.ready / core.down   the sidecar came up or died
+//   core.ready / core.down   the sidecar came up, or died and the shell gave up restarting it
+//   core.restarting          the sidecar died and the shell starts it again soon (ticket 40)
 //   turn.sent                the user sent a typed turn
 //   agent.audio              the agent's voice track started/stopped playing (LiveKit)
 //   tick                     time passing (the window sends one every ~200 ms)
 import type { AgentEvent } from "../../src/core/events.ts";
 
-export type OrbState = "connecting" | "listening" | "thinking" | "speaking" | "offline";
+/**
+ * `reconnecting` (ticket 40): no network, or the core is being restarted; it comes back by
+ * itself. `offline`: the retries ran out (or have gone on for long); Retry is offered.
+ */
+export type OrbState = "connecting" | "listening" | "thinking" | "speaking" | "reconnecting" | "offline";
 
 export type OrbInput =
   | AgentEvent
   | { type: "core.ready" }
   | { type: "core.down" }
+  | { type: "core.restarting"; attempt: number; retryInMs: number }
   | { type: "turn.sent" }
   | { type: "agent.audio"; speaking: boolean }
   | { type: "tick" };
@@ -31,7 +37,17 @@ export interface Orb {
   replying?: boolean;
   /** A typed turn was sent and the core has not echoed it back yet. */
   typed?: boolean;
+  /** Reconnecting or offline: when the next try is (same clock as `now`). */
+  retryAt?: number;
+  /** Offline because the core process is gone (Retry restarts it), not just the network. */
+  coreDead?: boolean;
 }
+
+/**
+ * Network tries in a row before the orb stops saying "Reconnecting…" and offers Retry
+ * (1 + 2 + 5 + 10 + 30 + 30 s: about a minute and a half). The core keeps trying anyway.
+ */
+export const RECONNECT_TRIES = 6;
 
 /**
  * How long a pause after the user's last words means "they are done, the model
@@ -44,8 +60,14 @@ export const orbStart: Orb = { state: "connecting" };
 
 export function nextOrb(orb: Orb, input: OrbInput, now: number): Orb {
   if (input.type === "core.ready") return { state: "listening" };
-  if (input.type === "core.down") return { state: "offline" };
-  if (orb.state === "offline" || orb.state === "connecting") return orb;
+  if (input.type === "core.down") return { state: "offline", coreDead: true };
+  if (input.type === "core.restarting") return { state: "reconnecting", retryAt: now + input.retryInMs };
+  if (input.type === "connection") {
+    if (orb.state === "connecting" || orb.coreDead) return orb;
+    if (input.state === "connected") return orb.state === "reconnecting" || orb.state === "offline" ? { state: "listening" } : orb;
+    return { state: input.attempt > RECONNECT_TRIES ? "offline" : "reconnecting", retryAt: now + input.retryInMs };
+  }
+  if (orb.state === "offline" || orb.state === "connecting" || orb.state === "reconnecting") return orb;
 
   switch (input.type) {
     case "transcript":

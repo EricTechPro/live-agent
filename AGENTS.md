@@ -8,6 +8,7 @@ Full plan: `docs/spec.md`. Decisions and reasons: `docs/plan.md`.
 ## Tickets
 Tickets live in the `tickets/` folder, one file per ticket, numbered in build order.
 Each ticket lists the tickets that block it. Work only tickets whose blockers are done.
+A blocker whose only open boxes need a person (`ready-for-human`) counts as done for this.
 When a ticket is done, tick its boxes and set `**Status:** done` in the same commit.
 `must-have` tickets are needed for DevFest (Nov 27). `after-talk` tickets can wait.
 

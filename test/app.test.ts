@@ -4,8 +4,10 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { startApp, type App } from "../src/app.ts";
 import { scriptedModel } from "../src/models/scripted.ts";
 import { defineTool } from "../src/core/tool.ts";
+import { freeLiveKitPort } from "./free-port.ts";
 
-const LIVEKIT_PORT = 7920;
+// Free ports, so a running app or another test run never collides with these.
+const LIVEKIT_PORT = await freeLiveKitPort();
 const GEMINI_KEY = "AIza-real-key-must-never-reach-the-window";
 
 let app: App;
@@ -51,6 +53,15 @@ describe("voice app, as the window sees it", () => {
     expect(html).not.toContain(GEMINI_KEY);
   });
 
+  test("only the app's own window (and localhost pages) may read the API from a browser", async () => {
+    const from = (origin: string) =>
+      fetch(`${app.url}/session`, { headers: { ...auth(), Origin: origin } }).then((res) => res.headers.get("access-control-allow-origin"));
+
+    expect(await from("tauri://localhost")).toBe("tauri://localhost");
+    expect(await from("http://localhost:1420")).toBe("http://localhost:1420");
+    expect(await from("https://evil.example")).toBeNull();
+  });
+
   test("without the per-launch token, the window gets nothing", async () => {
     expect((await fetch(`${app.url}/session`)).status).toBe(401);
     expect((await fetch(`${app.url}/session`, { headers: { Authorization: "Bearer guess" } })).status).toBe(401);
@@ -82,9 +93,10 @@ describe("voice app, as the window sees it", () => {
 
 describe("stopping the app", () => {
   test("stops the local LiveKit server too", async () => {
-    const other = await startApp({ model: scriptedModel([]), livekitPort: LIVEKIT_PORT + 10, tools: [] });
+    const otherPort = await freeLiveKitPort();
+    const other = await startApp({ model: scriptedModel([]), livekitPort: otherPort, tools: [] });
     await other.stop();
-    const up = await fetch(`http://127.0.0.1:${LIVEKIT_PORT + 10}`).then(() => true, () => false);
+    const up = await fetch(`http://127.0.0.1:${otherPort}`).then(() => true, () => false);
     expect(up).toBe(false);
   }, 15_000);
 });
@@ -113,7 +125,7 @@ describe("window commands: cancel a job, switch the mode", () => {
         [{ type: "text", text: "Started." }],
         [{ type: "text", text: "It was cancelled." }],
       ]),
-      livekitPort: LIVEKIT_PORT + 20,
+      livekitPort: await freeLiveKitPort(),
       tools: [startWait],
       mode: "auto-edits",
     });
@@ -153,7 +165,15 @@ describe("window commands: cancel a job, switch the mode", () => {
     const stream = events();
     const reader = await stream.ready;
     const now = await fetch(`${cmd.url}/mode`, { headers: { Authorization: `Bearer ${cmd.launchToken}` } });
-    expect(await now.json()).toEqual({ mode: "auto-edits" });
+    expect(await now.json()).toEqual({
+      mode: "auto-edits",
+      // The window draws its dropdown from this list, so the labels live with the core's modes.
+      modes: [
+        { id: "ask-me", label: "Ask first" },
+        { id: "auto-edits", label: "Auto" },
+        { id: "bypass", label: "Full access" },
+      ],
+    });
 
     expect(await (await post("/mode", { mode: "bypass" })).json()).toEqual({ mode: "bypass" });
     expect(await (await post("/mode", { cycle: true })).json()).toEqual({ mode: "ask-me" });
@@ -180,9 +200,84 @@ describe("window commands: cancel a job, switch the mode", () => {
     await reader.cancel();
   });
 
+  test("POST /chat/new ends this chat (note saved) and starts the next", async () => {
+    const stream = events();
+    const reader = await stream.ready;
+
+    const res = await post("/chat/new");
+
+    expect(res.status).toBe(200);
+    await until(() => stream.seen.some((e) => e.type === "chat.started"));
+    expect(stream.seen).toContainEqual(expect.objectContaining({ type: "brain.write", cause: "chat-end" }));
+    await reader.cancel();
+  });
+
   test("both commands need the per-launch token", async () => {
+    expect((await post("/chat/new", undefined, "guess")).status).toBe(401);
     expect((await post("/mode", { mode: "bypass" }, "guess")).status).toBe(401);
     expect((await post("/jobs/job-1/cancel", undefined, "guess")).status).toBe(401);
     expect((await fetch(`${cmd.url}/mode`)).status).toBe(401);
+  });
+});
+
+describe("window commands: approve or decline a waiting call (ticket 28)", () => {
+  const made: string[] = [];
+  const touch = defineTool<{ name: string }>({
+    name: "touch_file",
+    description: "make a file",
+    risk: "edit",
+    parameters: { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
+    run: ({ name }) => {
+      made.push(name);
+      return { made: name };
+    },
+  });
+  let gate: App;
+  beforeAll(async () => {
+    gate = await startApp({
+      model: scriptedModel([
+        [{ type: "tool.call", id: "c1", name: "touch_file", args: { name: "a.md" } }],
+        [{ type: "text", text: "May I?" }],
+        [{ type: "text", text: "Made it." }],
+        [{ type: "tool.call", id: "c2", name: "touch_file", args: { name: "b.md" } }],
+        [{ type: "text", text: "May I?" }],
+        [{ type: "text", text: "Okay, I won't." }],
+      ]),
+      livekitPort: await freeLiveKitPort(),
+      tools: [touch],
+      mode: "ask-me",
+    });
+  });
+  afterAll(() => gate.stop());
+  const post = (path: string, token = gate.launchToken) =>
+    fetch(`${gate.url}${path}`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+  const say = (text: string) =>
+    fetch(`${gate.url}/text`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${gate.launchToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+
+  test("POST /approvals/:id/approve runs the call; answered or unknown ids are a 404", async () => {
+    await say("make a.md");
+    expect((await post("/approvals/nope/approve")).status).toBe(404);
+    const res = await post("/approvals/c1/approve");
+    expect(await res.json()).toEqual({ answered: true, approve: true });
+    for (let i = 0; i < 100 && !made.length; i++) await Bun.sleep(20);
+    expect(made).toEqual(["a.md"]);
+    expect((await post("/approvals/c1/decline")).status).toBe(404);
+  });
+
+  test("POST /approvals/:id/decline declines it; nothing runs", async () => {
+    await Bun.sleep(100); // let "Made it." finish its turn
+    await say("make b.md");
+    const res = await post("/approvals/c2/decline");
+    expect(await res.json()).toEqual({ answered: true, approve: false });
+    expect(made).toEqual(["a.md"]);
+    expect((await post("/approvals/c2/approve")).status).toBe(404);
+  });
+
+  test("the approval routes need the per-launch token", async () => {
+    expect((await post("/approvals/c1/approve", "guess")).status).toBe(401);
   });
 });

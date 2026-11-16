@@ -19,7 +19,13 @@ import type { Model, ModelEvent, ModelInput } from "../core/model.ts";
 
 export type ScriptEntry = ModelEvent[] | ((input: ModelInput) => ModelEvent[]);
 
-export function scriptedModel(script: ScriptEntry[]): Model {
+export interface ScriptedOptions {
+  /** Every input the model got, in order (text, audio, images, tool answers): tests read it. */
+  inputs?: ModelInput[];
+}
+
+export function scriptedModel(script: ScriptEntry[], options: ScriptedOptions = {}): Model {
+  const log = (input: ModelInput) => options.inputs?.push(input);
   let next = 0;
   return {
     async connect(onEvent) {
@@ -40,19 +46,26 @@ export function scriptedModel(script: ScriptEntry[]): Model {
           for (const event of events) onEvent(event);
           // Every reply ends; the script only lists `turn.complete` when it
           // wants it somewhere unusual.
-          if (!events.some((e) => e.type === "turn.complete")) onEvent({ type: "turn.complete" });
+          // A dropped connection never completes its turn.
+          if (!events.some((e) => e.type === "turn.complete" || e.type === "disconnected")) onEvent({ type: "turn.complete" });
           replying = false;
         });
       }
       return {
         sendText(text) {
+          log({ type: "text", text });
           reply({ type: "text", text });
+        },
+        // An image is context: it is logged, never answered on its own.
+        sendImage(data, mimeType) {
+          log({ type: "image", data, mimeType });
         },
         sendAudio(data, sampleRate) {
           if (replying || next >= script.length) return;
           reply({ type: "audio", data, sampleRate });
         },
         sendToolResponse(response) {
+          log({ type: "tool.response", ...response });
           if (response.scheduling === "silent") return;
           reply({ type: "tool.response", ...response });
         },

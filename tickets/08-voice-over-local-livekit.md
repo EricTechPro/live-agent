@@ -30,3 +30,5 @@ Notes:
 - Known gap: in Ask me mode, a spoken "yes" does not yet approve a waiting tool call. Only a typed yes does (ticket 02's approval path is text-only).
 
 Manual check by Eric, 2026-11-14 (debug build at 10d1b10+, launched with `open --env`): the macOS mic prompt showed with the plain reason, a spoken question ("What's my sourdough starter called?") got a spoken answer ("Gus") in real time, and talking over the agent interrupted it.
+
+- 2026-11-14 review fix: a spoken yes/no now answers a waiting tool call like a typed one. The Live adapter reconnects on its own (session resumption, goAway hand-over, context compression), and a dropped connection ends the turn in flight instead of hanging it. Config `voice` is sent as speechConfig.

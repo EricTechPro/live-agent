@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jett drawing demo</title>
+    <!-- Dev only (drawing v2): plays a sample multi-card drawing with no Gemini and no core.
+         Open http://localhost:1420/demo-draw.html on the Vite dev server. Not part of the app build
+         (Vite builds index.html only). -->
+    <link rel="stylesheet" href="/src/pixel.css" />
+    <link rel="stylesheet" href="/src/sketch.css" />
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; }
+      body {
+        /* A plain dark desktop, so screenshots judge the ink and cards, not the backdrop. */
+        background: linear-gradient(#141a22, #1b1d21);
+      }
+      /* A fake window on the desktop, so the cards float beside real-looking content. */
+      .win { position: fixed; right: 4vw; top: 9vh; width: 46vw; height: 70vh; border-radius: 10px; background: #f4f4f2; box-shadow: 0 20px 60px rgba(0,0,0,.5); overflow: hidden; }
+      .win header { height: 34px; background: #dedcd8; display: flex; align-items: center; gap: 8px; padding: 0 12px; }
+      .win header i { width: 12px; height: 12px; border-radius: 50%; background: #c9c6c0; }
+      .win article { padding: 22px 28px; font: 15px/1.6 Georgia, serif; color: #222; }
+      .win h1 { font-weight: 400; margin: 0 0 10px; }
+      #stage { position: fixed; inset: 0; pointer-events: none; }
+      .replay { position: fixed; right: 12px; top: 8px; z-index: 5; font: 500 11px "Martian Mono", monospace; }
+    </style>
+  </head>
+  <body>
+    <div class="win" aria-hidden="true">
+      <header><i></i><i></i><i></i></header>
+      <article>
+        <h1>Black hole</h1>
+        <p>A black hole is a region of spacetime where gravity is so strong that nothing, not even light, can escape it.
+        The boundary of no escape is called the event horizon. A black hole forms when a massive star collapses at the end of its life.</p>
+        <p>Black holes of stellar mass form when very massive stars collapse at the end of their life cycle. After a black hole has formed,
+        it can grow by absorbing mass from its surroundings.</p>
+      </article>
+    </div>
+    <section id="stage" class="stage" aria-label="Drawing"></section>
+    <button class="replay" type="button" onclick="location.reload()">replay</button>
+    <script type="module" src="/src/demo-draw.ts"></script>
+  </body>
+</html>

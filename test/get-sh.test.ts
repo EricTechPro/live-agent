@@ -19,7 +19,7 @@ function fakeRelease(dir: string, version: string): string {
   const core = join(app, "Contents", "MacOS", "live-agent-core");
   writeFileSync(
     core,
-    `#!/bin/sh\necho "doctor-ran $* home=$LIVE_AGENT_HOME" >> "$LIVE_AGENT_HOME/doctor.log"\necho "fake doctor: all checks pass"\nexit \${FAKE_DOCTOR_EXIT:-0}\n`,
+    `#!/bin/sh\necho "doctor-ran $* home=$LIVE_AGENT_HOME cwd=$(pwd -P)" >> "$LIVE_AGENT_HOME/doctor.log"\necho "fake doctor: all checks pass"\nexit \${FAKE_DOCTOR_EXIT:-0}\n`,
   );
   chmodSync(core, 0o755);
   const tarball = join(dir, `live-agent-${version}.tar.gz`);
@@ -34,8 +34,9 @@ function sandbox() {
   return { root, home, apps: join(home, "Applications"), folder: join(home, "Desktop", "live-agent") };
 }
 
-function runGet(s: ReturnType<typeof sandbox>, tarball: string, extra: Record<string, string> = {}, args: string[] = []) {
+function runGet(s: ReturnType<typeof sandbox>, tarball: string, extra: Record<string, string> = {}, args: string[] = [], cwd?: string) {
   const r = Bun.spawnSync(["bash", GET_SH, "--no-open", ...args], {
+    cwd,
     env: {
       PATH: process.env.PATH!,
       HOME: s.home,
@@ -56,20 +57,45 @@ describe("get.sh", () => {
     expect(r.code).toBe(0);
     expect(readFileSync(join(s.apps, "live-agent.app", "Contents", "VERSION"), "utf8")).toBe("1");
     expect(readFileSync(join(s.folder, "sample-brain", "wiki", "tomato-garden.md"), "utf8")).toBe("# Tomatoes\n");
-    // No config yet: the setup chat writes it on first launch.
+    // No config yet: the setup wizard writes it on first launch.
     expect(existsSync(join(s.folder, "live-agent.config.json"))).toBe(false);
     // Doctor ran from the installed app, pointed at the Desktop folder.
     expect(readFileSync(join(s.folder, "doctor.log"), "utf8")).toContain(`doctor-ran doctor home=${s.folder}`);
     expect(r.out).toContain("fake doctor: all checks pass");
   });
 
-  test("with no terminal it writes an empty key file, private to the user, and says where to put the key", () => {
+  test("with no terminal it writes an empty key file, private to the user, and the app asks for the key", () => {
     const s = sandbox();
     const r = runGet(s, fakeRelease(s.root, "1"));
     const env = join(s.folder, ".env");
     expect(readFileSync(env, "utf8")).toBe("GEMINI_API_KEY=\n");
     expect(statSync(env).mode & 0o777).toBe(0o600);
-    expect(r.out).toContain(env);
+    // Not a warning: the app opens on "Paste your Gemini key" (ticket 19).
+    expect(r.out).toContain("the app will ask for your Gemini key");
+    expect(r.out).not.toContain("no key yet");
+  });
+
+  test("with no terminal it still ends by opening the app, which shows the key screen", () => {
+    const s = sandbox();
+    // A fake `open` first on PATH records what get.sh opens.
+    const bin = join(s.root, "bin");
+    mkdirSync(bin);
+    writeFileSync(join(bin, "open"), `#!/bin/sh\necho "$@" > "${join(s.root, "opened")}"\n`);
+    chmodSync(join(bin, "open"), 0o755);
+    const tarball = fakeRelease(s.root, "1");
+    const r = Bun.spawnSync(["bash", GET_SH], {
+      env: {
+        PATH: `${bin}:${process.env.PATH}`,
+        HOME: s.home,
+        LIVE_AGENT_TARBALL: `file://${tarball}`,
+        LIVE_AGENT_APPS: s.apps,
+        LIVE_AGENT_TTY: "/dev/null",
+      },
+      stdin: "ignore",
+    });
+    expect(r.exitCode).toBe(0);
+    expect(readFileSync(join(s.root, "opened"), "utf8").trim()).toBe(join(s.apps, "live-agent.app"));
+    expect(readFileSync(join(s.folder, ".env"), "utf8")).toBe("GEMINI_API_KEY=\n");
   });
 
   test("asks for the Gemini key on the terminal and saves it with 600 permissions, without printing it", () => {
@@ -87,7 +113,7 @@ describe("get.sh", () => {
   test("running it again upgrades the app and leaves the brain, config and key alone", () => {
     const s = sandbox();
     expect(runGet(s, fakeRelease(s.root, "1")).code).toBe(0);
-    // The user uses it: a note, a config from the setup chat, a key.
+    // The user uses it: a note, a config from the setup wizard, a key.
     writeFileSync(join(s.folder, "sample-brain", "wiki", "tomato-garden.md"), "# My tomatoes\n");
     mkdirSync(join(s.folder, "sample-brain", "raw"), { recursive: true });
     writeFileSync(join(s.folder, "sample-brain", "raw", "mine.md"), "my note\n");
@@ -105,7 +131,19 @@ describe("get.sh", () => {
     expect(readFileSync(join(s.folder, ".env"), "utf8")).toBe("GEMINI_API_KEY=kept-key\n");
   });
 
-  test("a failing doctor only warns: the setup chat helps fix it", () => {
+  test("doctor runs from the live-agent folder, so a .env where get.sh was run is never read", () => {
+    // Bun loads .env from the working folder. Run from a repo with its own key,
+    // doctor must still check the live-agent folder's key (ticket 20).
+    const s = sandbox();
+    const elsewhere = join(s.root, "some-repo");
+    mkdirSync(elsewhere);
+    writeFileSync(join(elsewhere, ".env"), "GEMINI_API_KEY=stray-repo-key\n");
+    const r = runGet(s, fakeRelease(s.root, "1"), {}, [], elsewhere);
+    expect(r.code).toBe(0);
+    expect(readFileSync(join(s.folder, "doctor.log"), "utf8")).toContain(`cwd=${s.folder}`);
+  });
+
+  test("a failing doctor only warns: the setup wizard helps fix it", () => {
     const s = sandbox();
     const r = runGet(s, fakeRelease(s.root, "1"), { FAKE_DOCTOR_EXIT: "1" });
     expect(r.code).toBe(0);

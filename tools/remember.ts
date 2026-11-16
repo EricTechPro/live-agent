@@ -23,8 +23,8 @@ export default defineTool<{ text: string; title?: string }>({
     },
     required: ["text"],
   },
-  async run({ text, title }, { brainPath, brainWrote }) {
-    const path = await saveRawNote(brainPath, { title: title?.trim() || "Remember", text });
+  async run({ text, title }, { brainPath, brainFolders, brainWrote }) {
+    const path = await saveRawNote(brainPath, { title: title?.trim() || "Remember", text }, brainFolders);
     brainWrote(path);
     return { saved: path };
   },

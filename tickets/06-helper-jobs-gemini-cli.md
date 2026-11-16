@@ -28,3 +28,4 @@ before. "Ready" now means installed + a key present; no key fails with a fix poi
 `README.md#get-your-gemini-key`, and exit code 41 now means the key was rejected. The
 doctor (ticket 11) drops the sign-in check for Gemini CLI. Verified end to end with real
 Gemini Live and real Gemini CLI 0.68 fixing an off-by-one bug on disk.
+- 2026-11-14 review fix: a watchdog (`src/helpers/group-watchdog.ts`) stops a helper's whole process group if the core is killed hard, so no Gemini CLI is left running after a crash.

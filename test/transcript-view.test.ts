@@ -48,3 +48,13 @@ test("an interruption and an error show as their own lines", () => {
     { role: "note", text: "error: network blip" },
   ]);
 });
+
+test("a new chat starts a clean transcript with a note saying so", () => {
+  expect(
+    feed([
+      { type: "transcript", role: "user", text: "old chat" },
+      { type: "turn.done", reply: "" },
+      { type: "chat.started" },
+    ]),
+  ).toEqual([{ role: "note", text: "New chat. The last one was saved to your brain." }]);
+});

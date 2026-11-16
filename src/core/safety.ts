@@ -9,7 +9,7 @@
 //   | command    | ask    | ask        | allow  |
 //   | helper     | ask    | ask        | allow  |
 //
-// Per-tool overrides (from the config) win over the table.
+// Per-tool overrides (from the config) win over everything.
 import type { SafetyMode, Verdict } from "../config/index.ts";
 import type { RiskClass } from "./tool.ts";
 
@@ -19,6 +19,13 @@ export type SafetyOverrides = Record<string, Verdict>;
 
 /** The modes in Shift+Tab order: Ask me -> Auto edits -> Bypass -> back to Ask me. */
 export const MODES: readonly SafetyMode[] = ["ask-me", "auto-edits", "bypass"];
+
+/** How each mode is called on screen (the same words as the setup wizard). GET /mode hands these to the window. */
+export const MODE_LABELS: Record<SafetyMode, string> = {
+  "ask-me": "Ask first",
+  "auto-edits": "Auto",
+  bypass: "Full access",
+};
 
 /** The mode after `mode` in the Shift+Tab cycle. */
 export function nextMode(mode: SafetyMode): SafetyMode {
@@ -48,4 +55,16 @@ export function decide({ tool, risk, mode, overrides }: GateInput): Verdict {
 export function explain({ tool, risk, mode, overrides }: GateInput, verdict: Verdict): string {
   if (overrides?.[tool]) return `the config sets ${tool} to "${verdict}"`;
   return `${risk} tools are "${verdict}" in ${mode} mode`;
+}
+
+/** A verdict and its reason. */
+export interface Ruling {
+  verdict: Verdict;
+  reason: string;
+}
+
+/** The gate's ruling on one call: a config override, else the mode table. */
+export function rule(input: GateInput): Ruling {
+  const verdict = decide(input);
+  return { verdict, reason: explain(input, verdict) };
 }

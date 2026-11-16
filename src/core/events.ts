@@ -7,9 +7,12 @@
 // Every event is plain JSON, so the core can later pipe it to the app as
 // JSON lines without a translation layer.
 import type { Config } from "../config/index.ts";
+import type { Mark, MarkChange } from "./canvas.ts";
 import type { JobInfo } from "./jobs.ts";
 import type { SafetyMode, Verdict } from "./safety.ts";
 import type { RiskClass } from "./tool.ts";
+import type { Rect, ShotMap } from "../screen/geometry.ts";
+import type { FrontWindow } from "../screen/eyes.ts";
 
 export type AgentEvent =
   /** Something said in the chat. Model text arrives in chunks: join them in order. */
@@ -29,13 +32,14 @@ export type AgentEvent =
   /**
    * What the core told the model about a call:
    * ok (with output), error, blocked (never ran), waiting (for the user's yes),
-   * declined (the user did not say yes, so it never ran).
+   * declined (the user did not say yes, so it never ran), cancelled (the model
+   * dropped the call, e.g. the user talked over it or the connection dropped).
    */
   | {
       type: "tool.result";
       id: string;
       name: string;
-      status: "ok" | "error" | "blocked" | "waiting" | "declined";
+      status: "ok" | "error" | "blocked" | "waiting" | "declined" | "cancelled";
       output?: unknown;
       error?: string;
     }
@@ -60,13 +64,68 @@ export type AgentEvent =
    * the mode only from this event, so the dropdown and Shift+Tab never disagree.
    */
   | { type: "mode.changed"; mode: SafetyMode }
-  /**
-   * A setup chat began (ticket 12): the model is about to ask the setup questions.
-   * `firstRun`: there was no config file yet. The window shows a setup banner.
-   */
-  | { type: "setup.started"; configPath: string; firstRun: boolean }
-  /** The setup chat wrote the config file. The new settings apply the next time live-agent starts. */
+  /** Pause on or off (the window's Pause button): while paused Jett neither speaks nor hears the mic. */
+  | { type: "paused"; paused: boolean }
+  /** The setup wizard wrote the config file. Its settings are in use at once (a `mode.changed` comes first if the mode changed). */
   | { type: "setup.saved"; configPath: string; config: Config }
+  /**
+   * A new chat began (New chat, or a quiet spell): the last one left its note
+   * and tidy job, and the model starts fresh. The window clears the transcript.
+   */
+  | { type: "chat.started" }
+  /**
+   * One beat of a `draw` call (ticket 31): the line the voice says (`say`) and the
+   * marks to draw while it is said, already checked (src/core/canvas.ts). `id` is
+   * the call, `beat` counts from 0. Coordinates are on the 1000 x 600 board.
+   * Marks stay on the canvas until a new chat (`chat.started`).
+   */
+  | { type: "canvas.beat"; id: string; beat: number; say: string; marks: Mark[] }
+  /**
+   * A mark changed (ticket 33, `edit_canvas`; `id` is the call): `change` is what
+   * the model asked for, `mark` the whole mark after it (same mark id, already checked).
+   */
+  | { type: "canvas.edit"; id: string; change: MarkChange; mark: Mark }
+  /**
+   * The voice starts saying beat `beat` of draw call `id` (ticket 34): the model's
+   * transcript reached the start of that beat's `say` line. Sent at most once per
+   * beat, in order. A line never said (reworded, or a turn ended first) gets none.
+   */
+  | { type: "canvas.speak"; id: string; beat: number }
+  /**
+   * Marks erased by id (ticket 33). `all`: the board was cleared, and `ids` was everything on it.
+   * An interruption also erases the beats not yet spoken (ticket 34), so the canvas keeps only what was said.
+   */
+  | { type: "canvas.erase"; id: string; ids: string[]; all: boolean }
+  /**
+   * The link to the model (ticket 40). `reconnecting`: no network, the core tries again in
+   * `retryInMs` (it never gives up; the window shows "Reconnecting…"). `connected`: back.
+   */
+  | { type: "connection"; state: "reconnecting"; attempt: number; retryInMs: number; message: string }
+  | { type: "connection"; state: "connected" }
+  /**
+   * Screen awareness: a screenshot went into the model. `look` = the model asked to see the
+   * screen; `circle` = the user circled something while holding Ctrl+Option (`text` says where).
+   * `map` turns the shot's pixels back into global screen points.
+   */
+  | { type: "screen.shot"; reason: "look" | "circle"; width: number; height: number; map: ShotMap; text?: string }
+  /**
+   * A permission Jett needs is off: Screen Recording (`kind` missing or "screen": Jett cannot
+   * see) or Accessibility ("accessibility": real controls cannot be found by their words).
+   * The window shows how to turn it on.
+   */
+  | { type: "screen.permission"; granted: boolean; message?: string; kind?: "screen" | "accessibility" }
+  /**
+   * The front app's window (global points), sent while a drawing is up and whenever it changes,
+   * so cards keep off it. `front` null: no window (the desktop).
+   */
+  | { type: "screen.front"; front: FrontWindow | null }
+  /**
+   * What the locator read on the front window (words, controls; global points): where it is
+   * busy. With a window that fills the screen, cards go where it is emptiest.
+   */
+  | { type: "screen.boxes"; boxes: Rect[]; front: FrontWindow | null }
+  /** Screen marks went stale (the window moved, the app switched, a scroll or click): they are erased next. */
+  | { type: "screen.stale"; ids: string[]; reason: string }
   /** The model finished its reply. `reply` is the whole reply, joined for you. */
   | { type: "turn.done"; reply: string }
   /** Something went wrong in the session. The session may still be usable. */

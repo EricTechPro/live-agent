@@ -16,47 +16,31 @@
 //   the user's own `gemini` login and settings are never read or touched.
 //   HOME itself is left alone, so git and the project behave as usual.
 // - Spawned in its own process group, so cancel stops the CLI and everything it
-//   started (shell commands, MCP servers).
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+//   started (shell commands, MCP servers): see src/helpers/cli-job.ts.
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { JobSpec } from "../core/jobs.ts";
+import { capSummary, childEnv, findBin, shortTitle, jsonLine, liveAgentDataDir, runCli, type HelperPaths } from "./cli-job.ts";
+import { geminiApiKey } from "../gemini-key.ts";
 
 const KEY_GUIDE = "README.md#get-your-gemini-key";
 export const INSTALL_FIX = "Gemini CLI is not installed. Install it with: npm install -g @google/gemini-cli";
-export const KEY_FIX = `The helper needs a Gemini key. Put GEMINI_API_KEY in your .env file. How to get one: ${KEY_GUIDE}`;
-export const KEY_REJECTED_FIX = `Gemini CLI rejected the Gemini key. Check GEMINI_API_KEY in your .env file. How to get one: ${KEY_GUIDE}`;
+export const KEY_FIX = `The helper needs a Gemini key. Paste it in the live-agent window, or put it after GEMINI_API_KEY= in the .env file in your live-agent folder. How to get one: ${KEY_GUIDE}`;
+export const KEY_REJECTED_FIX = `Gemini CLI rejected the Gemini key. Check GEMINI_API_KEY in the .env file in your live-agent folder, then restart live-agent. How to get one: ${KEY_GUIDE}`;
 
-export interface GeminiCliOptions {
+/** The Gemini CLI binary looked up on PATH unless told otherwise. */
+export const DEFAULT_GEMINI_BIN = "gemini";
+
+export interface GeminiCliOptions extends HelperPaths {
   /** What the helper should do, in plain words. */
   task: string;
   /** The project folder the helper works in. */
   cwd: string;
-  /** The Gemini CLI binary: a name on PATH or a path. Default "gemini". Tests point it at a fake script. */
-  bin?: string;
-  /** live-agent's private Gemini CLI home (its GEMINI_CLI_HOME). Default: `defaultHelperHome()`. */
-  home?: string;
-  /** The Gemini API key. Default: GEMINI_API_KEY, else GOOGLE_API_KEY, from the environment. */
-  apiKey?: string;
-  /** How long to wait after SIGINT before SIGKILL on cancel. Default 3000 ms. */
-  cancelGraceMs?: number;
-}
-
-/** The core's Gemini key, read the same way as for the voice. */
-export function envApiKey(): string | undefined {
-  return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || undefined;
 }
 
 /** live-agent's own folder for the helper's Gemini CLI home (in the OS app-data folder). */
 export function defaultHelperHome(): string {
-  const home = homedir();
-  const base =
-    process.platform === "darwin"
-      ? join(home, "Library", "Application Support")
-      : process.platform === "win32"
-        ? (process.env.APPDATA ?? join(home, "AppData", "Roaming"))
-        : (process.env.XDG_DATA_HOME ?? join(home, ".local", "share"));
-  return join(base, "live-agent", "gemini-cli");
+  return join(liveAgentDataDir(), "gemini-cli");
 }
 
 /** Make sure the private home's settings select API-key auth (any other settings in it are kept). */
@@ -74,9 +58,8 @@ function prepareHome(home: string) {
 }
 
 /** Find the binary, or undefined if it is not there. */
-export function findGeminiCli(bin = "gemini"): string | undefined {
-  if (bin.includes("/")) return existsSync(bin) ? bin : undefined;
-  return Bun.which(bin) ?? undefined;
+export function findGeminiCli(bin = DEFAULT_GEMINI_BIN): string | undefined {
+  return findBin(bin);
 }
 
 export type GeminiCliStatus =
@@ -88,106 +71,51 @@ export type GeminiCliStatus =
  * Installed and a key present? Cheap: no network, no model call (the doctor uses it too).
  * Whether Google accepts the key shows at run time as exit code 41.
  */
-export function geminiCliStatus({ bin = "gemini", apiKey = envApiKey() }: { bin?: string; apiKey?: string } = {}): GeminiCliStatus {
+export function geminiCliStatus({ bin = DEFAULT_GEMINI_BIN, apiKey = geminiApiKey() }: { bin?: string; apiKey?: string } = {}): GeminiCliStatus {
   const path = findGeminiCli(bin);
   if (!path) return { ok: false, installed: false, fix: INSTALL_FIX };
   return apiKey ? { ok: true, installed: true, bin: path } : { ok: false, installed: true, bin: path, fix: KEY_FIX };
 }
 
-const MAX_SUMMARY = 2000;
-
 export function geminiCliJob({
   task,
   cwd,
-  bin = "gemini",
-  home = defaultHelperHome(),
-  apiKey = envApiKey(),
+  geminiCliBin: bin = DEFAULT_GEMINI_BIN,
+  geminiCliHome: home = defaultHelperHome(),
+  geminiApiKey: apiKey = geminiApiKey(),
   cancelGraceMs = 3000,
 }: GeminiCliOptions): JobSpec {
   return {
     kind: "gemini-cli",
-    title: task.length > 80 ? `${task.slice(0, 77)}...` : task,
+    title: shortTitle(task),
     async run({ signal }) {
       const status = geminiCliStatus({ bin, apiKey });
       if (!status.ok) throw new Error(status.fix);
-      const path = status.bin;
       prepareHome(home);
 
-      const { GEMINI_API_KEY: _k1, GOOGLE_API_KEY: _k2, GEMINI_CLI_HOME: _h, ...env } = process.env;
-      const proc = Bun.spawn(
-        [path, "-p", task, "--output-format", "stream-json", "--approval-mode", "yolo", "--skip-trust"],
-        {
-          cwd,
-          env: { ...env, GEMINI_API_KEY: apiKey, GEMINI_CLI_HOME: home, GEMINI_CLI_TRUST_WORKSPACE: "true" },
-          // -p appends stdin to the prompt, so give it none.
-          stdin: "ignore",
-          stdout: "pipe",
-          stderr: "pipe",
-          detached: true,
+      let said = "";
+      let error: string | undefined;
+      const { GEMINI_CLI_HOME: _h, ...env } = childEnv();
+      const r = await runCli({
+        argv: [status.bin, "-p", task, "--output-format", "stream-json", "--approval-mode", "yolo", "--skip-trust"],
+        cwd,
+        env: { ...env, GEMINI_API_KEY: apiKey, GEMINI_CLI_HOME: home, GEMINI_CLI_TRUST_WORKSPACE: "true" },
+        signal,
+        cancelGraceMs,
+        // stream-json: one event per line.
+        onLine(line) {
+          const ev = jsonLine(line);
+          if (ev?.type === "message" && ev.role === "assistant" && typeof ev.content === "string") said += ev.content;
+          if (ev?.type === "result" && ev.status === "error") error = ev.error?.message ?? "Gemini CLI reported an error";
         },
-      );
-
-      // Cancel: SIGINT the whole group (the CLI exits cleanly), SIGKILL it if it lingers.
-      let killTimer: ReturnType<typeof setTimeout> | undefined;
-      const group = (sig: NodeJS.Signals) => {
-        try {
-          process.kill(-proc.pid, sig);
-        } catch {}
-      };
-      const onAbort = () => {
-        group("SIGINT");
-        killTimer = setTimeout(() => group("SIGKILL"), cancelGraceMs);
-      };
-      signal.addEventListener("abort", onAbort, { once: true });
-
-      try {
-        const stderr = new Response(proc.stderr).text();
-        const { said, error } = await readStream(proc.stdout);
-        const code = await proc.exited;
-        // The shell may be gone while children it left behind still hold the group.
-        if (signal.aborted) group("SIGKILL");
-        if (signal.aborted) return "cancelled";
-        if (code === 41) throw new Error(KEY_REJECTED_FIX);
-        if (code === 52) throw new Error(`Gemini CLI settings are broken: check ${join(home, ".gemini", "settings.json")}`);
-        if (code !== 0 || error) {
-          const tail = (await stderr).trim().split("\n").slice(-5).join("\n");
-          throw new Error(error ?? `Gemini CLI stopped with exit code ${code}${tail ? `: ${tail}` : ""}`);
-        }
-        const summary = said.trim() || "Gemini CLI finished without a reply.";
-        return summary.length > MAX_SUMMARY ? `${summary.slice(0, MAX_SUMMARY)}...` : summary;
-      } finally {
-        signal.removeEventListener("abort", onAbort);
-        clearTimeout(killTimer);
+      });
+      if (r === "cancelled") return "cancelled";
+      if (r.code === 41) throw new Error(KEY_REJECTED_FIX);
+      if (r.code === 52) throw new Error(`Gemini CLI settings are broken: check ${join(home, ".gemini", "settings.json")}`);
+      if (r.code !== 0 || error) {
+        throw new Error(error ?? `Gemini CLI stopped with exit code ${r.code}${r.stderrTail ? `: ${r.stderrTail}` : ""}`);
       }
+      return capSummary(said, "Gemini CLI finished without a reply.");
     },
   };
-}
-
-// Read stream-json (one JSON event per line). Lines that are not JSON are
-// warnings that leaked to stdout: skip them.
-async function readStream(stdout: ReadableStream<Uint8Array>) {
-  let said = "";
-  let error: string | undefined;
-  let buf = "";
-  const handle = (line: string) => {
-    let ev: any;
-    try {
-      ev = JSON.parse(line);
-    } catch {
-      return;
-    }
-    if (ev?.type === "message" && ev.role === "assistant" && typeof ev.content === "string") said += ev.content;
-    if (ev?.type === "result" && ev.status === "error") error = ev.error?.message ?? "Gemini CLI reported an error";
-  };
-  const decoder = new TextDecoder();
-  for await (const chunk of stdout) {
-    buf += decoder.decode(chunk, { stream: true });
-    let i: number;
-    while ((i = buf.indexOf("\n")) >= 0) {
-      handle(buf.slice(0, i));
-      buf = buf.slice(i + 1);
-    }
-  }
-  if (buf.trim()) handle(buf);
-  return { said, error };
 }

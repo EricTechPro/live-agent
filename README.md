@@ -28,11 +28,18 @@ A small desktop app you talk to.
 - **It learns slowly.** After a chat it saves a short note, and a background job tidies new
   notes into clean wiki pages.
 - **It hands off big jobs.** "Fix the bug in my recipe app" starts a **helper agent**
-  (Gemini CLI) in the background. A job board shows its progress, and the voice tells you
-  when it is done. It never freezes while a tool runs.
+  (Gemini CLI, Codex or Claude Code) in the background. A job board shows its progress, and
+  the voice tells you when it is done. It never freezes while a tool runs. With worktrees on,
+  a finished job's changes are committed on its own branch for you to review.
+- **It draws.** "Draw how the voice gets to Gemini" sketches on the Canvas tab while the
+  voice talks: hand-drawn boxes, arrows and Mermaid diagram cards, each beat's strokes timed
+  to the line being said (`draw`). "Make p2 red" or "clear the board" changes it (`edit_canvas`).
+- **It shrinks out of the way.** The **Mini** button turns the window into a small
+  always-on-top orb that shows how many jobs are running. Voice keeps working; click the orb
+  to open the full window again.
 - **You decide what it may do alone.** Three safety modes, Ask me / Auto edits / Bypass.
   <kbd>Shift</kbd>+<kbd>Tab</kbd> switches them.
-- **One JSON file controls it all**, and a setup chat fills it in for you.
+- **One JSON file controls it all**, and a click-through setup wizard fills it in for you.
 
 All you need is a Gemini key. LiveKit (the part that carries your voice) runs on your own
 computer, inside the app. No accounts, no cloud servers.
@@ -51,23 +58,25 @@ Have your Gemini key ready (next section): the installer asks for it. It then:
 2. makes a `live-agent` folder on your Desktop with the sample brain,
 3. saves your key in that folder, readable only by you,
 4. runs the doctor check (key, microphone, LiveKit, helper CLIs),
-5. opens the app, which starts the **setup chat**.
+5. opens the app, which starts the **setup wizard**.
 
 Your Desktop folder `~/Desktop/live-agent`:
 
 | file | what it is |
 |---|---|
 | `sample-brain/` | the brain the app reads and writes (`raw`, `wiki`, `projects`) |
-| `live-agent.config.json` | your settings, written by the setup chat |
+| `live-agent.config.json` | your settings, written by the setup wizard |
 | `.env` | your Gemini key (`GEMINI_API_KEY=...`), readable only by you |
 
 Then:
 
 1. **Allow the microphone** when macOS asks. The reason it shows: "live-agent listens to your
    voice so you can talk to it."
-2. **Answer the setup chat.** Four questions: brain folder, safety mode, helpers, how many
-   helpers at once. Say "keep it" to take the default. It saves `live-agent.config.json`.
-   The new settings apply the next time the app starts, so quit and reopen it.
+2. **Click through the setup wizard.** Jett's voice, your Gemini key (if not saved yet), the
+   mic, your notes folder (sample notes, or your own folder: it maps your folders onto raw,
+   wiki and projects), how Jett talks (Short, Casual, Friendly, Professional) and how careful
+   it is. Then say hi to test the voice. It saves `live-agent.config.json`, and the new
+   settings are in use straight away.
 3. **Press Start talking** and say "What is my sourdough starter called?" It answers from
    the sample brain, and the bottom bar shows `Notes used wiki/sourdough-starter.md`.
    Use headphones so it doesn't hear itself.
@@ -102,7 +111,7 @@ tidy job and the Gemini CLI helper. It takes about two minutes.
    <img src="docs/images/key-guide/04-create-key-dialog.png" width="640" alt="The Create API key dialog: key name, project picker, Create key button">
 
 5. **Copy the key.** Click the key in the list, then press **Copy**. It is a long string that
-   starts with `AIza`.
+   starts with `AQ.` (new auth keys, the default since May 2026) or `AIza` (older keys). Both work.
 
    <img src="docs/images/key-guide/05-copy-key.png" width="640" alt="The key details with the Copy button">
 
@@ -111,10 +120,14 @@ tidy job and the Gemini CLI helper. It takes about two minutes.
 
    <img src="docs/images/key-guide/06-paste-in-installer.png" width="640" alt="Terminal: the installer asking to paste the Gemini key">
 
-**Skipped it, or got a new key?** Open the key file and put the key after `GEMINI_API_KEY=`:
+**Skipped it?** No problem: the app opens on **Paste your Gemini key**. Paste it there and press
+**Save and start**. The app checks the key with Google, saves it in `~/Desktop/live-agent/.env`
+(readable only by you) and goes straight into the setup wizard. The window never shows it again.
+
+**Got a new key?** Open the key file and put the key after `GEMINI_API_KEY=`:
 
 ```sh
-open -e ~/Desktop/live-agent/.env      # GEMINI_API_KEY=AIza...
+open -e ~/Desktop/live-agent/.env      # GEMINI_API_KEY=AQ.... (or AIza...)
 ```
 
 Then quit and reopen the app. Check it with the [doctor](#doctor): `✓ Gemini key: key works`.
@@ -125,7 +138,7 @@ Google may ask you to turn on billing for heavier use.
 
 ## Customise it
 
-Everything lives in one file: `~/Desktop/live-agent/live-agent.config.json`. The setup chat
+Everything lives in one file: `~/Desktop/live-agent/live-agent.config.json`. The setup wizard
 writes it (press **Setup** in the window to run it again), and you can edit it by hand.
 Every field is optional; a missing field uses the default. Restart the app after a change.
 
@@ -151,14 +164,16 @@ This is the whole file with every default:
 
 | field | what it does | default |
 |---|---|---|
-| `brainPath` | the brain folder. A relative path starts in `~/Desktop/live-agent`. By hand, write a full path (`/Users/you/notes`); the setup chat turns `~/notes` into one for you. | `sample-brain` |
+| `brainPath` | the brain folder. A relative path starts in `~/Desktop/live-agent`. By hand, write a full path (`/Users/you/notes`); the setup wizard picks it in Finder. Setup refuses a folder that does not exist. | `sample-brain` |
+| `brainFolders` | which folder inside the brain plays each part: `{ "raw": "_inbox", "wiki": "03 Notes", "projects": "work" }`. A name or a relative path; never outside the brain. The wizard detects them by name. | `raw`, `wiki`, `projects` |
+| `tone` | how Jett talks: `short` (answer first, few plain words, one idea per line), `casual`, `friendly` or `pro` | `short` |
 | `safety.mode` | what runs without asking: `ask-me`, `auto-edits` or `bypass` (table below) | `auto-edits` |
 | `safety.overrides` | per-tool verdicts that win over the mode: `allow`, `ask` or `block` | `{}` |
 | `helpers.geminiCli` | allow the Gemini CLI helper | `true` |
-| `helpers.codex` | allow Codex as a helper (coming after the talk) | `false` |
-| `helpers.claudeCode` | allow Claude Code as a helper (coming after the talk) | `false` |
+| `helpers.codex` | allow Codex as a helper (needs your own Codex sign-in) | `false` |
+| `helpers.claudeCode` | allow Claude Code as a helper (needs your own Claude Code sign-in) | `false` |
 | `helpers.maxAtOnce` | most helper jobs running at once; extra jobs wait in the queue | `1` |
-| `worktrees` | give each helper job its own git worktree (coming after the talk) | `false` |
+| `worktrees` | give each helper job its own git worktree and branch, so it never touches your checkout ([Worktrees](#worktrees)) | `false` |
 | `voice` | Gemini Live voice name, e.g. `Puck`, `Kore`, `Charon` (not wired yet: today it always uses Gemini's default voice) | `Puck` |
 
 The full rules are in [`src/config/config.schema.json`](src/config/config.schema.json). Point your
@@ -171,7 +186,7 @@ Every tool has a **risk class**. The mode decides what each class may do:
 
 | risk class | example tools | Ask me | Auto edits | Bypass |
 |---|---|---|---|---|
-| read | `search_brain`, `read_file` | runs | runs | runs |
+| read | `search_brain`, `read_file`, `draw`, `edit_canvas` | runs | runs | runs |
 | edit | `remember`, `cancel_job` | asks | runs | runs |
 | command | (shell commands) | asks | asks | runs |
 | helper | `start_helper` | asks | asks | runs |
@@ -202,7 +217,8 @@ Here "remember this" saves at once even in Ask me, and helpers can never start.
 
 ### Helpers
 
-`helpers.geminiCli` lets the agent start Gemini CLI jobs. `maxAtOnce` keeps your laptop
+`helpers.geminiCli`, `helpers.codex` and `helpers.claudeCode` let the agent start jobs with
+that helper; turning one on is what allows it. `maxAtOnce` keeps your laptop
 cool: with `1`, a second job waits until the first is done. See [Helper agents](#helper-agents).
 
 ## Your second brain
@@ -226,8 +242,8 @@ How it flows:
 - **Tidy.** A background job reads new raw notes and folds them into `wiki/` pages,
   Karpathy-style: update a page when the topic exists, make a new one when it doesn't, never
   invent facts. It only ever writes inside `wiki/`, and it shows on the job board. The prompt
-  it uses is [`prompts/tidy.md`](prompts/tidy.md). Today a chat ends (and the tidy runs)
-  when the app quits.
+  it uses is [`prompts/tidy.md`](prompts/tidy.md). A chat ends (note saved, tidy queued)
+  when you press **New chat**, after ten quiet minutes, or when the app quits.
 
 Use your own notes: the [`bring-your-brain`](skills/bring-your-brain/SKILL.md) skill walks
 through it. In short, make `raw/`, `wiki/` and `projects/` in a folder, then set `brainPath`.
@@ -238,21 +254,56 @@ Keep your real brain out of any public repo; this repo only ships the made-up sa
 Gemini Live is the boss. It talks; helpers do the slow work.
 
 - **Start one by asking.** "Fix the off-by-one bug in ~/code/recipe-box." Gemini calls
-  `start_helper`, which starts **Gemini CLI** in that folder in the background and answers at
+  `start_helper`, which starts a helper in that folder in the background and answers at
   once with a job id. The voice keeps talking with you.
-- **It runs on your key.** The helper uses the same Gemini key as the voice, with its own
+- **Pick the helper.** Three helpers, each turned on in the config: **Gemini CLI**, **Codex**
+  and **Claude Code**. Say "use Claude Code to..." to pick one. If you don't say, the first one
+  turned on is used, in that order. Naming one that is turned off, not installed or not signed
+  in gets a plain fix instead of a job.
+- **Gemini CLI runs on your key.** It uses the same Gemini key as the voice, with its own
   private Gemini CLI settings folder, so your own `gemini` login and settings are never touched.
   (Google ended Gemini CLI's free "Login with Google" tier, so the key is the way in.)
   Install Gemini CLI once: `npm install -g @google/gemini-cli`.
+- **Codex and Claude Code run on your own sign-in** with OpenAI and Anthropic, and use your
+  plan or API credit. live-agent never signs in for you and never hands them your Gemini key.
+  - Codex: `npm install -g @openai/codex`, then `codex login` once. Runs
+    `codex exec --json --sandbox workspace-write`: it edits files and runs commands inside the
+    folder only. It uses the model in your `~/.codex/config.toml`; if your account can't use
+    that model, the job fails saying so.
+  - Claude Code: `npm install -g @anthropic-ai/claude-code`, then `claude auth login` once.
+    Runs `claude -p --output-format json --permission-mode bypassPermissions`
+    (nobody is there to answer its permission prompts) and does not save the run to your
+    session list.
 - **Max at once.** `helpers.maxAtOnce` jobs run at a time. More jobs wait as **Waiting**.
 - **Follow along.** The job board shows each job as Waiting, Working, Done, Failed or Cancelled.
   When a job ends, the agent says how it went.
 - **Cancel.** Press **Cancel** on the job, or say "stop job 1" (the `cancel_job` tool).
 - **Safety.** Helpers are the `helper` risk class: in Ask me and Auto edits the agent asks
-  first. A helper runs Gemini CLI in "yolo" mode inside the folder you name, so only point it
-  at code you are happy for it to change (git makes that easy to undo).
+  first. Once started, a helper does not ask again (Gemini CLI "yolo", Codex's workspace
+  sandbox, Claude Code's bypass mode), so only point it at code you are happy for it to change.
+  Turn on [worktrees](#worktrees) and it works on its own branch instead.
+- **Cancel stops everything it started.** Each helper runs in its own process group, and the
+  group is stopped on cancel, on quit, or if the core crashes.
 
-Codex, Claude Code and per-job git worktrees are in the config but come after the talk.
+### Worktrees
+
+Set `"worktrees": true` in `live-agent.config.json` and each helper job works in its own
+git worktree on a new branch, so your current branch, files and uncommitted work are never
+touched.
+
+- **Branch:** `live-agent/<task>-<date-time>`, made from your current commit (uncommitted
+  changes are not copied in).
+- **Where:** `~/Library/Application Support/live-agent/worktrees/<project>/<branch leaf>`
+  (Linux: `~/.local/share/live-agent/worktrees/...`), outside your project. The job board
+  shows the branch and path, and the agent says the branch when it announces the job.
+- **When done:** the helper's changes are committed on that branch. Review and merge from
+  your project: `git diff main...live-agent/<...>`, then `git merge live-agent/<...>`.
+  A failed or cancelled job commits nothing; its changes stay in the worktree.
+- **Clean up:** worktrees are kept for you to review. Remove one with
+  `git worktree remove <path>` and `git branch -D <branch>` in your project
+  (`git worktree list` shows them all).
+- **Not a git project?** The agent says so and starts nothing. Run `git init` and make a
+  first commit there, or turn worktrees off.
 
 ## Doctor
 
@@ -272,15 +323,24 @@ live-agent doctor
 ✓ Microphone: default input: Bose QC Headphones
 ✓ LiveKit: local server starts (port 52689)
 ✓ Gemini CLI: installed, uses your Gemini key
-✓ Codex: installed (turned off)
-✓ Claude Code: installed (turned off)
+✓ Codex: installed and signed in (turned off)
+! Claude Code: installed, not signed in (turned off)
+    Fix: Claude Code is not signed in. Run "claude auth login" once in a terminal.
 
-All checks pass.
+All required checks pass, 1 warning(s).
 ```
 
 The key, the microphone and LiveKit must pass. A helper CLI only fails when it is turned on in
-the config; otherwise a missing one is a warning with an install hint. A bad key points you
-back to [Get your Gemini key](#get-your-gemini-key).
+the config; otherwise a missing or signed-out one is a warning with the fix. Codex and Claude
+Code are asked with their own `codex login status` and `claude auth status` (no model call).
+A bad key points you back to [Get your Gemini key](#get-your-gemini-key).
+
+The installed app and its doctor only use the key in `~/Desktop/live-agent/.env` (or one you set in
+the environment), never a `.env` in the folder you happen to run them from.
+
+**The log.** Opened from Finder, the app keeps what its core says in
+`~/Desktop/live-agent/logs/core.log` (small: old lines are dropped). The key and every token are
+hidden in it. The **Show log** button in the window shows the file in Finder.
 
 ## How it works inside
 
@@ -342,7 +402,9 @@ core's token service trades the key for an **ephemeral token**: good for one ses
 start within a minute and dies within 30 minutes. The Live connection uses that token, not the
 key. The window never sees either: it only gets a 10-minute LiveKit token for the room, and a
 per-launch token for the core's local event stream. Even if the window leaked, there is no key
-in it.
+in it. (One exception, on purpose: if you skipped the key at install, you paste it into the
+window once. It goes straight to the core, which saves it to `.env`; the window keeps no copy.
+See [ADR 0002](docs/adr/0002-paste-key-in-the-window.md).)
 
 Want to read the code? Start at [`src/core/agent.ts`](src/core/agent.ts) (the core),
 [`src/models/gemini-live.ts`](src/models/gemini-live.ts) (Gemini Live and NON_BLOCKING),
@@ -356,7 +418,7 @@ The order for the room. Demo first, inside last. About an hour.
 1. **Live demo (5 min).** Watch it talk, answer from the sample brain, take a "remember this",
    and start a helper while it keeps talking.
 2. **Setup (15 min).** [Get your Gemini key](#get-your-gemini-key), run the one-line
-   [install](#install), let the doctor pass, answer the setup chat, then say hello.
+   [install](#install), let the doctor pass, click through the setup wizard, then say hello.
 3. **Customise (10 min).** Open `live-agent.config.json`. Try each [safety mode](#safety-modes)
    with <kbd>Shift</kbd>+<kbd>Tab</kbd>, add a [per-tool override](#per-tool-overrides), restart.
 4. **Build your brain (10 min).** Add a page to `wiki/` and a project to `projects/`, ask about
@@ -373,7 +435,7 @@ The order for the room. Demo first, inside last. About an hour.
 Copy these into your own projects:
 
 - [`prompts/`](prompts/README.md): the real prompts the agent sends to Gemini (tidy, chat
-  summary, setup chat). The code reads them from these files.
+  summary). The code reads them from these files.
 - [`skills/`](skills/README.md): skills for coding agents, like adding a tool or bringing your
   own brain.
 - [`tools/`](tools): every tool the agent can call, one small file each, with "why" comments.
@@ -390,7 +452,6 @@ cp .env.example .env   # add your GEMINI_API_KEY
 bun run smoke          # one real text turn against Gemini Live (skips with no key)
 bun run start          # the core from source; open the printed /check page to talk
 bun run doctor         # the doctor check
-bun run setup          # the setup chat, typed in the terminal
 bunx tsc --noEmit      # type check (also in app/)
 ```
 

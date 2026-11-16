@@ -3,30 +3,274 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>live-agent</title>
+    <title>Jett</title>
+    <link rel="stylesheet" href="/src/pixel.css" />
     <link rel="stylesheet" href="/src/style.css" />
+    <link rel="stylesheet" href="/src/wizard.css" />
+    <link rel="stylesheet" href="/src/sketch.css" />
     <script type="module" src="/src/main.ts"></script>
   </head>
   <body>
     <!--
-      Layout (spec story 46/47): orb + transcript on the left, job board on the
-      right, bottom bar under both. Ticket 10 fills #jobs and #bar.
+      Jett v3 (tickets 36, 37): one full-screen transparent window over the desktop. It lets
+      clicks through except over the elements marked data-hit (main.ts polls the cursor and
+      asks overlay.ts). At rest: the orb (#dock) and the captions. The sketch draws straight
+      on the screen (#stage). Chats, jobs and the brain live in one glass popover, opened
+      from the menu button by the orb.
     -->
-    <main class="shell">
-      <section class="voice" aria-label="Voice">
-        <div class="orb-wrap">
-          <div id="orb" class="orb" data-state="connecting" role="img" aria-label="Agent state: connecting"></div>
-          <p id="orb-label" class="orb-label" aria-live="polite">Starting…</p>
-          <button id="talk" class="talk" type="button" disabled>Start talking</button>
-          <button id="setup" class="setup" type="button" disabled title="Run the setup chat again">Setup</button>
+    <main class="overlay" id="overlay" data-layer="home">
+      <!-- The drawing on the screen (drawing v2): a full-screen layer; sketch-view.ts adds the ink
+           canvas, the HUD cards' close buttons, the "Clear all" chip and the caption bar. -->
+      <section id="stage" class="stage" aria-label="Drawing"></section>
+
+      <!-- The cues beside the orb (ticket 37): equaliser or working pill, Jett's speech bubble. -->
+      <div id="cues" class="cues" data-side="left">
+        <div id="cue-pill" class="cue-pill" hidden>
+          <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+          <span class="spin" aria-hidden="true"></span>
+          <span id="cue-pill-text" class="cue-text"></span>
         </div>
-        <ol id="transcript" class="transcript" aria-label="Transcript" aria-live="polite"></ol>
-        <form id="type" class="type">
-          <input id="type-input" type="text" placeholder="Or type to it…" autocomplete="off" disabled />
-        </form>
+        <div id="bubble" class="bubble" data-hit hidden>
+          <p id="bubble-text" class="bubble-text"></p>
+          <button id="bubble-more" class="ib bubble-more" type="button" aria-expanded="false" aria-label="Show the whole reply" data-tip="More" data-icon="chevron" data-size="10" hidden></button>
+        </div>
+      </div>
+
+      <!-- Live captions (ticket 37): the bottom caption bar, while a drawing is on screen. -->
+      <div id="captions" class="captions" aria-live="polite" hidden>
+        <p id="cap-user" class="cap user" hidden></p>
+        <p id="cap-model" class="cap model" hidden></p>
+      </div>
+
+      <!-- The orb: grip to drag it, the menu button, the orb itself, its state words, the call buttons. -->
+      <div id="dock" class="dock" data-hit data-look="starting">
+        <div class="dock-top">
+          <button id="hide" class="ib glass-ib hide-btn" type="button" aria-label="Hide Jett" data-tip="Hide" data-key="⌃⌥S" data-icon="minus" data-size="12"></button>
+          <button id="orb-new-chat" class="ib glass-ib newchat-btn" type="button" aria-label="New chat" data-tip="New chat" data-key="⌘N" data-icon="newChat" data-size="12"></button>
+          <button id="grip" class="grip" type="button" aria-label="Move Jett (arrow keys)" data-tip="Drag to move" data-key="← ↑ → ↓"><span aria-hidden="true"></span></button>
+          <button id="quick-btn" class="ib glass-ib quick-btn" type="button" aria-label="Type" data-tip="Type" data-key="⌃⌥T" data-icon="keyboard" data-size="12"></button>
+          <button id="open-center" class="ib glass-ib menu-btn" type="button" aria-controls="popover" aria-expanded="false" aria-label="Chats, jobs and brain" data-tip="Chats, jobs, brain" data-icon="center" data-size="14"></button>
+        </div>
+        <div class="orb-wrap">
+          <button id="orb" class="orb" type="button" aria-label="Start call" data-state="connecting" data-tip="Talk · double-click to minimise" data-key="Space"><canvas id="orb-canvas" width="352" height="352" aria-hidden="true"></canvas></button>
+          <button id="following" class="following-badge" type="button" hidden aria-label="Stop following my pointer" data-tip="Stop following my pointer" data-icon="mini" data-size="12"></button>
+          <span id="muted-badge" class="muted-badge" data-icon="micOff" data-size="14" aria-hidden="true" hidden></span>
+          <button id="jobs-toggle" class="jobs-badge" type="button" aria-controls="popover" aria-label="Jobs" data-tip="Jobs"><span data-icon="jobs" data-size="12"></span><b id="jobs-count" class="badge" data-count="0" aria-hidden="true">0</b></button>
+        </div>
+        <p class="orb-label" aria-live="polite"><span id="orb-label">Starting…</span><button id="orb-retry" class="retry-link" type="button" hidden>Retry</button></p>
+        <p id="orb-hint" class="orb-hint" hidden></p>
+        <div class="controls">
+          <button id="talk" class="ib call talk" type="button" disabled aria-label="Start call" data-tip="Start call" data-key="Space" data-icon="mic" data-size="20"></button>
+          <button id="mute" class="ib call mute" type="button" hidden aria-pressed="false" aria-label="Mute" data-tip="Mute" data-key="Space" data-icon="mic" data-size="20"></button>
+          <button id="hangup" class="ib call hangup" type="button" hidden aria-label="Hang up" data-tip="Hang up" data-key="⌘." data-icon="hangup" data-size="20"></button>
+        </div>
+      </div>
+
+      <!--
+        Minimised (ticket 39): a slim pill docked flush to a side edge. State dot, mini level
+        bars, expand chevron. Click it to bring the orb back; drag it along or across.
+        Under the cursor its quick actions show beside it, away from the edge.
+      -->
+      <button id="pill" class="edge-pill" type="button" data-hit data-dock="right" data-look="starting" hidden aria-label="Show Jett" data-tip="Show Jett" data-key="⌃⌥S" data-side="left">
+        <span class="pill-led" aria-hidden="true"></span>
+        <span class="pill-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+        <span class="pill-chev" aria-hidden="true" data-icon="chevron" data-size="12"></span>
+      </button>
+      <div id="pill-actions" class="pill-actions" data-hit hidden>
+        <button id="pill-expand" class="ib pill-act" type="button" aria-label="Expand" data-tip="Expand" data-key="⌃⌥S" data-side="left" data-icon="expand" data-size="12"></button>
+        <button id="pill-call" class="ib pill-act" type="button" aria-label="Start call" data-tip="Start call" data-side="left" data-icon="mic" data-size="14"></button>
+        <button id="pill-hangup" class="ib pill-act hangup" type="button" aria-label="Hang up" data-tip="Hang up" data-key="⌘." data-side="left" data-icon="hangup" data-size="14" hidden></button>
+      </div>
+
+      <!-- Quick typing (ticket 40): a small glass field under the orb, or beside the pill. -->
+      <form id="quick" class="quick" data-hit hidden>
+        <textarea id="quick-input" rows="1" placeholder="Type to Jett…" aria-label="Type to Jett" autocomplete="off" spellcheck="false"></textarea>
+      </form>
+
+      <!-- A short note by the orb (ticket 39): "New chat". -->
+      <p id="toast" class="toast" role="status" hidden></p>
+
+      <!-- The Shortcuts card (ticket 38), from the popover's "?" or the menu-bar item. -->
+      <section id="shortcuts" class="shortcuts" data-hit tabindex="-1" aria-labelledby="shortcuts-title" hidden>
+        <header class="shortcuts-head">
+          <h2 id="shortcuts-title">Shortcuts</h2>
+          <button id="close-shortcuts" class="ib" type="button" aria-label="Close" data-tip="Close" data-key="Esc" data-side="left" data-icon="close" data-size="12"></button>
+        </header>
+        <dl id="shortcuts-list" class="shortcuts-list"></dl>
       </section>
-      <aside id="jobs" class="jobs" aria-label="Job board"></aside>
-      <footer id="bar" class="bar" aria-label="Status"></footer>
+
+      <!-- Approve / deny cards (ticket 28), next to the orb. -->
+      <ul id="approvals" class="approvals" data-hit aria-label="Waiting for your yes" aria-live="polite" hidden></ul>
+
+      <!-- The popover (ticket 36): one view at a time, icon tabs. -->
+      <section id="popover" class="popover" data-hit aria-label="Jett" hidden>
+        <header class="pop-head">
+          <div class="tabs" role="tablist" aria-label="Views">
+            <button id="tab-chat" class="ib tab" role="tab" type="button" aria-controls="panel-chat" aria-selected="true" aria-label="Chat" data-tip="Chat" data-icon="chat" data-size="16"></button>
+            <button id="tab-jobs" class="ib tab" role="tab" type="button" aria-controls="panel-jobs" aria-selected="false" tabindex="-1" aria-label="Jobs" data-tip="Jobs"><span class="icon-slot" data-icon="jobs" data-size="16"></span><b id="tab-jobs-count" class="badge" data-count="0" aria-hidden="true">0</b></button>
+            <button id="tab-brain" class="ib tab" role="tab" type="button" aria-controls="panel-brain" aria-selected="false" tabindex="-1" aria-label="Brain" data-tip="Chats and notes" data-icon="brain" data-size="16"></button>
+          </div>
+          <span class="spacer"></span>
+          <button id="follow" class="ib" type="button" aria-pressed="false" aria-label="Follow my pointer" data-tip="Follow my pointer" data-icon="mini" data-size="16"></button>
+          <button id="new-chat" class="ib" type="button" disabled aria-label="New chat" data-tip="New chat" data-key="⌘N" data-icon="newChat" data-size="16"></button>
+          <button id="setup" class="ib" type="button" disabled aria-label="Setup" data-tip="Setup" data-icon="gear" data-size="16"></button>
+          <button id="show-log" class="ib" type="button" aria-label="Show log" data-tip="Show log in Finder" data-icon="log" data-size="16"></button>
+          <button id="open-shortcuts" class="ib" type="button" aria-controls="shortcuts" aria-label="Shortcuts" data-tip="Shortcuts" data-key="?" data-icon="help" data-size="16"></button>
+          <button id="close-center" class="ib" type="button" aria-controls="popover" aria-label="Close" data-tip="Close" data-key="Esc" data-side="left" data-icon="close" data-size="14"></button>
+        </header>
+        <section id="panel-chat" class="view" role="tabpanel" aria-labelledby="tab-chat">
+          <ol id="transcript" class="transcript" aria-label="Transcript" aria-live="polite"></ol>
+          <div class="composer-wrap">
+            <ul id="mode-menu" class="pf mode-menu" hidden></ul>
+            <form id="type" class="composer type">
+              <button id="mode-pill" class="pill" type="button" disabled></button>
+              <input id="type-input" type="text" placeholder="Type to Jett…" aria-label="Message Jett" autocomplete="off" disabled />
+              <button id="send" class="ib send" type="submit" disabled aria-label="Send" data-tip="Send" data-key="Enter" data-icon="send" data-size="16"></button>
+            </form>
+          </div>
+          <footer id="bar" class="bar" aria-label="Status"></footer>
+        </section>
+        <section id="panel-jobs" class="view" role="tabpanel" aria-labelledby="tab-jobs" hidden>
+          <div id="jobs" class="jobs" aria-label="Job board"></div>
+        </section>
+        <section id="panel-brain" class="view" role="tabpanel" aria-labelledby="tab-brain" hidden>
+          <div id="brain-lists" class="brain-lists">
+            <h2 class="side-title" id="chats-title">Past chats</h2>
+            <ul id="chat-list" class="chat-list" aria-labelledby="chats-title"></ul>
+            <p id="chats-empty" class="side-empty">Past chats show here.</p>
+            <h2 class="side-title" id="brain-title">Notes</h2>
+            <ul id="brain-tree" class="brain-tree" role="tree" aria-labelledby="brain-title"></ul>
+            <p id="brain-empty" class="side-empty">Your notes show here.</p>
+          </div>
+          <!-- A note or past chat, read only (tickets 23, 24). X (or Escape) goes back to the lists. -->
+          <section id="reader" class="reader" aria-labelledby="reader-name" hidden>
+            <header class="reader-head">
+              <span class="reader-icon" data-icon="file" aria-hidden="true"></span>
+              <h2 id="reader-name" class="reader-name"></h2>
+              <span id="reader-path" class="reader-path"></span>
+              <button id="close-reader" class="ib" type="button" aria-label="Close note" data-tip="Back" data-key="Esc" data-side="left" data-icon="close" data-size="14"></button>
+            </header>
+            <pre id="reader-text" class="reader-text" tabindex="0"></pre>
+          </section>
+        </section>
+      </section>
     </main>
+    <!--
+      The setup wizard (Jett setup): first launch (no config file, or no Gemini key) and the
+      Setup button. Typed answers go to the core (POST /setup/save); no model is involved.
+      The key passes through here once, to the core, which checks and saves it.
+    -->
+    <div id="wizard" hidden>
+      <div class="pf win" role="dialog" aria-label="Jett setup">
+        <aside class="stage">
+          <p class="pf say" id="w-say" aria-live="polite"></p>
+          <span class="tail" aria-hidden="true"></span>
+          <canvas id="w-orb" width="352" height="352" aria-hidden="true"></canvas>
+          <div class="pad" aria-hidden="true"></div>
+        </aside>
+
+        <main class="panel">
+          <ol class="progress" id="w-progress" aria-label="Setup progress"></ol>
+
+          <section class="step" data-name="welcome" data-next="Let's go">
+            <h1>Hi, I'm Jett.</h1>
+            <p class="lead">I talk with you and look after your notes. Setup takes about a minute.</p>
+            <div class="pf box">
+              <h2 id="w-voice-h">My voice</h2>
+              <p class="note" style="margin:2px 0 0">Pick one. You hear it in the last step. Change it any time.</p>
+              <div class="chips" role="radiogroup" aria-labelledby="w-voice-h" id="w-voices"></div>
+            </div>
+          </section>
+
+          <section class="step" data-name="key" data-next="Continue" hidden>
+            <h1>Give me a brain</h1>
+            <p class="lead">Paste a free Gemini key. I check it right away.</p>
+            <div class="label-row"><label for="w-key-input">Gemini key</label><button class="link" type="button" id="w-get-key">Get a free key</button></div>
+            <form class="field-row" id="w-key-form">
+              <span class="pf field"><input id="w-key-input" type="password" placeholder="Paste your key (AQ.… or AIza…)" autocomplete="off" spellcheck="false"></span>
+              <button class="pf btn go" type="submit" id="w-key-check">Check</button>
+            </form>
+            <p class="msg" id="w-key-msg" role="status"></p>
+            <p class="note">Saved on this Mac only. Nobody else sees it.</p>
+          </section>
+
+          <section class="step" data-name="mic" data-next="Continue" data-skip="1" hidden>
+            <h1>Let me hear you</h1>
+            <p class="lead">Only on while you talk to me.</p>
+            <ul class="rows">
+              <li class="pf row" id="w-mic-row"><div><h2>Microphone</h2><p id="w-mic-sub">So you can talk to me.</p></div><span id="w-mic-side"></span></li>
+            </ul>
+            <p class="note">Rather type? Skip this. Typing always works.</p>
+          </section>
+
+          <section class="step" data-name="notes" data-next="Continue" hidden>
+            <h1>Where are your notes?</h1>
+            <p class="lead">I read and write notes in one folder.</p>
+            <div class="choices" role="radiogroup" aria-label="Notes folder">
+              <button class="pf pick" type="button" role="radio" aria-checked="false" data-notes="sample"><span>Try sample notes</span><span class="led"></span><small>Play first. Switch later.</small></button>
+              <button class="pf pick" type="button" role="radio" aria-checked="false" data-notes="folder"><span>Use my folder</span><span class="led"></span><small id="w-folder-sub">Opens Finder on your Mac.</small></button>
+            </div>
+            <p class="msg" id="w-notes-msg" role="status"></p>
+            <div class="pf brain" id="w-brain" hidden>
+              <div class="brain-head"><h2>Your brain</h2><span class="note" id="w-brain-src"></span></div>
+              <ul class="slots" id="w-slots"></ul>
+              <p class="note">I create the missing folders when you continue.</p>
+            </div>
+          </section>
+
+          <section class="step" data-name="tone" data-next="Continue" hidden>
+            <h1>How should I talk?</h1>
+            <p class="lead">Pick the way I speak to you.</p>
+            <div class="choices" role="radiogroup" aria-label="Tone">
+              <button class="pf pick" type="button" role="radio" aria-checked="true" data-tone="short"><span>Short</span><span class="led"></span><small>Answer first. Few words.<br>"Done. 3 files fixed."</small><span class="tag">Default</span></button>
+              <button class="pf pick" type="button" role="radio" aria-checked="false" data-tone="casual"><span>Casual</span><span class="led"></span><small>"Yo, done. Want more?"</small></button>
+              <button class="pf pick" type="button" role="radio" aria-checked="false" data-tone="friendly"><span>Friendly</span><span class="led"></span><small>"All done! Anything else?"</small></button>
+              <button class="pf pick" type="button" role="radio" aria-checked="false" data-tone="pro"><span>Professional</span><span class="led"></span><small>"The task is complete."</small></button>
+            </div>
+          </section>
+
+          <section class="step" data-name="safety" data-next="Continue" hidden>
+            <h1>How careful should I be?</h1>
+            <p class="lead">Reading is always fine.</p>
+            <div class="choices three" role="radiogroup" aria-label="Safety">
+              <button class="pf pick" type="button" role="radio" aria-checked="false" data-mode="ask-me"><span>Ask first</span><span class="led"></span><small>I ask before changes.</small></button>
+              <button class="pf pick" type="button" role="radio" aria-checked="true" data-mode="auto-edits"><span>Auto</span><span class="led"></span><small>I edit notes, ask for big stuff.</small><span class="tag">Best</span></button>
+              <button class="pf pick" type="button" role="radio" aria-checked="false" data-mode="bypass"><span>Full access</span><span class="led"></span><small>I never ask.</small></button>
+            </div>
+            <p class="note">Switch any time: Shift+Tab.</p>
+          </section>
+
+          <section class="step" data-name="test" data-next="Done" hidden>
+            <h1>Say hi!</h1>
+            <p class="lead">Tap Talk and say anything. Try "Hi, what can you do?"</p>
+            <div class="pf talkbox">
+              <button class="pf btn go" type="button" id="w-talk">Talk</button>
+              <span class="meter" id="w-meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+              <span class="msg wait" id="w-talk-msg" style="margin:0">Mic is off</span>
+              <button class="link" type="button" id="w-type-open">or type it</button>
+            </div>
+            <form class="field-row type-row" id="w-type-row" hidden>
+              <span class="pf field"><input id="w-type-input" placeholder="Type a message" aria-label="Type a message" autocomplete="off" maxlength="300"></span>
+              <button class="pf btn ghost" type="submit">Send</button>
+            </form>
+            <div class="heard" id="w-heard" aria-live="polite"></div>
+            <dl class="pf recap" id="w-recap"></dl>
+          </section>
+
+          <section class="step" data-name="end" hidden>
+            <h1>All set!</h1>
+            <p class="lead">Talk or type any time. Press Setup to change these.</p>
+            <button class="pf btn go" type="button" id="w-open">Open Jett</button>
+          </section>
+
+          <footer class="nav" id="w-nav">
+            <button class="btn bare" type="button" id="w-back">Back</button>
+            <span class="spacer"></span>
+            <button class="pf btn ghost" type="button" id="w-skip" hidden>Skip for now</button>
+            <button class="pf btn go" type="button" id="w-next">Let's go</button>
+          </footer>
+        </main>
+      </div>
+    </div>
   </body>
 </html>

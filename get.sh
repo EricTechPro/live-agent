@@ -6,7 +6,7 @@
 # Downloads the ready-built app from GitHub Releases (no Rust needed), puts it in
 # /Applications (or ~/Applications), makes ~/Desktop/live-agent with the sample
 # brain and your Gemini key, runs `live-agent doctor`, and opens the app into the
-# setup chat. Run it again to upgrade: your brain, config and key are kept.
+# setup wizard. Run it again to upgrade: your brain, config and key are kept.
 #
 # Options:
 #   --ref <tag>     install this release (default: the latest)
@@ -115,24 +115,27 @@ main() {
   else
     local key=""
     if { : < "$tty"; } 2>/dev/null; then
-      printf '🔑 Paste your Gemini key (from https://aistudio.google.com/apikey), or press Enter to skip: ' >&2
+      printf '🔑 Paste your Gemini key (from https://aistudio.google.com/apikey), or press Enter to paste it in the app later: ' >&2
       { IFS= read -r -s key < "$tty" || true; } 2>/dev/null
       printf '\n' >&2
     fi
     key="$(printf '%s' "$key" | tr -d '[:space:]')"
     ( umask 077; printf 'GEMINI_API_KEY=%s\n' "$key" > "$env" )
     chmod 600 "$env"
+    # Skipped (or no keyboard): fine. The app opens on "Paste your Gemini key" and saves it here.
     if [ -n "$key" ]; then say "🔑 key saved: $env"
-    else warn "no key yet. Put it after GEMINI_API_KEY= in $env (README: \"Get your Gemini key\")."; fi
+    else say "🔑 the app will ask for your Gemini key when it opens (it saves it in $env)."; fi
   fi
 
   # --- check, then open -----------------------------------------------------
   say "🩺 live-agent doctor"
-  LIVE_AGENT_HOME="$home" "$app/Contents/MacOS/live-agent-core" doctor \
-    || warn "doctor found problems (see above). The setup chat will help you fix them."
+  # Run it from the live-agent folder: a .env in the folder this script was run
+  # from (say, a clone of the repo) must never stand in for the key the app uses.
+  ( cd "$home" && LIVE_AGENT_HOME="$home" "$app/Contents/MacOS/live-agent-core" doctor ) \
+    || warn "doctor found problems (see above). The setup wizard will help you fix them."
 
   if [ "$open_app" -eq 1 ]; then
-    say "🚀 opening live-agent: the setup chat starts on first launch"
+    say "🚀 opening live-agent: the setup wizard starts on first launch"
     open "$app"
   fi
   say "🎉 live-agent is installed. Your folder: $home"

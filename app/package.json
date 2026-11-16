@@ -1,18 +1,20 @@
 {
   "name": "live-agent-app",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "build:core": "sh scripts/build-core.sh",
+    "build:eyes": "sh scripts/build-eyes.sh",
     "tauri": "tauri",
     "build:livekit": "sh scripts/fetch-livekit.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.4",
-    "livekit-client": "2.24.1"
+    "livekit-client": "2.24.1",
+    "mermaid": "11.12.1"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.12.4",

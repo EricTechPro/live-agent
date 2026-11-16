@@ -13,8 +13,13 @@
 // Why a risk class on every tool: the safety gate decides by risk class and
 // mode (see src/core/safety.ts), so a new tool is safe by declaring one word.
 
-import type { Config } from "../config/index.ts";
+import type { BrainFolders } from "../config/index.ts";
+import type { HelperPaths } from "../helpers/cli-job.ts";
+import type { CanvasChange } from "./board.ts";
+import type { Beat } from "./canvas.ts";
 import type { Jobs } from "./jobs.ts";
+import type { FrontWindow } from "../screen/eyes.ts";
+import type { Found, Target } from "../screen/locator.ts";
 
 export type RiskClass = "read" | "edit" | "command" | "helper";
 
@@ -24,10 +29,22 @@ export interface ToolContext {
   workDir: string;
   /** The brain folder (config `brainPath`, resolved to an absolute path). */
   brainPath: string;
+  /** The real folder of each brain part (config `brainFolders`), e.g. raw = `_inbox`. */
+  brainFolders: BrainFolders;
   /** Report brain notes (paths inside the brain) this turn's answer used. The core emits `notes.used`. */
   useNotes(paths: string[]): void;
   /** Report a note this tool wrote into the brain (path inside the brain). The core emits `brain.write` right away. */
   brainWrote(path: string): void;
+  /**
+   * The chat's canvas (src/core/board.ts), tied to this call.
+   * draw: one `canvas.beat` per beat; throws (and emits nothing) if a mark id is already on it.
+   * change: `canvas.edit` per edit, then `canvas.erase`; throws (and changes nothing) on an unknown id.
+   */
+  canvas: {
+    ids(): string[];
+    draw(beats: Beat[]): void;
+    change(change: CanvasChange): { edited: string[]; erased: string[] };
+  };
   /**
    * The orchestrator (src/core/jobs.ts). A job submitted from a tool call is
    * tied to that call: the core tells the model when the job ends.
@@ -35,21 +52,28 @@ export interface ToolContext {
   jobs?: Pick<Jobs, "submit" | "cancel" | "list">;
   /** Helper settings: which helpers are on (config `helpers`) and where their CLIs are. */
   helpers?: HelperSettings;
-  /** The setup chat (ticket 12): where the config file lives, and "it was saved" (the core emits `setup.saved`). */
-  setup?: { configPath: string; saved(config: Config): void };
+  /**
+   * Jett's eyes (src/screen): `look` sends one screenshot of the screen into the model and
+   * answers with what it is. Missing when the session has no eyes (tests, non-macOS).
+   */
+  screen?: {
+    look(): Promise<Record<string, unknown>>;
+    /** Find a real UI element by its words or a description (src/screen/locator.ts). Throws when not found. */
+    find?(target: Target): Promise<Found>;
+    /** Pin screen marks to the window they were found in: they are erased when it changes. */
+    pin?(ids: string[], front: FrontWindow | null): void;
+  };
 }
 
-export interface HelperSettings {
-  /** Config `helpers.geminiCli`. */
+export interface HelperSettings extends HelperPaths {
+  /** Config `helpers.geminiCli`: is the Gemini CLI helper turned on? */
   geminiCli: boolean;
-  /** The Gemini CLI binary. Default "gemini" on PATH. */
-  geminiCliBin: string;
-  /** live-agent's private Gemini CLI home. Default: under the OS app-data folder. */
-  geminiCliHome?: string;
-  /** The Gemini key the helper runs on. Default: GEMINI_API_KEY / GOOGLE_API_KEY from the environment. */
-  geminiApiKey?: string;
-  /** Wait this long after SIGINT before SIGKILL when cancelling. */
-  cancelGraceMs?: number;
+  /** Config `helpers.codex`: is the Codex helper turned on? */
+  codex?: boolean;
+  /** Config `helpers.claudeCode`: is the Claude Code helper turned on? */
+  claudeCode?: boolean;
+  /** Config `worktrees`: does each helper job get its own git worktree? */
+  worktrees?: boolean;
 }
 
 export interface Tool<Args extends Record<string, any> = Record<string, any>> {

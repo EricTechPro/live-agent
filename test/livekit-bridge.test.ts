@@ -19,8 +19,10 @@ import type { Model, ModelEvent } from "../src/core/model.ts";
 import { joinVoiceRoom } from "../src/voice/livekit-bridge.ts";
 import { startLiveKit, type LiveKitServer } from "../src/voice/livekit-runner.ts";
 import { createTokenService, type TokenService } from "../src/voice/token-service.ts";
+import { freeLiveKitPort } from "./free-port.ts";
 
-const PORT = 7940;
+// A free port, so a running app or another test run never collides with this one.
+const PORT = await freeLiveKitPort();
 const ROOM = "live-agent";
 
 /** A fake model the test drives by hand: `say` an event, see if mic audio arrived. */
@@ -50,8 +52,9 @@ async function fakeWindow(lk: LiveKitServer, tokens: TokenService) {
   room.on(RoomEvent.TrackSubscribed, async (track, _pub, participant) => {
     if (track.kind !== TrackKind.KIND_AUDIO || participant.identity !== "agent") return;
     for await (const frame of new AudioStream(track, { sampleRate: 24000, numChannels: 1 })) {
-      // Count only real sound: WebRTC fills gaps with silence.
-      if (frame.data.some((s) => s !== 0)) heard += frame.samplesPerChannel;
+      // Count only real sound: WebRTC fills gaps with silence, and the codec
+      // turns silence into faint noise, so a frame must be clearly loud.
+      if (frame.data.some((s) => Math.abs(s) > 2000)) heard += frame.samplesPerChannel;
     }
   });
   await room.connect(lk.url, (await tokens.livekitToken("user")).token, { autoSubscribe: true, dynacast: false });
@@ -120,6 +123,23 @@ describe("voice over local LiveKit", () => {
       { type: "transcript", role: "model", text: "Hi there." },
       { type: "turn.done", reply: "Hi there." },
     ]);
+    await window.leave();
+    await bridge.close();
+  }, 15_000);
+
+  test("every 20 ms frame of a voice chunk plays its own samples, not the chunk's first frame again", async () => {
+    // rtc-node's AudioFrame hands native code `data.buffer` and ignores the
+    // view's offset, so a subarray frame replays the chunk's first 20 ms over
+    // and over (heard as a buzzing, robotic voice). A chunk that starts with
+    // 20 ms of silence makes that bug play nothing at all.
+    const { fake, bridge, window } = await setup();
+    await until(() => fake.micSamples() > 0);
+
+    const chunk = tone(1);
+    chunk.fill(0, 0, 480);
+    fake.say({ type: "audio", data: chunk, sampleRate: 24000 });
+
+    await until(() => window.heardSeconds() > 0.5);
     await window.leave();
     await bridge.close();
   }, 15_000);

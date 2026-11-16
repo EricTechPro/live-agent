@@ -28,4 +28,22 @@ describe("Gemini Live server messages to model events", () => {
       { type: "turn.complete" },
     ]);
   });
+
+  test("the server taking back tool calls becomes tool.cancel", () => {
+    const message = { toolCallCancellation: { ids: ["c1", "c2"] } } as LiveServerMessage;
+
+    expect(toModelEvents(message)).toEqual([{ type: "tool.cancel", ids: ["c1", "c2"] }]);
+  });
+
+  test("generation complete comes after the last words and before the turn ends", () => {
+    const message = {
+      serverContent: { outputTranscription: { text: "Bye." }, generationComplete: true, turnComplete: true },
+    } as LiveServerMessage;
+
+    expect(toModelEvents(message)).toEqual([
+      { type: "text", text: "Bye." },
+      { type: "generation.complete" },
+      { type: "turn.complete" },
+    ]);
+  });
 });

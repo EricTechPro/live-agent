@@ -15,12 +15,6 @@ export interface Bar {
 
 export const emptyBar: Bar = { notes: [], pending: [] };
 
-export const MODE_LABELS: Record<SafetyMode, string> = {
-  "ask-me": "Ask me",
-  "auto-edits": "Auto edits",
-  bypass: "Bypass",
-};
-
 export function addBarEvent(bar: Bar, event: AgentEvent): Bar {
   switch (event.type) {
     case "notes.used":

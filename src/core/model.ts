@@ -11,14 +11,38 @@ export type ModelEvent =
   | { type: "text"; text: string }
   /** The model wants a tool run. `id` ties the answer (a ToolResponse) back to this call. */
   | { type: "tool.call"; id: string; name: string; args: Record<string, unknown> }
+  /**
+   * The model takes back tool calls it made (e.g. the user talked over it).
+   * Their answers must not be sent.
+   */
+  | { type: "tool.cancel"; ids: string[] }
   /** A chunk of what the user said out loud (Gemini Live's input transcription). */
   | { type: "user.text"; text: string }
   /** A chunk of the model's voice: 16-bit mono PCM (Gemini Live speaks at 24 kHz). */
   | { type: "audio"; data: Int16Array; sampleRate: number }
   /** The user talked over the model. Stop playing its voice now; `turn.complete` follows. */
   | { type: "interrupted" }
+  /**
+   * The model has generated its whole reply (all of its text is in). Its voice
+   * may still be playing: Gemini Live sends `turn.complete` only once the
+   * spoken reply would have finished, which can be 15+ seconds later.
+   */
+  | { type: "generation.complete" }
   /** The model is done with this turn and is waiting for the user. */
   | { type: "turn.complete" }
+  /**
+   * The connection dropped. Anything the model still owed us (a reply, the end
+   * of a turn) is lost. The adapter reconnects by itself; this is said once
+   * per drop (and again if it gives up reconnecting).
+   */
+  | { type: "disconnected"; message: string }
+  /**
+   * No network (ticket 40): the adapter could not reach the model and tries again in
+   * `retryInMs`. It keeps trying; `attempt` counts the tries in a row. Input sent now is dropped.
+   */
+  | { type: "reconnecting"; attempt: number; retryInMs: number; message: string }
+  /** Reached the model again after `reconnecting`. */
+  | { type: "connected" }
   /** The connection or the model reported a problem. */
   | { type: "error"; message: string };
 
@@ -45,6 +69,8 @@ export interface ToolResponse {
 export type ModelInput =
   | { type: "text"; text: string }
   | { type: "audio"; data: Int16Array; sampleRate: number }
+  /** A still image (a screenshot) for the model to see; it answers the text that comes with it. */
+  | { type: "image"; data: Uint8Array; mimeType: string }
   | ({ type: "tool.response" } & ToolResponse);
 
 /** What the model is told about a tool, so it knows it can call it. */
@@ -64,14 +90,26 @@ export interface ModelSession {
    * There is no "end of turn" call: the model hears when the user stops talking.
    */
   sendAudio(data: Int16Array, sampleRate: number): void;
+  /**
+   * Show the model a still image (a JPEG screenshot). It gets no reply of its own: the text
+   * or tool answer sent right after it is what the model answers. Optional: a model without
+   * eyes leaves it out.
+   */
+  sendImage?(data: Uint8Array, mimeType: string): void;
   /** Answer a `tool.call`. Replies (if any) arrive through `onEvent`. */
   sendToolResponse(response: ToolResponse): void;
+  /** No network (ticket 40): stop waiting out the backoff and try to connect now. */
+  retryNow?(): void;
   close(): Promise<void>;
 }
 
 export interface ConnectOptions {
   /** The tools the model may call. All of them run NON_BLOCKING. */
   tools: ToolDeclaration[];
+  /** The prebuilt voice to speak with (config `voice`, e.g. "Puck"). */
+  voice?: string;
+  /** Who the model is and how it talks (built from config `tone`, see src/core/tone.ts). */
+  systemInstruction?: string;
 }
 
 export interface Model {

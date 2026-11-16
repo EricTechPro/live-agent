@@ -2,10 +2,10 @@
 // Opened from Finder the core has no terminal: no cwd, no key in the
 // environment, no livekit-server on PATH. useHome() gives it all three.
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { livekitBinary, useHome } from "../src/home.ts";
+import { livekitBinary, saveGeminiKey, useHome } from "../src/home.ts";
 
 const startDir = process.cwd();
 afterEach(() => process.chdir(startDir));
@@ -83,5 +83,26 @@ describe("livekitBinary", () => {
     const dir = tempDir();
     mkdirSync(join(dir, "empty"));
     expect(livekitBinary(join(dir, "empty", "bun"))).toBe("livekit-server");
+  });
+});
+
+describe("saveGeminiKey (the key pasted in the window, ticket 19)", () => {
+  test("fills the installer's empty key line, readable only by you, and keeps the other lines", () => {
+    const home = tempDir();
+    writeFileSync(join(home, ".env"), "# from get.sh\nGEMINI_API_KEY=\nOTHER=1\n", { mode: 0o644 });
+    const env: Record<string, string | undefined> = {};
+    saveGeminiKey(home, "pasted-key-abc", env);
+    expect(readFileSync(join(home, ".env"), "utf8")).toBe("# from get.sh\nGEMINI_API_KEY=pasted-key-abc\nOTHER=1\n");
+    expect(statSync(join(home, ".env")).mode & 0o777).toBe(0o600);
+    // The running core uses it straight away (helpers read it from the environment).
+    expect(env.GEMINI_API_KEY).toBe("pasted-key-abc");
+  });
+
+  test("makes the .env when there is none, and leaves no temp file behind", () => {
+    const home = tempDir();
+    saveGeminiKey(home, "pasted-key-abc", {});
+    expect(readFileSync(join(home, ".env"), "utf8")).toBe("GEMINI_API_KEY=pasted-key-abc\n");
+    expect(statSync(join(home, ".env")).mode & 0o777).toBe(0o600);
+    expect(readdirSync(home)).toEqual([".env"]);
   });
 });

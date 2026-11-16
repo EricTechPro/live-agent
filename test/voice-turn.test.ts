@@ -5,6 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { startSession, type AgentSession } from "../src/core/agent.ts";
 import type { AgentEvent } from "../src/core/events.ts";
 import { scriptedModel } from "../src/models/scripted.ts";
+import { defineTool } from "../src/core/tool.ts";
 
 const MIC_CHUNK = new Int16Array(160); // 10 ms of 16 kHz silence: content does not matter to the fake
 const VOICE = new Int16Array([1, 2, 3, 4]);
@@ -58,6 +59,70 @@ describe("voice turn through the agent core", () => {
 
     expect(heard).toEqual([{ type: "audio", data: VOICE, sampleRate: 24000 }]);
     expect(events.map((e) => e.type)).toEqual(["transcript", "turn.done"]);
+    await session.close();
+  });
+
+  test("in Ask me mode, a spoken yes runs the tool that was waiting", async () => {
+    let runs = 0;
+    const edit = defineTool({
+      name: "edit_note",
+      description: "an edit",
+      risk: "edit",
+      parameters: { type: "object", properties: {} },
+      run: () => ({ ran: ++runs }),
+    });
+    const session = await startSession({
+      model: scriptedModel([
+        [{ type: "tool.call", id: "c1", name: "edit_note", args: {} }],
+        [{ type: "text", text: "May I edit your note?" }],
+        [{ type: "user.text", text: "Yes, " }, { type: "user.text", text: "go ahead." }, { type: "text", text: "Okay." }],
+        [{ type: "text", text: "Done, I edited it." }],
+      ]),
+      tools: [edit],
+      mode: "ask-me",
+      chatEndNote: false,
+    });
+    await session.sendText("edit my note");
+
+    const spoken = nextTurn(session);
+    session.sendAudio(MIC_CHUNK, 16000);
+    const events = await spoken;
+
+    expect(runs).toBe(1);
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "safety.verdict", id: "c1", verdict: "allow", reason: "the user said yes" }),
+    );
+    expect(events).toContainEqual(expect.objectContaining({ type: "tool.result", id: "c1", status: "ok" }));
+    await session.close();
+  });
+
+  test("in Ask me mode, a spoken no declines the tool that was waiting", async () => {
+    let runs = 0;
+    const edit = defineTool({
+      name: "edit_note",
+      description: "an edit",
+      risk: "edit",
+      parameters: { type: "object", properties: {} },
+      run: () => ({ ran: ++runs }),
+    });
+    const session = await startSession({
+      model: scriptedModel([
+        [{ type: "tool.call", id: "c1", name: "edit_note", args: {} }],
+        [{ type: "text", text: "May I edit your note?" }],
+        [{ type: "user.text", text: "No, leave it." }, { type: "text", text: "Okay, I won't." }],
+      ]),
+      tools: [edit],
+      mode: "ask-me",
+      chatEndNote: false,
+    });
+    await session.sendText("edit my note");
+
+    const spoken = nextTurn(session);
+    session.sendAudio(MIC_CHUNK, 16000);
+    const events = await spoken;
+
+    expect(runs).toBe(0);
+    expect(events).toContainEqual(expect.objectContaining({ type: "tool.result", id: "c1", status: "declined" }));
     await session.close();
   });
 

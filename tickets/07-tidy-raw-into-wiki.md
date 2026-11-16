@@ -13,3 +13,7 @@
 - [x] Raw notes are kept, not deleted
 - [x] The tidy job appears as a normal job with states on the event stream
 - [x] A tidy failure never breaks the next chat
+
+## Comments
+
+- 2026-11-14 review fix: chats now have a boundary inside one app run. The window's New chat button (POST /chat/new) or 10 quiet minutes end the chat: chat-end note, then the tidy job shows on the job board, then the model reconnects fresh. Quitting still ends the last chat the same way.

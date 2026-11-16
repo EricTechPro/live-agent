@@ -1,0 +1,89 @@
+/* The Pixel look, shared by the setup wizard and the main Jett view: LED-panel style
+   (Roamies-like, written fresh). Tokens, fonts and the parts both use: the stepped pixel
+   frame (.pf), LEDs, buttons, chips, links, fields and selects. Each view's layout lives
+   in its own file (wizard.css, style.css).
+   Fonts: Doto and Martian Mono (SIL Open Font License), latin subset, bundled in ./fonts.
+   Contrast on --panel: ink 17:1, ink-2 11.7:1, ink-3 8.6:1, led 14.7:1, bad 10.5:1 (all text >= 4.5:1). */
+@font-face { font-family: "Doto"; src: url("./fonts/doto-latin.woff2") format("woff2"); font-weight: 400 900; font-display: block; }
+@font-face { font-family: "Martian Mono"; src: url("./fonts/martian-mono-latin.woff2") format("woff2");
+  font-weight: 400 800; font-stretch: 75% 112.5%; font-display: block; }
+
+:root {
+  --bg: #051214;
+  --panel: #071a1c;
+  --ink: #e8fffa;
+  --ink-2: #b4d8d1;
+  --ink-3: #8fbdb5;
+  --led: #78ffe2;
+  --led-hi: #a8ffed;
+  --led-lo: #5ce6c9;
+  --led-ink: #032722;
+  --edge: #1d4a48;
+  --edge-hi: #2f7c74;
+  --edge-hot: #4fbfa9;
+  --off: #14302f;
+  --bad: #ffb4a8;
+  --ease: cubic-bezier(.2,.8,.2,1);
+  --dots: "Doto", ui-monospace, monospace;
+  --mono: "Martian Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: dark;
+}
+
+/* ---- stepped pixel frame: outer box = frame colour, ::before = fill, both clipped to 2-step corners ---- */
+.pf {
+  --k: 2px; --frame: var(--edge); --fill: var(--panel); --t: 2px;
+  --steps: polygon(0 calc(var(--k)*2), var(--k) calc(var(--k)*2), var(--k) var(--k), calc(var(--k)*2) var(--k), calc(var(--k)*2) 0,
+    calc(100% - var(--k)*2) 0, calc(100% - var(--k)*2) var(--k), calc(100% - var(--k)) var(--k), calc(100% - var(--k)) calc(var(--k)*2), 100% calc(var(--k)*2),
+    100% calc(100% - var(--k)*2), calc(100% - var(--k)) calc(100% - var(--k)*2), calc(100% - var(--k)) calc(100% - var(--k)), calc(100% - var(--k)*2) calc(100% - var(--k)), calc(100% - var(--k)*2) 100%,
+    calc(var(--k)*2) 100%, calc(var(--k)*2) calc(100% - var(--k)), var(--k) calc(100% - var(--k)), var(--k) calc(100% - var(--k)*2), 0 calc(100% - var(--k)*2));
+  position: relative; isolation: isolate; background: var(--frame); clip-path: var(--steps);
+  transition: background-color .15s var(--ease);
+}
+.pf::before { content: ""; position: absolute; inset: var(--t); z-index: -1; background: var(--fill); clip-path: var(--steps); transition: background-color .15s var(--ease); }
+.pf:focus-visible { --frame: var(--ink) !important; --t: 3px; outline: none; }
+.pf:focus-visible::before { box-shadow: inset 0 0 0 2px var(--bg); }
+
+.led { display: inline-block; flex: none; width: 8px; height: 8px; background: #1e3f3d; }
+.led.on { background: var(--led); box-shadow: 0 0 6px rgba(120,255,226,.9), 0 0 14px rgba(120,255,226,.35); }
+.led.busy { background: var(--led); animation: blink .9s steps(2) infinite; }
+.led.bad { background: var(--bad); box-shadow: 0 0 6px rgba(255,180,168,.7); }
+@keyframes blink { 50% { background: #1e3f3d; box-shadow: none; } }
+
+.chip { --frame: var(--edge-hi); appearance: none; border: 0; cursor: pointer; padding: 7px 11px; color: var(--ink);
+  font: 700 12px/1.2 var(--mono); font-stretch: 87.5%; }
+.chip:hover { --frame: var(--edge-hot); }
+.chip span { color: var(--ink-3); font-weight: 500; }
+.chip[aria-checked="true"] { --frame: var(--led); --fill: #0a2a28; color: var(--led); }
+.chip[aria-checked="true"] span { color: var(--ink-2); }
+
+.btn { appearance: none; border: 0; padding: 10px 16px; cursor: pointer; color: var(--ink);
+  font: 700 12px/1.25 var(--mono); font-stretch: 87.5%; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.btn.go { --frame: var(--led); --fill: var(--led); color: var(--led-ink); }
+.btn.go:hover { --frame: var(--led-hi); --fill: var(--led-hi); }
+.btn.go:active { --fill: var(--led-lo); }
+.btn.go:disabled { --frame: #1c3634; --fill: #1c3634; color: #8db0aa; cursor: default; }
+.btn.ghost { --frame: var(--edge-hi); }
+.btn.ghost:hover { --frame: var(--edge-hot); }
+.btn.bare { background: none; color: var(--ink-2); padding-inline: 4px; }
+.btn.bare:hover { color: var(--ink); }
+.btn.small { padding: 7px 12px; }
+.link { appearance: none; background: none; border: 0; padding: 4px 0; cursor: pointer; color: var(--led);
+  font: 600 12px/1.25 var(--mono); font-stretch: 87.5%; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; }
+.link:hover { text-decoration-color: currentColor; }
+.link[hidden] { display: none; }
+.btn.bare:focus-visible, .link:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.field { display: flex; flex: 1; min-width: 0; --frame: var(--edge-hi); --fill: #061719; }
+.field:focus-within { --frame: var(--led); }
+.field input { min-width: 0; flex: 1; padding: 10px 12px; border: 0; background: transparent; color: var(--ink); font: 500 13px/1.25 var(--mono); font-stretch: 87.5%; }
+.field input::placeholder { color: var(--ink-3); }
+.field input:focus { outline: none; }
+
+.sel { --frame: var(--edge-hi); --fill: #061719; display: flex; min-width: 0; }
+.sel:focus-within { --frame: var(--led); }
+.sel select { appearance: none; -webkit-appearance: none; min-width: 0; flex: 1; border: 0; padding: 6px 26px 6px 9px; cursor: pointer; color: var(--ink);
+  font: 500 12px/1.25 var(--mono); font-stretch: 87.5%;
+  background: linear-gradient(45deg, transparent 50%, var(--led) 50%) calc(100% - 13px) 50% / 5px 5px no-repeat,
+              linear-gradient(-45deg, transparent 50%, var(--led) 50%) calc(100% - 8px) 50% / 5px 5px no-repeat; }
+.sel select:focus { outline: none; }
+.sel option { background: #061719; color: var(--ink); }
