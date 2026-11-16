@@ -17,6 +17,7 @@ import { layoutScene, toScreen, type Layout, type Owned, type PlacedCard, type P
 import { easeInOut, stepAt, typed, unitPlan, type UnitPlan } from "./motion.ts";
 import { emptyPen, penAddBeat, penInterrupt, penSpeak, slotOf, VOICE, type Pen } from "./pen.ts";
 import { isCard } from "../../src/core/card-kinds.ts";
+import { overlayOrigin } from "./screen-origin.ts";
 import { addCanvasEvent, emptyScene, INK_COLORS, partialPoints, type Pt, type Scene } from "./sketch.ts";
 import type { Slot } from "./sketch.ts";
 
@@ -132,20 +133,20 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
     const due = (id: string) => !waiting.has(id) || (slotOf(pen, id)?.start ?? Infinity) <= now0;
     const group = (m: (typeof scene.marks)[number]) => {
       const r = m.mark as { on?: string; to_card?: string };
-      if (r.to_card) return m.mark.id;
+      if (r.to_card || m.mark.kind === "spot") return m.mark.id;
       if (r.on) return r.on;
       return isCard(m.mark) ? m.mark.id : `sketch:${m.beatKey.split(":")[0]}`;
     };
     const live = new Set(scene.marks.filter((m) => due(m.mark.id)).map(group));
     const shown = scene.marks.filter((m) => due(m.mark.id) || live.has(group(m)));
     for (const m of shown) waiting.delete(m.mark.id);
-    layout = layoutScene({ marks: shown, view, obstacles: [...obstacles, bottomBand], prev, closed, from, charW, displayW, diagrams });
+    layout = layoutScene({ marks: shown, view, obstacles: [...obstacles, bottomBand], prev, closed, from, charW, displayW, diagrams, origin: overlayOrigin() });
     prev = new Map(layout.cards.map((c) => [c.id, { ...c.rect, scale: c.scale }]));
     // Cards that went (closed, evicted, erased) fade out.
     const now = performance.now();
     for (const [id, card] of before) if (!prev.has(id) && cardStarted(card, now)) leaving.push({ card, at: now });
     units = buildUnits(layout);
-    host.dataset.view = layout.cards.length || leaving.length ? "sketch" : "";
+    host.dataset.view = layout.cards.length || layout.screen.length || leaving.length ? "sketch" : "";
     if (!host.dataset.view) delete host.dataset.view;
     syncUi(now);
     kick();
@@ -224,7 +225,7 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
     const key = `${event.id}:${event.beat}`;
     const ids = event.marks.map((m) => m.id);
     // How long each new mark takes, from a layout with everything in it (only sizes matter here).
-    const all = buildUnits(layoutScene({ marks: scene.marks, view: { width: innerWidth, height: innerHeight }, closed, charW, displayW, diagrams, max: Infinity }));
+    const all = buildUnits(layoutScene({ marks: scene.marks, view: { width: innerWidth, height: innerHeight }, closed, charW, displayW, diagrams, max: Infinity, origin: overlayOrigin() }));
     pen = penAddBeat(pen, { key, say: event.say, ids, durations: ids.map((id) => all.get(id)?.plan.total ?? 0) }, now, reduced);
     relayout();
     beats = [...beats.filter((b) => b.key !== key), { key, say: event.say, ids }];
@@ -343,7 +344,7 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
       opts.onCaption?.(on);
     }
     syncUi(now);
-    if (!layout.cards.length && !leaving.length) delete host.dataset.view;
+    if (!layout.cards.length && !layout.screen.length && !leaving.length) delete host.dataset.view;
     if (busy) kick();
   }
 
@@ -409,11 +410,14 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
   }
 
   function toneColor(tone: Tone, ink: string): string {
+    if (tone === "wash") return "rgba(120,255,226,0.30)";
     return tone === "ink" ? ink : tone === "text" ? LOOK.text : tone === "dim" ? LOOK.dim : tone === "hot" ? LOOK.hot : LOOK.deep;
   }
 
   function drawPrim(p: Prim, t: number, screen: boolean, ink: string) {
+    if (p.t === "stroke" && p.tone === "wash") return drawWash(p.pts, p.width, t);
     if (p.t === "stroke") return drawStroke(p.pts, p.width, toneColor(p.tone, ink), t);
+    if (p.t === "text" && p.chip) return drawChip(p, t, ink);
     if (p.t === "dot") {
       const r = p.r * (t >= 1 ? 1 : 0.4 + 0.9 * Math.sin((t * Math.PI) / 1.6));
       ctx.save();
@@ -466,6 +470,62 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
       ctx.moveTo(tail[0]!.x, tail[0]!.y);
       for (const q of tail) ctx.lineTo(q.x, q.y);
       ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** A marker pass over real words (screen highlight): see-through, no dark edge, flat ends. */
+  function drawWash(pts: Pt[], width: number, t: number) {
+    const part = partialPoints(pts, t);
+    if (part.length < 2) return;
+    ctx.save();
+    ctx.lineCap = "butt";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "rgba(120,255,226,0.26)";
+    ctx.shadowColor = "rgba(120,255,226,0.55)";
+    ctx.shadowBlur = 10;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(part[0]!.x, part[0]!.y);
+    for (const q of part) ctx.lineTo(q.x, q.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** A label chip on real UI: a glowing filled tag with stepped corners, dark heavy words typed in. */
+  function drawChip(p: Prim & { t: "text" }, t: number, ink: string) {
+    const pad = { x: 8, y: 4 };
+    const b = { x: p.box.x - pad.x, y: p.box.y - pad.y, w: p.box.w + pad.x * 2, h: p.box.h + pad.y * 2 };
+    const grow = Math.min(1, t * 3); // the tag snaps open, then the words type
+    const w = b.w * easeInOut(grow);
+    const c = 3;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(b.x + c, b.y);
+    ctx.lineTo(b.x + w - c, b.y);
+    ctx.lineTo(b.x + w, b.y + c);
+    ctx.lineTo(b.x + w, b.y + b.h - c);
+    ctx.lineTo(b.x + w - c, b.y + b.h);
+    ctx.lineTo(b.x + c, b.y + b.h);
+    ctx.lineTo(b.x, b.y + b.h - c);
+    ctx.lineTo(b.x, b.y + c);
+    ctx.closePath();
+    ctx.shadowColor = ink;
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = ink;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = LOOK.hot;
+    ctx.globalAlpha = 0.7;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    if (grow >= 1) {
+      const shown = typed(p.lines, Math.min(1, (t - 1 / 3) * 1.5));
+      ctx.font = `${p.weight} ${p.size}px ${FONT}`;
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#03211f";
+      ctx.fillText(shown.lines[0] ?? "", p.box.x, p.box.y + p.box.h / 2 + 0.5);
     }
     ctx.restore();
   }

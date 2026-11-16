@@ -110,6 +110,8 @@ export default defineTool<{ beats: unknown }>({
   },
   run({ beats }, { canvas }) {
     const checked = parseBeats(beats);
+    const spots = checked.flatMap((b) => b.marks).filter((m) => m.kind === "spot");
+    if (spots.length) throw new Error(`Nothing was drawn. ${spots[0]!.id}: to mark something on the real screen, call mark_screen.`);
     canvas.draw(checked);
     const ids = checked.flatMap((b) => b.marks.map((m) => m.id));
     // Every id on the canvas, so later turns can say "make p2 red" (edit_canvas).

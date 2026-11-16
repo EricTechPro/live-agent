@@ -9,10 +9,12 @@ import type { Tool } from "./tool.ts";
 import cancelJob from "../../tools/cancel-job.ts";
 import draw from "../../tools/draw.ts";
 import editCanvas from "../../tools/edit-canvas.ts";
+import findOnScreen from "../../tools/find-on-screen.ts";
 import look from "../../tools/look.ts";
+import markScreen from "../../tools/mark-screen.ts";
 import readFile from "../../tools/read-file.ts";
 import remember from "../../tools/remember.ts";
 import searchBrain from "../../tools/search-brain.ts";
 import startHelper from "../../tools/start-helper.ts";
 
-export const bundledTools: Tool[] = [cancelJob, draw, editCanvas, look, readFile, remember, searchBrain, startHelper];
+export const bundledTools: Tool[] = [cancelJob, draw, editCanvas, findOnScreen, look, markScreen, readFile, remember, searchBrain, startHelper];

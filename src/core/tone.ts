@@ -70,6 +70,11 @@ function workRules(brainPath?: string): string {
       "Their words may come with a [Screen: ...] line (front app, window, page, cursor): use it, never read it out. " +
       "A [Circled: ...] line means the image just before it is what they circled: that circle is the subject and beats " +
       "the app or window name. Answer about what is inside it (\"what's this?\" = the circled thing) and do not call look for it.",
+    "- To show where something is on the user's real screen (\"where's the Export button?\", \"which one do I click?\", " +
+      "\"ring the Subscribe button\"), call mark_screen: name each target by its exact words on screen (text) or what it " +
+      "looks like (describe), never coordinates; the app finds it and draws a ring, arrow, underline, highlight or label " +
+      "chip on it while you say the beat. Look first if you don't know the words. If a target is not found, say so in one " +
+      "line; never pretend you marked it. Cards from draw keep clear of these marks, so you can use both in one answer.",
     "- The safety mode decides if the user is asked first; if the call is declined or blocked, say so in one line.",
   ].join("\n");
 }

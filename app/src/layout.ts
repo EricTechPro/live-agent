@@ -53,12 +53,13 @@ export const CHAR_W = 0.62;
 export const DISPLAY_W = 0.6;
 export const LINE = 1.38;
 
-export type Tone = "ink" | "text" | "dim" | "hot" | "deep";
+/** "wash": a see-through marker over real words (screen highlight). */
+export type Tone = "ink" | "text" | "dim" | "hot" | "deep" | "wash";
 
 export type Prim =
   | { t: "stroke"; pts: Pt[]; width: number; tone: Tone }
   | { t: "dot"; x: number; y: number; r: number; tone: Tone }
-  | { t: "text"; box: Rect; lines: string[]; size: number; weight: number; align: "left" | "center" | "right"; tone: Tone; font?: "display" };
+  | { t: "text"; box: Rect; lines: string[]; size: number; weight: number; align: "left" | "center" | "right"; tone: Tone; font?: "display"; chip?: boolean };
 
 /** A primitive plus the mark it belongs to (its pen timing comes from that mark). */
 export interface Owned {
@@ -113,6 +114,8 @@ export interface LayoutInput {
   displayW?: number;
   /** Rendered Mermaid sizes by card id (card-view measures them). */
   diagrams?: ReadonlyMap<string, { w: number; h: number }>;
+  /** This window's top-left in global points: screen marks (`spot`) come in global points. */
+  origin?: Pt;
 }
 
 // ---- geometry --------------------------------------------------------------------
@@ -870,10 +873,15 @@ export function layoutScene(input: LayoutInput): Layout {
   const loose = new Map<string, Mark[]>();
   const between: SceneMark[] = [];
 
+  const spots: SpotIn[] = [];
+  const o = input.origin ?? { x: 0, y: 0 };
+  const local = (r: Rect): Rect => ({ x: r.x - o.x, y: r.y - o.y, w: r.w, h: r.h });
   for (const sm of input.marks) {
     const m = sm.mark;
     const r = m as { on?: string; to_card?: string };
-    if (isCard(m)) {
+    if (m.kind === "spot") {
+      spots.push({ id: m.id, style: m.style, rect: local(m.rect), label: m.label, texts: (m.texts ?? []).map(local) });
+    } else if (isCard(m)) {
       if (closed.has(m.id)) continue;
       const c = layoutCard(m as CardMark, charW, input.displayW ?? DISPLAY_W, input.diagrams?.get(m.id));
       contents.push(c);
@@ -896,10 +904,12 @@ export function layoutScene(input: LayoutInput): Layout {
   }
   const all = contents.map((c) => (c.kind === "sketch" && loose.has(c.id) ? sketchCard(c.id, loose.get(c.id)!, charW) : c));
 
+  // Marks on real UI first: they are tied to the screen. Cards then keep off them.
+  const marked = layoutSpots(spots, input.view, charW, input.obstacles ?? []);
   const { rects, evicted } = placeCards(
     all.map((c) => ({ id: c.id, w: c.w, h: c.h })),
     input.view,
-    input.obstacles,
+    [...(input.obstacles ?? []), ...marked.boxes],
     input.prev,
     input.from,
     input.max,
@@ -910,9 +920,9 @@ export function layoutScene(input: LayoutInput): Layout {
   });
 
   // Arrows between two cards on screen: edge to edge, words where nothing else is.
-  const screen: Owned[] = [];
+  const screen: Owned[] = [...marked.prims];
   const placedById = new Map(cards.map((c) => [c.id, c]));
-  const taken: Rect[] = [...cards.map((c) => c.rect), ...cards.flatMap((c) => textBoxes(c.prims).map((b) => toScreen(b, c)))];
+  const taken: Rect[] = [...cards.map((c) => c.rect), ...cards.flatMap((c) => textBoxes(c.prims).map((b) => toScreen(b, c))), ...marked.boxes];
   for (const sm of between) {
     const m = sm.mark as Mark & { on: string; to_card: string; label?: string };
     const a = placedById.get(m.on);
@@ -1021,4 +1031,162 @@ export function screenTextBoxes(layout: Layout): Rect[] {
     ...layout.cards.flatMap((c) => textBoxes(c.prims).map((b) => toScreen(b, c))),
     ...textBoxes(layout.screen),
   ];
+}
+
+// ---- marks on real UI (slice 4) ---------------------------------------------------------
+//
+// A `spot` is a real element found on screen (src/screen/locator.ts), already in this
+// window's px. It is drawn where it is, by the same pen: a ring round it, an arrow at it,
+// a line under it, a marker wash over it, and a label chip beside it. The chip goes on the
+// side that covers the fewest words on screen (and no card, other mark or screen edge).
+
+export type SpotStyle = "ring" | "arrow" | "underline" | "highlight" | "label";
+
+export interface SpotIn {
+  id: string;
+  style: SpotStyle;
+  /** The element, in this window's px. */
+  rect: Rect;
+  label?: string;
+  /** Word boxes around it on screen, px. */
+  texts?: Rect[];
+}
+
+/** Chip words: small, heavy, padded. */
+export const CHIP = { size: 12, padX: 8, padY: 4, gap: 7 } as const;
+
+const grow = (r: Rect, dx: number, dy = dx): Rect => ({ x: r.x - dx, y: r.y - dy, w: r.w + dx * 2, h: r.h + dy * 2 });
+const overlapArea = (a: Rect, b: Rect) => {
+  const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+  const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+  return w > 0 && h > 0 ? w * h : 0;
+};
+const boxOfPts = (pts: Pt[]): Rect => union(pts.map((p) => ({ x: p.x, y: p.y, w: 0, h: 0 })))!;
+
+/**
+ * Where a chip of size `w` x `h` goes beside `around`: the candidate (above, below, right,
+ * left, then the above corners) that covers the least word area, never off screen; other
+ * marks and cards in `taken` count four times as much as words. Pure (tested).
+ */
+export function chipSpot(around: Rect, w: number, h: number, texts: readonly Rect[], taken: readonly Rect[], view: Size): Rect {
+  const g = CHIP.gap;
+  const cx = around.x + around.w / 2 - w / 2;
+  const cy = around.y + around.h / 2 - h / 2;
+  const options: Rect[] = [
+    { x: cx, y: around.y - g - h, w, h },
+    { x: cx, y: around.y + around.h + g, w, h },
+    { x: around.x + around.w + g, y: cy, w, h },
+    { x: around.x - g - w, y: cy, w, h },
+    { x: around.x, y: around.y - g - h, w, h },
+    { x: around.x + around.w - w, y: around.y - g - h, w, h },
+  ];
+  let best: { r: Rect; cost: number } | undefined;
+  options.forEach((r, i) => {
+    const off = r.x < MARGIN || r.y < MARGIN || r.x + r.w > view.width - MARGIN || r.y + r.h > view.height - MARGIN;
+    const cost =
+      (off ? 1e9 : 0) +
+      texts.reduce((n, t) => n + overlapArea(r, t), 0) +
+      4 * taken.reduce((n, t) => n + overlapArea(r, t), 0) +
+      i * 0.5; // ties: the order above
+    if (!best || cost < best.cost) best = { r, cost };
+  });
+  const r = best!.r;
+  // Off screen everywhere (a huge element): slide the first option back inside.
+  return {
+    x: Math.min(Math.max(r.x, MARGIN), view.width - MARGIN - w),
+    y: Math.min(Math.max(r.y, MARGIN), view.height - MARGIN - h),
+    w,
+    h,
+  };
+}
+
+/** The side an arrow comes from: the one with room and the fewest words in its way. */
+function arrowFrom(r: Rect, texts: readonly Rect[], taken: readonly Rect[], view: Size): { from: Pt; to: Pt } {
+  const len = 78;
+  const c = centre(r);
+  const sides = [
+    { from: { x: r.x - len - 8, y: c.y - 26 }, to: { x: r.x - 8, y: c.y } },
+    { from: { x: r.x + r.w + len + 8, y: c.y - 26 }, to: { x: r.x + r.w + 8, y: c.y } },
+    { from: { x: c.x - 30, y: r.y - len }, to: { x: c.x, y: r.y - 8 } },
+    { from: { x: c.x - 30, y: r.y + r.h + len }, to: { x: c.x, y: r.y + r.h + 8 } },
+  ];
+  let best = sides[0]!;
+  let cost = Infinity;
+  for (const sd of sides) {
+    const box = grow(boxOfPts([sd.from, sd.to]), 6);
+    const off = box.x < MARGIN || box.y < MARGIN || box.x + box.w > view.width - MARGIN || box.y + box.h > view.height - MARGIN;
+    const k = (off ? 1e9 : 0) + texts.reduce((n, t) => n + overlapArea(box, t), 0) + 4 * taken.reduce((n, t) => n + overlapArea(box, t), 0);
+    if (k < cost) {
+      cost = k;
+      best = sd;
+    }
+  }
+  return best;
+}
+
+/** Ink for every screen mark, in screen px, plus the boxes cards must keep off. */
+export function layoutSpots(spots: readonly SpotIn[], view: Size, charW = CHAR_W, avoid: readonly Rect[] = []): { prims: Owned[]; boxes: Rect[] } {
+  const prims: Owned[] = [];
+  const boxes: Rect[] = [];
+  // Every element is taken from the start, so no chip lands on another marked thing.
+  const taken: Rect[] = [...avoid, ...spots.map((s) => grow(s.rect, 4))];
+  for (const s of spots) {
+    const rand = seededRandom(s.id);
+    const r = s.rect;
+    const texts = s.texts ?? [];
+    const out: Prim[] = [];
+    let around = r;
+    if (s.style === "ring") {
+      const pad = Math.min(12, Math.max(6, Math.min(r.w, r.h) * 0.25));
+      const loop = roughLoop(r, rand, undefined, pad + 2, pad);
+      out.push(stroke(loop, 3.5));
+      around = boxOfPts(loop);
+    } else if (s.style === "underline") {
+      const y = r.y + r.h + 4;
+      const line = roughLine({ x: r.x - 3, y }, { x: r.x + r.w + 3, y: y + 1 }, rand, 0.4);
+      out.push(stroke(line, 3.5));
+      around = union([r, boxOfPts(line)])!;
+    } else if (s.style === "highlight") {
+      const y = r.y + r.h / 2;
+      out.push(stroke(roughLine({ x: r.x - 4, y }, { x: r.x + r.w + 4, y }, rand, 0.15), r.h + 6, "wash"));
+      around = grow(r, 4, 3);
+    } else if (s.style === "arrow") {
+      const { from, to } = arrowFrom(r, texts, taken, view);
+      const shaft = roughLine(from, to, rand, 0.6);
+      out.push(stroke(shaft, 3.5), ...headAt(shaft.at(-2) ?? from, to, rand, 3.5));
+      around = union([r, boxOfPts(shaft)])!;
+      // The arrow's chip sits at its tail, so words, arrow and target read in one line.
+      if (s.label) {
+        const t = textAt(s.label, 0, 0, 220, charW, { size: CHIP.size, tone: "deep", weight: 700, maxLines: 1 });
+        const w = t.box.w + CHIP.padX * 2;
+        const h = t.box.h + CHIP.padY * 2;
+        const at = chipSpot({ x: from.x - 1, y: from.y - 1, w: 2, h: 2 }, w, h, texts, taken, view);
+        t.box = { x: at.x + CHIP.padX, y: at.y + CHIP.padY, w: t.box.w, h: t.box.h };
+        t.chip = true;
+        out.push(t);
+        taken.push(at);
+        boxes.push(at);
+      }
+    }
+    if (s.label && s.style !== "arrow") {
+      const t = textAt(s.label, 0, 0, 220, charW, { size: CHIP.size, tone: "deep", weight: 700, maxLines: 1 });
+      const w = t.box.w + CHIP.padX * 2;
+      const h = t.box.h + CHIP.padY * 2;
+      const at = chipSpot(around, w, h, texts, taken, view);
+      t.box = { x: at.x + CHIP.padX, y: at.y + CHIP.padY, w: t.box.w, h: t.box.h };
+      t.chip = true;
+      if (s.style === "label") {
+        // A chip alone points with a short tick from its edge to the element.
+        const a = edgeToward(at, centre(r));
+        const b = edgeToward(r, centre(at));
+        if (Math.hypot(a.x - b.x, a.y - b.y) > 6) out.push(stroke(roughLine(a, b, rand, 0.3), 2.5));
+      }
+      out.push(t);
+      taken.push(at);
+      boxes.push(at);
+    }
+    prims.push(...own(s.id, out));
+    boxes.push(grow(around, 4));
+  }
+  return { prims, boxes };
 }

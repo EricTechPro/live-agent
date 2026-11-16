@@ -82,13 +82,26 @@ const diagram = z.object({
   color,
 });
 
+// ---- screen marks (slice 4): on real UI, placed by code, never by the model ---------
+//
+// The model names a target in `mark_screen` (words or a description); the core finds it
+// (src/screen/locator.ts) and draws a `spot` with the found rect in global screen points.
+// `texts`: words around it on screen, so its label chip covers as few as it can.
+export const SPOT_STYLES = ["ring", "arrow", "underline", "highlight", "label"] as const;
+const screenRect = z.object({ x: z.number().finite(), y: z.number().finite(), w: z.number().positive(), h: z.number().positive() });
+const spot = z.object({
+  kind: z.literal("spot"), id, style: z.enum(SPOT_STYLES), rect: screenRect, label: z.string().trim().min(1).max(40).optional(), color,
+  texts: z.array(screenRect).max(120).optional(),
+  via: z.enum(["ax", "ocr", "vision"]).optional(),
+});
+
 const NEEDS_SPOT: Record<string, string[]> = {
   box: ["x", "y", "w", "h"], text: ["x", "y"], circle: ["x", "y", "r"], underline: ["x", "y", "w"],
   check: ["x", "y"], cross: ["x", "y"], step: ["x", "y"],
 };
 
 const mark = z
-  .discriminatedUnion("kind", [box, text, arrow, line, circle, underline, check, cross, step, diagram, timeline, list, flow, bars, table])
+  .discriminatedUnion("kind", [box, text, arrow, line, circle, underline, check, cross, step, diagram, timeline, list, flow, bars, table, spot])
   .superRefine((m, ctx) => {
     // A free mark needs a place: a card to sit on, or board hints.
     const r = m as Record<string, unknown>;
@@ -183,11 +196,13 @@ export function applyEdit(m: Mark, change: MarkChange): Mark {
   if (change.label !== undefined) {
     if (m.kind === "text") next.text = change.label;
     else if (isCard(m)) next.title = change.label;
-    else if (m.kind === "box" || m.kind === "arrow" || m.kind === "step") next.label = change.label;
+    else if (m.kind === "box" || m.kind === "arrow" || m.kind === "step" || m.kind === "spot") next.label = change.label;
     else throw new Error(`${m.id} is a ${m.kind}: it has no label`);
   }
   if (change.x !== undefined || change.y !== undefined) {
-    if (isCard(m) || r(m).on) {
+    if (m.kind === "spot") {
+      throw new Error(`${m.id} marks something real on the screen: it stays on it and cannot be moved by x / y`);
+    } else if (isCard(m) || r(m).on) {
       throw new Error(`${m.id} is placed for you (cards and marks on cards never overlap): it cannot be moved by x / y`);
     } else if (m.kind === "arrow" || m.kind === "line") {
       if (!m.from || !m.to) throw new Error(`${m.id} joins two cards: it cannot be moved by x / y`);
