@@ -70,7 +70,8 @@ export interface Eyes {
   permission(): Promise<boolean>;
   /** Ask macOS (its prompt shows once) and open the right Settings pane. */
   requestPermission(): Promise<boolean>;
-  state(): Promise<ScreenState>;
+  /** `url: false` skips asking the browser for its address (the locator only needs the window). */
+  state(options?: { url?: boolean }): Promise<ScreenState>;
   /** Throws ScreenPermissionError when Screen Recording is off. */
   shot(options?: ShotOptions): Promise<Shot>;
   /**
@@ -177,10 +178,10 @@ export function helperEyes({ bin, excludePids = [] }: HelperEyesOptions): Eyes {
       if (!ok) await run(["open", SCREEN_SETTINGS_URL], 3000).catch(() => {});
       return ok;
     },
-    async state() {
+    async state(options = {}) {
       const s = await call(["state", ...exclude], 3000);
       const front = s.front as FrontWindow | null;
-      if (front) front.url = await browserUrl(front.bundleId);
+      if (front && options.url !== false) front.url = await browserUrl(front.bundleId);
       return { display: s.display as Rect, front };
     },
     async shot(options = {}) {

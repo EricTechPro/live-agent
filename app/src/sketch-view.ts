@@ -481,7 +481,7 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
     ctx.save();
     ctx.lineCap = "butt";
     ctx.lineJoin = "round";
-    ctx.strokeStyle = "rgba(120,255,226,0.26)";
+    ctx.strokeStyle = "rgba(80,240,210,0.36)";
     ctx.shadowColor = "rgba(120,255,226,0.55)";
     ctx.shadowBlur = 10;
     ctx.lineWidth = width;

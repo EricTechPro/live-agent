@@ -39,11 +39,26 @@ const sketch = mountSketch(core as never, stage);
 // Jett's orb sits bottom right in the app; cards keep off it.
 sketch.setObstacles([{ x: innerWidth - 120, y: innerHeight - 160, w: 100, h: 100 }], "left");
 
+type Beat = { say: string; marks: Record<string, unknown>[] };
+
+/**
+ * ?fixture=<url>: a real run instead of the mock app. The JSON is
+ * { backdrop: <screenshot url>, beats: [{ say, marks: [spot marks in global points] }] },
+ * the screenshot covering the window at origin 0,0 (scripts save it from a real locator run).
+ */
+async function fixtureScene(url: string): Promise<Beat[]> {
+  const f = (await (await fetch(url)).json()) as { backdrop: string; beats: Beat[] };
+  for (const sel of [".app", ".top"]) document.querySelector<HTMLElement>(sel)!.style.display = "none";
+  Object.assign(document.body.style, { background: `url(${f.backdrop}) 0 0 / 100vw 100vh no-repeat` });
+  return f.beats;
+}
+
 async function play() {
   await document.fonts.ready;
   const texts = wordBoxes();
   const spot = (id: string, style: string, el: string, label?: string) => ({ kind: "spot", id, style, rect: rectOf(el), label, texts, via: "ax" });
-  const scene: { say: string; marks: Record<string, unknown>[] }[] = [
+  const fixture = params.get("fixture");
+  const scene: Beat[] = fixture ? await fixtureScene(fixture) : [
     { say: "That's the Subscribe button, right under the video.", marks: [spot("p1", "ring", "subscribe", "click here")] },
     { say: "The scale field is on the right panel.", marks: [spot("p2", "arrow", "scale", "Scale")] },
     { say: "This video is about drawing on screen.", marks: [spot("p3", "underline", "title"), spot("p4", "label", "channel", "Subject")] },

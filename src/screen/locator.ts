@@ -201,7 +201,7 @@ export function createLocator(deps: LocatorDeps): (target: Target) => Promise<Fo
 
   return async function locate(target) {
     if (!target.text && !target.describe) throw new NotFoundError("Say what to find: its words (text) or what it looks like (describe).");
-    const state = await eyes.state();
+    const state = await eyes.state({ url: false });
     const front = state.front;
     const scope = front?.bounds ?? state.display;
     const nearPt = await where(target.near, front);
@@ -260,7 +260,7 @@ export function createLocator(deps: LocatorDeps): (target: Target) => Promise<Fo
       const shot = await eyes.shot({ rect: scope, maxPx: 1568 });
       const answer = await deps.ground(shot, target.text && target.describe ? `${target.describe} (it says "${target.text}")` : describe);
       if (answer) {
-        const after = await eyes.state();
+        const after = await eyes.state({ url: false });
         const problem = shotProblem({ at: shotAt, front }, { at: now(), front: after.front });
         if (problem) throw new NotFoundError(`Not marking ${quote(target)}: ${problem}. Look again and retry.`);
         const guess = gridBoxToPoints(shot.map, answer.box);
