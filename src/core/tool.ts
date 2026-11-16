@@ -50,6 +50,13 @@ export interface ToolContext {
    * tied to that call: the core tells the model when the job ends.
    */
   jobs?: Pick<Jobs, "submit" | "cancel" | "list">;
+  /**
+   * Change Jett's voice and / or speaking style (set_voice): saved to the config file, then
+   * the model moves to a resumed connection that speaks with it. Resolves once the switch
+   * is made. `applied: false`: saved, but the model could not switch now (next connection).
+   * Missing when the session cannot change voices.
+   */
+  setVoice?(change: { voice?: string; style?: string }): Promise<{ voice: string; style: string; applied: boolean }>;
   /** Helper settings: which helpers are on (config `helpers`) and where their CLIs are. */
   helpers?: HelperSettings;
   /**

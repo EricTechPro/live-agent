@@ -46,6 +46,7 @@ import { createScreen, type ReleaseInput, type Screen } from "../screen/service.
 import { createFollow, type Follow } from "../screen/follow.ts";
 import { createLocator, type Ground } from "../screen/locator.ts";
 import type { Pt } from "../screen/geometry.ts";
+import { saveVoice } from "../setup/index.ts";
 
 /** A mic chunk with someone talking in it (not room hum): any sample past ~8% of full scale. */
 export function isVoice(data: Int16Array, threshold = 2600): boolean {
@@ -307,6 +308,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         claudeCode: config.helpers.claudeCode,
         worktrees: config.worktrees,
       },
+      setVoice,
       screen: screen && {
         look: () => screen.look(),
         find: (target) => locate!(target),
@@ -472,8 +474,27 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     return options.model.connect((event) => mine === connection && onModelEvent(event), {
       tools: tools.map(({ name, description, parameters }) => ({ name, description, parameters })),
       voice: config.voice,
-      systemInstruction: systemInstruction(config.tone, { brainPath }),
+      systemInstruction: systemInstruction(config.tone, { brainPath, voiceStyle: config.voiceStyle }),
     });
+  }
+
+  // set_voice: save the voice and style where the wizard saves them, then move the model to a
+  // resumed connection that speaks with them (same chat, unlike the wizard's new chat).
+  async function setVoice(change: { voice?: string; style?: string }) {
+    const { config: saved } = saveVoice(configPath, { voice: change.voice, voiceStyle: change.style });
+    applyConfig(saved);
+    emit({ type: "voice.changed", voice: saved.voice, style: saved.voiceStyle });
+    let applied = !!modelSession.reconfigure;
+    try {
+      await modelSession.reconfigure?.({
+        voice: saved.voice,
+        systemInstruction: systemInstruction(saved.tone, { brainPath, voiceStyle: saved.voiceStyle }),
+      });
+    } catch (err) {
+      applied = false;
+      emit({ type: "error", message: `could not switch the voice now: ${errorMessage(err)}` });
+    }
+    return { voice: saved.voice, style: saved.voiceStyle, applied };
   }
   let modelSession = await connectModel();
 
