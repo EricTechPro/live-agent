@@ -12,7 +12,7 @@ import { mountBrainView } from "./brain-view.ts";
 import { mountChatView } from "./chat-view.ts";
 import {
   connectCore, getSetup, inTauri, onCoreDown, onCoreReady, onCoreRestarting, onNewChat, onOpenPanel, onQuickType, onShowShortcuts, onToggleMini, overlayPoll, quickTypeFocus, restartCore,
-  revealLog, setClickThrough, setTrayShown, waitForCore, type CoreClient,
+  revealLog, setClickThrough, setTrayShown, waitForCore, type CoreClient, type CoreInfo,
 } from "./core-client.ts";
 import { waveFor, QUIET } from "./orb-wave.ts";
 import { isNewChatKey, SHORTCUTS, SHORTCUTS_TITLE } from "./shortcuts.ts";
@@ -48,6 +48,7 @@ const dock = $("dock");
 const orbEl = $<HTMLButtonElement>("orb");
 const orbLabel = $("orb-label");
 const retryBtn = $<HTMLButtonElement>("orb-retry");
+const finishSetupBtn = $<HTMLButtonElement>("orb-setup");
 const orbHint = $("orb-hint");
 const talkBtn = $<HTMLButtonElement>("talk");
 const muteBtn = $<HTMLButtonElement>("mute");
@@ -562,7 +563,8 @@ function render() {
   shown = v;
   dock.dataset.look = v.look;
   orbEl.dataset.state = orb.state;
-  orbLabel.textContent = v.label;
+  // Wizard closed with no key: no core yet, so say that instead of "Starting…".
+  orbLabel.textContent = finishSetupBtn.hidden ? v.label : "No key yet";
   retryBtn.hidden = !v.retry;
   if (v.retry) retryBtn.textContent = v.retry;
   pillEl.dataset.look = v.look;
@@ -1102,6 +1104,25 @@ window.addEventListener("keydown", (e) => {
 
 // ---- boot -----------------------------------------------------------------
 
+/** The wizard was closed with no Gemini key: wait for "Finish setup", then run it again. */
+function finishSetupLater(info: CoreInfo): Promise<CoreClient | undefined> {
+  say("Setup isn't finished. I need a Gemini key to talk.");
+  finishSetupBtn.hidden = false;
+  render();
+  return new Promise((resolve) => {
+    finishSetupBtn.onclick = async () => {
+      finishSetupBtn.hidden = true;
+      render();
+      try {
+        resolve(await runWizard(info, await getSetup(info)));
+      } catch (err) {
+        showError(`setup: ${errorText(err)}`);
+        resolve(undefined);
+      }
+    };
+  });
+}
+
 async function boot() {
   moveOrb(placeOrb(storedSpot(), dockSize(), view()));
   // Minimised last time: come back as the pill (tickets 38, 39).
@@ -1125,7 +1146,10 @@ async function boot() {
     booted = true;
     // First launch (no config file) or no Gemini key yet: the setup wizard first.
     const status = await getSetup(info);
-    core = status.needed || status.keyNeeded ? await runWizard(info, status) : connectCore(info);
+    let first = status.needed || status.keyNeeded ? await runWizard(info, status) : connectCore(info);
+    // Closed before a key: no chat yet, so "Finish setup" under the orb opens it again.
+    while (!first) first = await finishSetupLater(info);
+    core = first;
   } catch (err) {
     booted = true; // a Retry that brings the core up reloads the page
     feedOrb({ type: "core.down" });
