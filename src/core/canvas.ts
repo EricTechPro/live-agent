@@ -50,6 +50,9 @@ const step = z.object({ kind: z.literal("step"), id, x: X.optional(), y: Y.optio
 // ---- cards (drawing v2): content only, placed by the window ----------------------
 
 const title = z.string().trim().min(1).max(40).optional();
+/** How big a card opens: small, normal (default), large, or full (it fills the screen until Esc). */
+export const CARD_SIZES = ["small", "normal", "large", "full"] as const;
+const card_size = z.enum(CARD_SIZES).optional();
 const words = (max: number) => z.string().trim().min(1).max(max);
 /** One entry of a card: a timeline event, a list line, a flow step, a bar or a table row. */
 const entry = z.object({
@@ -61,16 +64,16 @@ const entry = z.object({
 const entries = (min: number, max: number, what: string) =>
   z.array(entry).min(min, `a ${what} needs at least ${min} items`).max(max, `a ${what} takes at most ${max} items`);
 
-const timeline = z.object({ kind: z.literal("timeline"), id, title, items: entries(2, 8, "timeline"), color });
-const list = z.object({ kind: z.literal("list"), id, title, heading: words(60).optional(), numbered: z.boolean().optional(), items: entries(1, 8, "list"), color });
-const flow = z.object({ kind: z.literal("flow"), id, title, items: entries(2, 6, "flow"), color });
-const bars = z.object({ kind: z.literal("bars"), id, title, unit: z.string().trim().max(8).optional(), items: entries(1, 8, "bar chart"), color })
+const timeline = z.object({ kind: z.literal("timeline"), id, title, items: entries(2, 8, "timeline"), color, card_size });
+const list = z.object({ kind: z.literal("list"), id, title, heading: words(60).optional(), numbered: z.boolean().optional(), items: entries(1, 8, "list"), color, card_size });
+const flow = z.object({ kind: z.literal("flow"), id, title, items: entries(2, 6, "flow"), color, card_size });
+const bars = z.object({ kind: z.literal("bars"), id, title, unit: z.string().trim().max(8).optional(), items: entries(1, 8, "bar chart"), color, card_size })
   .superRefine((m, ctx) => {
     m.items.forEach((it, i) => {
       if (it.value === undefined || it.value < 0) ctx.addIssue({ code: "custom", path: ["items", i, "value"], message: "every bar needs a value of 0 or more" });
     });
   });
-const table = z.object({ kind: z.literal("table"), id, title, columns: z.array(words(24)).min(2, "a table needs 2 to 4 columns").max(4, "a table needs 2 to 4 columns"), items: entries(1, 8, "table"), color });
+const table = z.object({ kind: z.literal("table"), id, title, columns: z.array(words(24)).min(2, "a table needs 2 to 4 columns").max(4, "a table needs 2 to 4 columns"), items: entries(1, 8, "table"), color, card_size });
 
 // A Mermaid card (ticket 35). x / y / w / h are old hints, kept so older calls still parse.
 const diagram = z.object({
@@ -80,6 +83,7 @@ const diagram = z.object({
   source: z.string({ message: "source is the Mermaid diagram" }).trim().min(1, "source is empty: send Mermaid source").max(4000),
   title,
   color,
+  card_size,
 });
 
 // ---- screen marks (slice 4): on real UI, placed by code, never by the model ---------
@@ -160,10 +164,15 @@ function problems(error: z.ZodError, root: string): string {
 
 // ---- edits (ticket 33) ---------------------------------------------------------
 
+/** A relative move on the board, in board units: -1000 to 1000. */
+const delta = z.number().finite().min(-BOARD.width, "dx and dy are -1000 to 1000").max(BOARD.width, "dx and dy are -1000 to 1000");
 const edit = z
-  .object({ id, color, label: z.string().trim().min(1).max(80).optional(), x: X.optional(), y: Y.optional() })
-  .refine((e) => e.color !== undefined || e.label !== undefined || e.x !== undefined || e.y !== undefined, {
-    message: "nothing to change: give a color, label, x or y",
+  .object({ id, color, label: z.string().trim().min(1).max(80).optional(), x: X.optional(), y: Y.optional(), dx: delta.optional(), dy: delta.optional() })
+  .refine((e) => e.color !== undefined || e.label !== undefined || e.x !== undefined || e.y !== undefined || !!e.dx || !!e.dy, {
+    message: "nothing to change: give a color, label, x, y, dx or dy",
+  })
+  .refine((e) => !((e.x !== undefined && e.dx !== undefined) || (e.y !== undefined && e.dy !== undefined)), {
+    message: "give x or dx (and y or dy), not both",
   });
 const editArgs = z
   .object({ edits: z.array(edit).max(20).optional(), erase: z.array(z.string().trim()).max(50).optional() })
@@ -186,7 +195,8 @@ const r = (m: Mark) => m as Record<string, unknown>;
 /**
  * The mark with one change applied, checked again.
  * A move puts a loose mark's anchor hint at x / y: a box's corner, a ring's centre, an
- * arrow's or line's start (its end moves with it). Cards and marks on cards are placed
+ * arrow's or line's start (its end moves with it); dx / dy move it by that much instead
+ * (clamped onto the board). Cards and marks on cards are placed
  * by the window, so they refuse a move. `label` is the words of a text mark, the title
  * of a card, and the label of a box, arrow or step. Throws a plain message.
  */
@@ -199,19 +209,23 @@ export function applyEdit(m: Mark, change: MarkChange): Mark {
     else if (m.kind === "box" || m.kind === "arrow" || m.kind === "step" || m.kind === "spot") next.label = change.label;
     else throw new Error(`${m.id} is a ${m.kind}: it has no label`);
   }
-  if (change.x !== undefined || change.y !== undefined) {
+  const moves = change.x !== undefined || change.y !== undefined || !!change.dx || !!change.dy;
+  if (moves) {
     if (m.kind === "spot") {
       throw new Error(`${m.id} marks something real on the screen: it stays on it and cannot be moved by x / y`);
     } else if (isCard(m) || r(m).on) {
       throw new Error(`${m.id} is placed for you (cards and marks on cards never overlap): it cannot be moved by x / y`);
     } else if (m.kind === "arrow" || m.kind === "line") {
       if (!m.from || !m.to) throw new Error(`${m.id} joins two cards: it cannot be moved by x / y`);
-      const dx = (change.x ?? m.from.x) - m.from.x;
-      const dy = (change.y ?? m.from.y) - m.from.y;
+      const dx = change.x !== undefined ? change.x - m.from.x : (change.dx ?? 0);
+      const dy = change.y !== undefined ? change.y - m.from.y : (change.dy ?? 0);
       Object.assign(next, { from: { x: m.from.x + dx, y: m.from.y + dy }, to: { x: m.to.x + dx, y: m.to.y + dy } });
     } else {
+      const at = r(m) as { x?: number; y?: number };
       if (change.x !== undefined) next.x = change.x;
+      else if (change.dx) next.x = (at.x ?? 0) + change.dx;
       if (change.y !== undefined) next.y = change.y;
+      else if (change.dy) next.y = (at.y ?? 0) + change.dy;
     }
   }
   const result = mark.safeParse(next);

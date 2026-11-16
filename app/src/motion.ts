@@ -9,7 +9,7 @@
 // Words type one character at a time. Between two steps the pen flies.
 // Idea from Roamies (AGPL): idea only, our own code.
 import type { Prim, Rect } from "./layout.ts";
-import { pathLength, type Pt } from "./sketch.ts";
+import { pathLength, seededRandom, type Pt } from "./sketch.ts";
 
 export const MOTION = {
   openMs: 450,
@@ -149,4 +149,67 @@ export function typed(lines: string[], t: number): { lines: string[]; hot: numbe
     left -= l.length;
   }
   return { lines: out, hot: Math.min(MOTION.hotChars, Math.floor(total * Math.max(0, t))) };
+}
+
+// ---- the hand: strokes look drawn, not plotted -----------------------------------------
+
+export const HAND = {
+  /** Sideways wobble: a few slow waves along it, this share of its length, at most `wobble` px. */
+  wobbleShare: 0.005,
+  wobble: 2.8,
+  /** An open stroke bows to one side by up to this share of its length (at most `maxBow` px). */
+  bow: 0.025,
+  maxBow: 5,
+  /** Ends land a little off where they were aimed, px. */
+  jitter: 1.2,
+} as const;
+
+/**
+ * A stroke as a hand draws it: a slight bow (open strokes), a slow sideways wobble of three
+ * waves, and ends that land a touch off target. Deterministic per `seed` (the mark id and
+ * the stroke's place in it), so redraws never shimmer. Short strokes (ticks, arrow heads)
+ * wobble less. Points stay in the stroke's own coordinates.
+ */
+export function handDrawn(raw: Pt[], seed: string): Pt[] {
+  if (raw.length < 2) return raw;
+  const pts = dense(raw, 6);
+  const rand = seededRandom(`hand:${seed}`);
+  const len = pathLength(pts);
+  if (len < 1) return pts;
+  const closed = Math.hypot(pts[0]!.x - pts.at(-1)!.x, pts[0]!.y - pts.at(-1)!.y) < len * 0.08;
+  const small = Math.min(1, len / 60);
+  const waves = [1, 2, 3].map((f) => ({ f: f + rand() * 0.5, phase: rand() * Math.PI * 2, amp: (Math.min(HAND.wobble, Math.max(0.6, len * HAND.wobbleShare)) * small * (0.6 + rand() * 0.5)) / f ** 0.9 }));
+  const bow = closed ? 0 : (rand() - 0.5) * 2 * Math.min(len * HAND.bow, HAND.maxBow);
+  const j = HAND.jitter * small;
+  const endA = { x: (rand() - 0.5) * 2 * j, y: (rand() - 0.5) * j };
+  const endB = { x: (rand() - 0.5) * 2 * j, y: (rand() - 0.5) * j };
+  let along = 0;
+  return pts.map((p, i) => {
+    if (i) along += Math.hypot(p.x - pts[i - 1]!.x, p.y - pts[i - 1]!.y);
+    const u = along / len;
+    const q = pts[Math.min(i + 1, pts.length - 1)]!;
+    const o = pts[Math.max(i - 1, 0)]!;
+    const tl = Math.hypot(q.x - o.x, q.y - o.y) || 1;
+    const nx = -(q.y - o.y) / tl;
+    const ny = (q.x - o.x) / tl;
+    // A closed loop's wobble fades to nothing at its ends, so they still meet.
+    const fade = closed ? Math.sin(Math.PI * u) : 1;
+    const off = (Math.sin(Math.PI * u) * bow + waves.reduce((s, w) => s + w.amp * Math.sin(u * Math.PI * 2 * w.f + w.phase), 0)) * fade;
+    // The end nudges ease in from nothing at the far end.
+    const ex = closed ? 0 : endA.x * (1 - u) + endB.x * u;
+    const ey = closed ? 0 : endA.y * (1 - u) + endB.y * u;
+    return { x: p.x + nx * off + ex, y: p.y + ny * off + ey };
+  });
+}
+
+/** Extra points so no segment is longer than `step` (a wobble needs points to bend). */
+function dense(pts: Pt[], step: number): Pt[] {
+  const out: Pt[] = [pts[0]!];
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]!;
+    const b = pts[i]!;
+    const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / step));
+    for (let k = 1; k <= n; k++) out.push({ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n });
+  }
+  return out;
 }

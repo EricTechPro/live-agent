@@ -4,9 +4,11 @@
 //
 // The fake core emits what the real one would: one `canvas.beat` per beat at once
 // (the draw tool's result), then `canvas.speak` as the "voice" reaches each line
-// (paced at 15 characters a second, like pen.ts expects).
+// (paced at 15 characters a second, like pen.ts expects), with the voice's transcription
+// streaming word by word into the caption bar (captions.ts `barLine`), as main.ts does.
 import type { Mark } from "../../src/core/canvas.ts";
 import type { AgentEvent } from "../../src/core/events.ts";
+import { addCaption, barLine, noCaptions } from "./captions.ts";
 import { beatMs } from "./pen.ts";
 import { mountSketch } from "./sketch-view.ts";
 
@@ -121,11 +123,21 @@ async function play() {
   scene.forEach((b, i) => emit({ type: "canvas.beat", id, beat: i, say: b.say, marks: b.marks as Mark[] }));
   // The "voice" says each line in turn.
   let t = 0;
+  let captions = noCaptions;
+  const hear = (e: AgentEvent) => (captions = addCaption(captions, e, performance.now()));
   scene.forEach((b, i) => {
     setTimeout(() => emit({ type: "canvas.speak", id, beat: i }), t / speed);
+    // The line's words, as Gemini's output transcription streams them.
+    const words = b.say.split(/(?=\s)/);
+    const per = beatMs(b.say) / words.length;
+    words.forEach((w, k) => setTimeout(() => hear({ type: "transcript", role: "model", text: i && !k ? ` ${w}` : w }), (t + k * per) / speed));
     t += beatMs(b.say) + 900;
   });
-  setTimeout(() => Object.assign(window, { __demoSpoken: true }), t / speed);
+  setTimeout(() => {
+    hear({ type: "turn.done", reply: "" } as AgentEvent);
+    Object.assign(window, { __demoSpoken: true });
+  }, t / speed);
+  setInterval(() => sketch.setCaption(barLine(captions, performance.now(), false)), 100);
 }
 void play();
 Object.assign(window, { __sketch: sketch });

@@ -82,13 +82,23 @@ export interface CardContent {
   /** Mark ids drawn with this card (the card and the ink on it). */
   owners: string[];
   color?: string;
+  /** The model's card_size: how big it opens. */
+  size?: "small" | "normal" | "large" | "full";
 }
 
 export interface PlacedCard extends CardContent {
-  /** Screen px. Content is drawn scaled by `scale` from the card's top-left. */
+  /**
+   * Screen px. Content is drawn scaled by `scale` from the card's top-left. A card zoomed
+   * taller than the screen keeps a screen-high rect and its contents scroll.
+   */
   rect: Rect;
   scale: number;
 }
+
+/** card_size: the scale a card opens at (still shrunk to fit the screen). */
+export const SIZE_SCALE = { small: 0.75, normal: 1, large: 1.35, full: 1 } as const;
+/** The scales a user may zoom a card to. */
+export const ZOOM = { min: 0.4, max: 3 } as const;
 
 export interface Layout {
   cards: PlacedCard[];
@@ -121,6 +131,12 @@ export interface LayoutInput {
    * free spot that covers the least of them (used when the front window fills the screen).
    */
   busy?: Rect[];
+  /** Scales the user set (resize grip, ctrl + wheel, pinch), by card id. */
+  zoom?: ReadonlyMap<string, number>;
+  /** Pinned cards: never closed to make room for new ones. */
+  pinned?: ReadonlySet<string>;
+  /** The card the user is resizing: placed first, so it keeps its spot and others move. */
+  lead?: string;
 }
 
 // ---- geometry --------------------------------------------------------------------
@@ -224,7 +240,7 @@ export function layoutCard(m: CardMark, charW = CHAR_W, displayW = DISPLAY_W, di
   const rand = seededRandom(m.id);
   const prims: Prim[] = [];
   const items: Rect[] = [];
-  const base = { id: m.id, kind: m.kind, title: (m.title ?? m.kind).toLowerCase(), owners: [m.id], color: m.color };
+  const base = { id: m.id, kind: m.kind, title: (m.title ?? m.kind).toLowerCase(), owners: [m.id], color: m.color, size: m.card_size };
   const top = BAR + PAD;
   const lh = (size: number, lines: number) => size * LINE * lines;
 
@@ -790,19 +806,32 @@ function resolveLoose(m: Mark): InkMark[] {
  * Put cards (oldest first) on the screen with no overlap. Cards in `prev` stay put while
  * they still fit; new ones go column by column (top to bottom, then the next column).
  * More than `max` cards, or no room: the oldest close. A card too big for the screen is
- * scaled down. Returns screen rects, scales and the closed ids.
+ * scaled down. A card with a `k` (the user's zoom, or its card_size) takes that scale, at
+ * most as wide as the screen; taller than the screen, its rect stops at the screen and the
+ * contents scroll. Pinned cards never close to make room; `lead` is placed first.
+ * Returns screen rects, scales and the closed ids.
  */
 export function placeCards(
-  sizes: { id: string; w: number; h: number }[],
+  sizes: { id: string; w: number; h: number; k?: number }[],
   view: Size,
   obstacles: Rect[] = [],
   prev: ReadonlyMap<string, Rect & { scale?: number }> = new Map(),
   from: "left" | "right" = "left",
   max = MAX_CARDS,
   busy: Rect[] = [],
+  opts: { pinned?: ReadonlySet<string>; lead?: string } = {},
 ): { rects: Map<string, { rect: Rect; scale: number }>; evicted: string[] } {
-  const evicted = sizes.slice(0, Math.max(0, sizes.length - max)).map((s) => s.id);
-  let live = sizes.slice(Math.max(0, sizes.length - max));
+  const pinned = opts.pinned ?? new Set<string>();
+  // Too many: the oldest unpinned cards close.
+  let over = Math.max(0, sizes.length - max);
+  const evicted: string[] = [];
+  for (const s of sizes) if (over > 0 && !pinned.has(s.id)) evicted.push(s.id), over--;
+  let live = sizes.filter((s) => !evicted.includes(s.id));
+  const order = opts.lead ? [...live.filter((c) => c.id === opts.lead), ...live.filter((c) => c.id !== opts.lead)] : live;
+  const maxH = view.height - MARGIN - BOTTOM_FREE - MARGIN;
+  const fitW = (w: number) => (view.width - MARGIN * 2) / w;
+  /** The rect of a card at a scale: never taller than the screen (it scrolls instead). */
+  const sized = (x: number, y: number, card: { w: number; h: number }, scale: number): Rect => ({ x, y, w: card.w * scale, h: Math.min(card.h * scale, maxH) });
   // Work left to right; mirror for the right side.
   const mirror = (r: Rect): Rect => (from === "left" ? r : { ...r, x: view.width - r.x - r.w });
   const obs = obstacles.map(mirror);
@@ -811,27 +840,37 @@ export function placeCards(
   const freeOf = (r: Rect, others: Rect[]) =>
     inside(r, view) && !obs.some((o) => overlaps(r, o, 10)) && !others.some((o) => overlaps(r, o, GAP));
 
-  for (let i = 0; i < live.length; i++) {
-    const card = live[i]!;
+  for (let i = 0; i < order.length; i++) {
+    const card = order[i]!;
     const taken = () => [...rects.values()].map((v) => v.rect);
     const old = prev.get(card.id);
+    const asked = card.k !== undefined ? Math.min(card.k, fitW(card.w)) : undefined;
     if (old) {
       const at = mirror(old);
-      // It keeps its spot and its scale; only its size follows its content.
-      const scale = old.scale ?? 1;
-      const rect = { x: at.x, y: at.y, w: card.w * scale, h: card.h * scale };
-      if (freeOf(rect, taken())) {
+      // It keeps its spot and its scale (or the zoom asked for); only its size follows its content.
+      const scale = asked ?? old.scale ?? 1;
+      let rect = sized(at.x, at.y, card, scale);
+      // Zoomed past the screen's edge: it slides back on, keeping its size.
+      if (asked !== undefined) rect = { ...rect, x: Math.max(MARGIN, Math.min(rect.x, view.width - MARGIN - rect.w)), y: Math.max(MARGIN, Math.min(rect.y, view.height - BOTTOM_FREE - rect.h)) };
+      if (freeOf(rect, taken()) || (card.id === opts.lead && inside(rect, view) && !obs.some((o) => overlaps(rect, o, 10)))) {
         rects.set(card.id, { rect, scale });
         continue;
       }
     }
-    let scale = Math.min(1, (view.width - MARGIN * 2) / card.w, (view.height - MARGIN - BOTTOM_FREE) / card.h);
+    let scale = asked ?? Math.min(1, fitW(card.w), (view.height - MARGIN - BOTTOM_FREE) / card.h);
     let spot: Rect | undefined;
+    // While the user zooms a card, the others shrink (to half) before any of them closes.
+    const floor = opts.lead && card.id !== opts.lead ? scale * 0.5 : Infinity;
     for (;;) {
-      spot = findSpot(card.w * scale, card.h * scale, taken(), obs, view, soft);
+      const want = sized(0, 0, card, scale);
+      spot = findSpot(want.w, want.h, taken(), obs, view, soft);
       if (spot) break;
-      // No room: close the oldest card on screen, else shrink this one.
-      const oldest = live.slice(0, i).find((c) => rects.has(c.id));
+      if (scale > floor) {
+        scale *= 0.85;
+        continue;
+      }
+      // No room: close the oldest unpinned card on screen, else shrink this one.
+      const oldest = order.slice(0, i).find((c) => rects.has(c.id) && !pinned.has(c.id) && c.id !== opts.lead);
       if (oldest) {
         rects.delete(oldest.id);
         evicted.push(oldest.id);
@@ -920,13 +959,14 @@ export function layoutScene(input: LayoutInput): Layout {
   // Marks on real UI first: they are tied to the screen. Cards then keep off them.
   const marked = layoutSpots(spots, input.view, charW, input.obstacles ?? []);
   const { rects, evicted } = placeCards(
-    all.map((c) => ({ id: c.id, w: c.w, h: c.h })),
+    all.map((c) => ({ id: c.id, w: c.w, h: c.h, k: input.zoom?.get(c.id) ?? (c.size && c.size !== "normal" && c.size !== "full" ? SIZE_SCALE[c.size] : undefined) })),
     input.view,
     [...(input.obstacles ?? []), ...marked.boxes],
     input.prev,
     input.from,
     input.max,
     input.busy,
+    { pinned: input.pinned, lead: input.lead },
   );
   const cards: PlacedCard[] = all.flatMap((c) => {
     const at = rects.get(c.id);
