@@ -243,20 +243,7 @@ html:not([data-polled]) .dock:hover .hide-btn, .dock.hover .hide-btn, .hide-btn:
 .hangup { background: #e5483a; border-color: #e5483a; color: #fff; }
 .hangup:hover { background: #f05a4c; color: #fff; }
 
-/* ---- live captions (ticket 37): bottom centre, yours above Jett's ---- */
-.captions {
-  position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); width: min(720px, calc(100vw - 48px));
-  display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none;
-}
-.cap {
-  margin: 0; max-width: 100%; padding: 7px 14px 8px; border-radius: 14px;
-  background: rgba(4, 14, 16, .72); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  font: 500 16px/1.4 var(--mono); font-stretch: 87.5%; text-align: center; overflow-wrap: anywhere;
-  box-shadow: 0 6px 22px rgba(0,0,0,.3); animation: cap-in .25s var(--ease);
-}
-.cap.user { color: #f1f5f4; border: 1px solid rgba(255, 255, 255, .16); font-size: 14px; }
-.cap.user::before { content: "You  "; color: rgba(241, 245, 244, .55); font-size: 11px; letter-spacing: .06em; white-space: pre; }
-.cap.model { color: var(--led); border: 1px solid var(--glass-edge); text-shadow: 0 0 10px rgba(120, 255, 226, .25); }
+/* The cues fade in (the drawing's caption bar lives in sketch.css). */
 @keyframes cap-in { from { opacity: 0; transform: translateY(4px); } }
 
 /* ---- the drawing, straight on the screen (tickets 32 to 36, drawing v2) ---- */

@@ -26,7 +26,7 @@ import { mountLedOrb, type Mood } from "./led-orb.ts";
 import { nextOrb, orbStart, type Orb, type OrbInput } from "./orb-state.ts";
 import { addToTranscript, emptyTranscript, type Transcript } from "./transcript.ts";
 import { callButton, callView, retryHint, showCallButtons, showsWords, spaceAction, type CallLook, type CallPhase, type CallView } from "./call-state.ts";
-import { addCaption, noCaptions, shownCaptions, type Captions } from "./captions.ts";
+import { addCaption, barLine, noCaptions, shownCaptions, type Captions } from "./captions.ts";
 import { spokenLang, WORDS, type Lang } from "./lang.ts";
 import { followMic } from "./mic-follow.ts";
 import {
@@ -730,8 +730,6 @@ function renderTranscript() {
 
 // ---- live captions (ticket 37) ----------------------------------------------------
 let captions: Captions = noCaptions;
-const capUser = $("cap-user");
-const capModel = $("cap-model");
 // The cues beside the orb (ticket 37): equaliser / working pill and the speech bubble.
 let work: Work = noWork;
 const cuePill = $("cue-pill");
@@ -757,14 +755,9 @@ function renderCaptions() {
     caption: shownCaptions(captions, now, Infinity),
     drawing,
   });
-  // The bottom caption bar: only while a drawing is on screen.
-  const bar = shownCaptions(captions, now);
-  // While a drawing's own caption bar shows the line being drawn, this one steps aside.
-  $("captions").hidden = !cues.bar || !!sketch?.captionActive();
-  for (const [el, text] of [[capUser, bar.user], [capModel, bar.model]] as const) {
-    if (text && el.textContent !== text) el.textContent = text;
-    el.hidden = !text;
-  }
+  // The drawing's one caption bar (sketch-view.ts): what is being said now, from the
+  // voice's transcription, one sentence at a time; it clears once Jett's voice stops.
+  sketch?.setCaption(drawing ? barLine(captions, now, !!orb.audio) : undefined);
   cuePill.hidden = !cues.pill;
   if (cues.pill) {
     cuePill.dataset.kind = cues.pill.kind;
@@ -1274,7 +1267,7 @@ async function boot() {
     readerPath: $("reader-path"), readerText: $("reader-text"), closeReader: $<HTMLButtonElement>("close-reader"), transcript: $("brain-lists"),
   });
   mountChatView(core, reader, { list: $<HTMLUListElement>("chat-list"), empty: $("chats-empty") });
-  sketch = mountSketch(core, stage, { onCaption: () => renderCaptions() });
+  sketch = mountSketch(core, stage);
   onFrontWindowMoved(placeFloaters);
   followFrontWindow(core);
   placeFloaters();

@@ -34,10 +34,11 @@
     6px 100%, 6px calc(100% - 3px), 3px calc(100% - 3px), 3px calc(100% - 6px), 0 calc(100% - 6px), 0 6px, 3px 6px, 3px 3px, 6px 3px);
 }
 
-/* The caption bar: the line being drawn, bottom centre. */
+/* The caption bar: what is being said now, one line, bottom centre (sketch-view.ts
+   setCaption cuts a long line to its newest words; CAPTION there mirrors these sizes). */
 .sketch-caption {
   position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
-  max-width: min(640px, calc(100vw - 32px)); padding: 9px 18px 10px;
+  max-width: min(760px, calc(100vw - 32px)); padding: 9px 18px 10px; box-sizing: border-box;
   background: #78ffe2; /* the border: the glass sits 1.5px inside it */
   animation: sketch-fade .25s ease-out;
 }
@@ -47,8 +48,10 @@
 }
 .sketch-caption p {
   position: relative; margin: 0; color: #dcfff6; text-align: center;
-  font: 400 13px/1.45 "Martian Mono", ui-monospace, monospace; overflow-wrap: anywhere;
+  font: 400 13px/1.45 "Martian Mono", ui-monospace, monospace;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.sketch-caption[data-who="user"] p::before { content: "You  "; color: #8ab8b0; white-space: pre; }
 .sketch-caption[hidden], .sketch-clear[hidden] { display: none; }
 /* Above the card frames, always reachable. */
 .sketch-caption, .sketch-clear { z-index: 2; }
