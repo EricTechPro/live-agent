@@ -18,6 +18,10 @@ tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# Ticket 40: hand the keyboard back to the app you were in when the quick type field closes.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "libc", "NSWorkspace", "NSRunningApplication"] }
+
 [profile.release]
 codegen-units = 1
 lto = true

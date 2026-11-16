@@ -11,7 +11,7 @@ import { mountApprovals } from "./approvals-view.ts";
 import { mountBrainView } from "./brain-view.ts";
 import { mountChatView } from "./chat-view.ts";
 import {
-  connectCore, getSetup, inTauri, onCoreDown, onCoreReady, onCoreRestarting, onNewChat, onOpenPanel, onShowShortcuts, onToggleMini, overlayPoll, restartCore,
+  connectCore, getSetup, inTauri, onCoreDown, onCoreReady, onCoreRestarting, onNewChat, onOpenPanel, onQuickType, onShowShortcuts, onToggleMini, overlayPoll, quickTypeFocus, restartCore,
   revealLog, setClickThrough, setTrayShown, waitForCore, type CoreClient,
 } from "./core-client.ts";
 import { waveFor, QUIET } from "./orb-wave.ts";
@@ -35,6 +35,7 @@ import {
 import { UI, type UiKey } from "./ui-words.ts";
 import { dockPill, hoverPill, migrateDot, morph, MORPH_MS, parsePill, PILL, pillActions, pillAt, pillBars, pillFlyout, placePill, type PillAction, type PillSpot } from "./pill.ts";
 import { runWizard } from "./wizard.ts";
+import { isQuickTypeStart, nextQuick, quickClosed, quickPlace, type Quick, type QuickAction } from "./quick-type.ts";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 // Icon buttons (ticket 26): pixel icons from icons.ts, one shared tooltip.
@@ -79,6 +80,7 @@ function moveOrb(at: Point, save = false) {
   dock.style.left = `${at.x}px`;
   dock.style.top = `${at.y}px`;
   placeFloaters();
+  placeQuick();
   if (save) {
     try {
       localStorage.setItem(ORB_KEY, JSON.stringify(at));
@@ -138,6 +140,7 @@ function movePill(spot: PillSpot, save = false) {
     else delete el.dataset.side;
   }
   if (pillOpen) placePillActions();
+  placeQuick();
   if (save) store(PILL_KEY, JSON.stringify(spot));
 }
 function placePillActions() {
@@ -629,7 +632,7 @@ retryBtn.onclick = async () => {
 };
 // One UI language (ticket 39): every static tooltip and label follows the language you last spoke.
 const UI_IDS: [string, UiKey][] = [
-  ["hide", "hide"], ["grip", "move"], ["open-center", "menu"], ["orb-new-chat", "newChat"], ["new-chat", "newChat"], ["jobs-toggle", "jobs"],
+  ["hide", "hide"], ["grip", "move"], ["open-center", "menu"], ["quick-btn", "quickType"], ["orb-new-chat", "newChat"], ["new-chat", "newChat"], ["jobs-toggle", "jobs"],
   ["pill", "showJett"], ["pill-expand", "expand"], ["tab-chat", "chat"], ["tab-jobs", "jobs"], ["tab-brain", "brain"], ["setup", "setup"],
   ["show-log", "showLog"], ["open-shortcuts", "shortcuts"], ["close-center", "close"], ["close-shortcuts", "close"], ["clear-canvas", "hideDrawing"],
   ["send", "send"], ["close-reader", "back"],
@@ -648,6 +651,8 @@ function applyLang() {
     tips.refresh(el);
   }
   typeInput.placeholder = words.typeHere;
+  quickInput.placeholder = words.typeHere;
+  quickInput.setAttribute("aria-label", words.typeHere);
   $("chats-title").textContent = words.pastChats;
   $("brain-title").textContent = words.notes;
   bubbleMore.dataset.tip = words[bubble.dataset.open === "true" ? "less" : "more"];
@@ -824,6 +829,78 @@ async function startNewChat() {
   }
 }
 $<HTMLButtonElement>("orb-new-chat").onclick = () => void startNewChat();
+
+// ---- quick typing (ticket 40): type to Jett without the popover --------------------
+const quickEl = $<HTMLFormElement>("quick");
+const quickInput = $<HTMLTextAreaElement>("quick-input");
+const quickBtn = $<HTMLButtonElement>("quick-btn");
+let quick: Quick = quickClosed;
+function placeQuick() {
+  if (quickEl.hidden) return;
+  const by = mini ? pillRect() : { ...orbAt, ...dockSize() };
+  const at = quickPlace(by, { width: quickEl.offsetWidth, height: quickEl.offsetHeight }, view(), mini ? pillSpot.side : undefined);
+  quickEl.style.left = `${at.x}px`;
+  quickEl.style.top = `${at.y}px`;
+}
+function feedQuick(action: QuickAction) {
+  const step = nextQuick(quick, action);
+  const wasOpen = quick.open;
+  quick = step.quick;
+  quickEl.hidden = !quick.open;
+  quickBtn.setAttribute("aria-expanded", String(quick.open));
+  if (quickInput.value !== quick.text) quickInput.value = quick.text;
+  if (quick.open && !wasOpen) {
+    placeQuick();
+    quickInput.focus();
+    quickInput.setSelectionRange(quick.text.length, quick.text.length);
+  }
+  if (!quick.open && wasOpen) quickInput.blur();
+  if (step.focus && inTauri()) void quickTypeFocus(step.focus === "take").catch(() => {});
+  if (step.send) void sendTyped(step.send);
+}
+/** A typed turn from the quick field: the reply shows in the bubble, and is spoken only in a call. */
+async function sendTyped(text: string) {
+  if (!coreRef) return showError(UI[lang].typeHere);
+  feedOrb({ type: "turn.sent" });
+  try {
+    await coreRef.sendText(text);
+  } catch (err) {
+    showError(errorText(err));
+    feedOrb({ type: "turn.done", reply: "" });
+  }
+}
+quickBtn.onclick = () => feedQuick(quick.open ? { type: "close" } : { type: "open" });
+quickInput.addEventListener("input", () => {
+  feedQuick({ type: "input", text: quickInput.value });
+  // Grow with the text, up to a few lines.
+  quickInput.style.height = "auto";
+  quickInput.style.height = `${Math.min(96, quickInput.scrollHeight)}px`;
+});
+quickInput.addEventListener("keydown", (e) => {
+  if (e.isComposing) return; // an IME is still picking characters
+  if (e.key === "Escape" || (e.key === "Enter" && !e.shiftKey)) {
+    e.preventDefault();
+    e.stopPropagation();
+    feedQuick({ type: "key", key: e.key, shift: e.shiftKey });
+  }
+});
+quickEl.onsubmit = (e) => e.preventDefault();
+// You clicked into another app: the field closes, and the keyboard stays where you went.
+window.addEventListener("blur", () => {
+  if (!quick.open) return;
+  quick = quickClosed;
+  quickEl.hidden = true;
+  quickBtn.setAttribute("aria-expanded", "false");
+});
+void onQuickType(() => feedQuick({ type: "open" })).catch(() => {});
+// Starting to type while Jett has focus opens the field with that first letter.
+window.addEventListener("keydown", (e) => {
+  if (!wizardEl.hidden || quick.open || e.defaultPrevented || e.isComposing) return;
+  const t = e.target as HTMLElement;
+  if (!isQuickTypeStart(e, !!t.closest?.("input, textarea, select, [contenteditable]"))) return;
+  e.preventDefault();
+  feedQuick({ type: "open", seed: e.key });
+});
 
 /** A line the window says itself (the greeting, new chat), shown as Jett's caption. */
 function say(text: string) {

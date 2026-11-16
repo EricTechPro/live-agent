@@ -208,6 +208,16 @@ export function onNewChat(cb: () => void) {
   return listen("new-chat", () => cb());
 }
 
+/** Ctrl+Option+T (ticket 40): open the quick type field (Rust already gave the window the keyboard). */
+export function onQuickType(cb: () => void) {
+  return listen("quick-type", () => cb());
+}
+
+/** The quick type field opened (take the keyboard) or closed (give it back to the app before). */
+export function quickTypeFocus(on: boolean): Promise<void> {
+  return invoke<void>("quick_type_focus", { on });
+}
+
 /** The menu-bar "Shortcuts" item (ticket 38). */
 export function onShowShortcuts(cb: () => void) {
   return listen("show-shortcuts", () => cb());

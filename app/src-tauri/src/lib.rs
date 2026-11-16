@@ -372,6 +372,57 @@ fn toggle_overlay(app: &tauri::AppHandle) {
     let _ = app.emit("toggle-mini", ());
 }
 
+// ---- quick typing (ticket 40): the window takes the keyboard while its field is open ----
+
+/// The app that was in front before Jett took the keyboard, to hand it back on close.
+struct PrevApp(Mutex<Option<i32>>);
+
+#[cfg(target_os = "macos")]
+fn frontmost_pid() -> Option<i32> {
+    use objc2_app_kit::NSWorkspace;
+    let app = NSWorkspace::sharedWorkspace().frontmostApplication()?;
+    Some(app.processIdentifier())
+}
+
+#[cfg(target_os = "macos")]
+fn activate_pid(pid: i32) {
+    use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
+    if let Some(app) = NSRunningApplication::runningApplicationWithProcessIdentifier(pid) {
+        app.activateWithOptions(NSApplicationActivationOptions::empty());
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn frontmost_pid() -> Option<i32> {
+    None
+}
+
+#[cfg(not(target_os = "macos"))]
+fn activate_pid(_pid: i32) {}
+
+/// Take the keyboard (remembering who had it), or give it back.
+fn keyboard(app: &tauri::AppHandle, take: bool) {
+    let prev = app.state::<PrevApp>();
+    if take {
+        let ours = std::process::id() as i32;
+        if let Some(pid) = frontmost_pid().filter(|pid| *pid != ours) {
+            *prev.0.lock().unwrap() = Some(pid);
+        }
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    } else if let Some(pid) = prev.0.lock().unwrap().take() {
+        activate_pid(pid);
+    }
+}
+
+/// The page opened (true) or closed its quick type field.
+#[tauri::command]
+fn quick_type_focus(app: tauri::AppHandle, on: bool) {
+    keyboard(&app, on);
+}
+
 /// The page says whether Jett is shown (true) or minimised: the menu-bar item's words follow.
 #[tauri::command]
 fn set_tray_shown(toggle: tauri::State<'_, TrayToggle>, shown: bool) -> Result<(), String> {
@@ -471,6 +522,11 @@ pub fn run() {
                     if event.state == ShortcutState::Pressed && shortcut.matches(Modifiers::CONTROL | Modifiers::ALT, Code::KeyS) {
                         toggle_overlay(app);
                     }
+                    // Ticket 40: Ctrl+Option+T opens the quick type field, with the keyboard.
+                    if event.state == ShortcutState::Pressed && shortcut.matches(Modifiers::CONTROL | Modifiers::ALT, Code::KeyT) {
+                        keyboard(app, true);
+                        let _ = app.emit("quick-type", ());
+                    }
                 })
                 .build(),
         )
@@ -482,7 +538,8 @@ pub fn run() {
             quitting: AtomicBool::new(false),
         })
         .manage(TrayToggle(Mutex::new(None)))
-        .invoke_handler(tauri::generate_handler![core_status, restart_core, open_key_page, reveal_log, overlay_poll, set_click_through, set_tray_shown])
+        .manage(PrevApp(Mutex::new(None)))
+        .invoke_handler(tauri::generate_handler![core_status, restart_core, open_key_page, reveal_log, overlay_poll, set_click_through, set_tray_shown, quick_type_focus])
         .setup(|app| {
             // No Dock icon: Jett lives in the menu bar and floats over everything.
             #[cfg(target_os = "macos")]
@@ -495,6 +552,10 @@ pub fn run() {
                 let show_hide = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyS);
                 if let Err(err) = app.global_shortcut().register(show_hide) {
                     eprintln!("live-agent: Ctrl+Option+S is taken: {err}");
+                }
+                let quick_type = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyT);
+                if let Err(err) = app.global_shortcut().register(quick_type) {
+                    eprintln!("live-agent: Ctrl+Option+T is taken: {err}");
                 }
             }
             if let Some(window) = app.get_webview_window("main") {

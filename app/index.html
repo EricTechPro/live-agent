@@ -54,6 +54,7 @@
           <button id="hide" class="ib glass-ib hide-btn" type="button" aria-label="Hide Jett" data-tip="Hide" data-key="⌃⌥S" data-icon="minus" data-size="12"></button>
           <button id="orb-new-chat" class="ib glass-ib newchat-btn" type="button" aria-label="New chat" data-tip="New chat" data-key="⌘N" data-icon="newChat" data-size="12"></button>
           <button id="grip" class="grip" type="button" aria-label="Move Jett (arrow keys)" data-tip="Drag to move" data-key="← ↑ → ↓"><span aria-hidden="true"></span></button>
+          <button id="quick-btn" class="ib glass-ib quick-btn" type="button" aria-label="Type" data-tip="Type" data-key="⌃⌥T" data-icon="keyboard" data-size="12"></button>
           <button id="open-center" class="ib glass-ib menu-btn" type="button" aria-controls="popover" aria-expanded="false" aria-label="Chats, jobs and brain" data-tip="Chats, jobs, brain" data-icon="center" data-size="14"></button>
         </div>
         <div class="orb-wrap">
@@ -86,6 +87,11 @@
         <button id="pill-call" class="ib pill-act" type="button" aria-label="Start call" data-tip="Start call" data-side="left" data-icon="mic" data-size="14"></button>
         <button id="pill-hangup" class="ib pill-act hangup" type="button" aria-label="Hang up" data-tip="Hang up" data-key="⌘." data-side="left" data-icon="hangup" data-size="14" hidden></button>
       </div>
+
+      <!-- Quick typing (ticket 40): a small glass field under the orb, or beside the pill. -->
+      <form id="quick" class="quick" data-hit hidden>
+        <textarea id="quick-input" rows="1" placeholder="Type to Jett…" aria-label="Type to Jett" autocomplete="off" spellcheck="false"></textarea>
+      </form>
 
       <!-- A short note by the orb (ticket 39): "New chat". -->
       <p id="toast" class="toast" role="status" hidden></p>

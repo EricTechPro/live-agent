@@ -19,8 +19,8 @@ test("the hint shows only at rest", () => {
 });
 
 test("the Shortcuts card lists every shortcut, in both languages", () => {
-  expect(SHORTCUTS.en.map((s) => s.keys)).toEqual(["Tap orb · Space", "Hold ⌃⌥", "Space", "Esc", "⌘.", "⌘N", "⌃⌥S", "Double-click orb"]);
-  expect(SHORTCUTS.en.map((s) => s.what)).toEqual(["Talk", "Push to talk", "Mute in a call", "Stop the reply", "Hang up", "New chat", "Hide / show", "Minimise"]);
+  expect(SHORTCUTS.en.map((s) => s.keys)).toEqual(["Tap orb · Space", "Hold ⌃⌥", "Space", "Esc", "⌘.", "⌘N", "⌃⌥T", "⌃⌥S", "Double-click orb"]);
+  expect(SHORTCUTS.en.map((s) => s.what)).toEqual(["Talk", "Push to talk", "Mute in a call", "Stop the reply", "Hang up", "New chat", "Type to Jett", "Hide / show", "Minimise"]);
   expect(SHORTCUTS.zh).toHaveLength(SHORTCUTS.en.length);
 });
 

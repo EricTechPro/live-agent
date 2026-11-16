@@ -56,28 +56,41 @@ body {
 .dock-top { position: relative; width: 100%; height: 26px; display: flex; justify-content: center; align-items: center; }
 /* The grip: a pill you grab to move Jett. Shows on hover, always there for the keyboard. */
 .grip {
-  appearance: none; border: 0; padding: 0; width: 36px; height: 20px; border-radius: 10px; cursor: grab; margin-left: 14px;
+  appearance: none; border: 0; padding: 0; width: 28px; height: 20px; border-radius: 10px; cursor: grab; margin-left: 0;
   background: transparent; display: grid; place-items: center; touch-action: none;
 }
 /* Ticket 40: the grip shows only under the cursor, while dragging or with keyboard focus;
    at rest it was a stray white capsule floating above the orb. */
-.grip span { width: 34px; height: 5px; border-radius: 3px; background: rgba(200, 255, 244, .38); box-shadow: 0 0 0 1px rgba(0,0,0,.25); opacity: 0; transition: background-color .15s var(--ease), width .15s var(--ease), opacity .15s var(--ease); }
+.grip span { width: 26px; height: 5px; border-radius: 3px; background: rgba(200, 255, 244, .38); box-shadow: 0 0 0 1px rgba(0,0,0,.25); opacity: 0; transition: background-color .15s var(--ease), width .15s var(--ease), opacity .15s var(--ease); }
 html:not([data-polled]) .dock:hover .grip span, .dock.hover .grip span, .dock.dragging .grip span, .grip:focus-visible span { opacity: 1; }
-.grip:hover span, .dock.dragging .grip span { background: var(--led); width: 42px; }
+.grip:hover span, .dock.dragging .grip span { background: var(--led); width: 28px; }
 .dock.dragging .grip { cursor: grabbing; }
 .grip:focus-visible { outline: 2px solid var(--ink); }
 .menu-btn { position: absolute; right: 6px; top: 0; width: 26px; height: 26px; border-radius: 8px; opacity: .0; }
 /* Hover reveal (ticket 38): .hover comes from the overlay poll's cursor (main.ts), so it
    works while another app is in front; :hover stays for the browser preview. */
 .hide-btn, .newchat-btn { position: absolute; left: 4px; top: 0; width: 26px; height: 26px; border-radius: 8px; opacity: 0; transition: opacity .15s var(--ease), background-color .15s var(--ease); }
-/* New chat (ticket 39) sits next to the minus; the grip narrows to make room. */
+/* New chat (ticket 39) sits next to the minus; Type (ticket 40) next to the menu; the grip narrows to make room. */
 .newchat-btn { left: 32px; }
+.quick-btn { position: absolute; right: 34px; top: 0; width: 26px; height: 26px; border-radius: 8px; opacity: 0; transition: opacity .15s var(--ease), background-color .15s var(--ease); }
 .menu-btn { transition: opacity .15s var(--ease), background-color .15s var(--ease); }
 /* Ticket 39: in the app (html[data-polled]) only the poll's .hover counts. WebKit keeps
    :hover stuck after the cursor leaves for another app, which left these up for seconds. */
 html:not([data-polled]) .dock:hover .menu-btn, .dock.hover .menu-btn, .menu-btn:focus-visible, .menu-btn[aria-expanded="true"], .overlay[data-layer="center"] .menu-btn,
 html:not([data-polled]) .dock:hover .hide-btn, .dock.hover .hide-btn, .hide-btn:focus-visible,
-html:not([data-polled]) .dock:hover .newchat-btn, .dock.hover .newchat-btn, .newchat-btn:focus-visible { opacity: 1; }
+html:not([data-polled]) .dock:hover .newchat-btn, .dock.hover .newchat-btn, .newchat-btn:focus-visible,
+html:not([data-polled]) .dock:hover .quick-btn, .dock.hover .quick-btn, .quick-btn:focus-visible, .quick-btn[aria-expanded="true"] { opacity: 1; }
+/* Quick typing (ticket 40): a small glass field under the orb. */
+.quick {
+  position: absolute; left: 0; top: 0; width: 260px; margin: 0; padding: 6px 10px; border-radius: 14px;
+  background: var(--glass); border: 1px solid rgba(120, 255, 226, .45); box-shadow: 0 10px 28px rgba(0, 0, 0, .45), 0 0 0 1px rgba(0, 0, 0, .4);
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+}
+.quick textarea {
+  display: block; width: 100%; min-height: 26px; max-height: 96px; resize: none; border: 0; outline: 0; background: none; padding: 3px 0;
+  color: var(--ink); font: 500 13px/1.45 var(--mono); caret-color: var(--led);
+}
+.quick textarea::placeholder { color: rgba(200, 255, 244, .45); }
 .dock.hover .grip span { background: rgba(200, 255, 244, .6); }
 .dock.dragging .orb { cursor: grabbing; transform: scale(1.04); }
 
