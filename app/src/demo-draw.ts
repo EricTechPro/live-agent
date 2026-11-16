@@ -101,7 +101,7 @@ const core = { onEvent: (fn: Listener) => void listeners.push(fn) };
 
 const stage = document.getElementById("stage")!;
 const sketch = mountSketch(core as never, stage);
-addEventListener("keydown", (e) => {
+window.addEventListener("keydown", (e: KeyboardEvent) => {
   if (e.key === "Escape" && sketch.openCount()) sketch.clearAll();
 });
 
