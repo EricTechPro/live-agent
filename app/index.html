@@ -19,15 +19,9 @@
       from the menu button by the orb.
     -->
     <main class="overlay" id="overlay" data-layer="home">
-      <!-- The sketch canvas on the screen (tickets 32 to 35; sketch-view.ts adds the board). -->
-      <section id="stage" class="stage" aria-label="Drawing">
-        <header class="stage-head">
-          <span class="stage-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-          <span class="stage-title">jett · sketch</span>
-          <button id="clear-canvas" class="ib stage-x" type="button" data-hit aria-label="Hide drawing" data-tip="Hide drawing" data-icon="close" data-size="12"></button>
-        </header>
-        <p class="canvas-empty" hidden></p>
-      </section>
+      <!-- The drawing on the screen (drawing v2): a full-screen layer; sketch-view.ts adds the ink
+           canvas, the HUD cards' close buttons, the "Clear all" chip and the caption bar. -->
+      <section id="stage" class="stage" aria-label="Drawing"></section>
 
       <!-- The cues beside the orb (ticket 37): equaliser or working pill, Jett's speech bubble. -->
       <div id="cues" class="cues" data-side="left">
