@@ -17,7 +17,7 @@ import {
 import { waveFor, QUIET } from "./orb-wave.ts";
 import { isNewChatKey, SHORTCUTS, SHORTCUTS_TITLE } from "./shortcuts.ts";
 import { addWork, cuesFor, noWork, type Work } from "./cues.ts";
-import { mountSketch } from "./sketch-view.ts";
+import { mountSketch, type SketchApi } from "./sketch-view.ts";
 import { mountTooltips, paintIcons, setIcon } from "./tooltip.ts";
 import { nextPanel, startPanel, tabForKey, TABS, type Panel, type PanelAction, type Tab } from "./panel.ts";
 import { nextLayer, startLayer, type Layer, type LayerAction } from "./layers.ts";
@@ -29,7 +29,7 @@ import { addCaption, noCaptions, shownCaptions, type Captions } from "./captions
 import { spokenLang, WORDS, type Lang } from "./lang.ts";
 import { followMic } from "./mic-follow.ts";
 import {
-  capture, DOUBLE_MS, dragEnd, dragTo, followStep, isDoubleClick, pollHover, isDrag, keepOn, parseSaved, placeCard, placeOrb, placePopover,
+  capture, DOUBLE_MS, dragEnd, dragTo, followStep, isDoubleClick, pollHover, isDrag, keepOn, parseSaved, placeOrb, placePopover,
   pttCallIdle, pttIdle, pttPress, pttRelease, pttStep, type PttCall, type Point, type Ptt, type Rect,
 } from "./overlay.ts";
 import { UI, type UiKey } from "./ui-words.ts";
@@ -59,6 +59,8 @@ const newChatBtn = $<HTMLButtonElement>("new-chat");
 const popover = $("popover");
 const approvalsEl = $("approvals");
 const stage = $("stage");
+/** The drawing on the screen (drawing v2), once the core is up. */
+let sketch: SketchApi | undefined;
 const wizardEl = $("wizard");
 /** The UI language: the one you last spoke (lang.ts); every label and tooltip follows it. */
 let lang: Lang = "en";
@@ -321,12 +323,15 @@ function placeFloaters() {
   cuesEl.dataset.side = left ? "left" : "right";
   cuesEl.style.left = `${left ? orbAt.x - 6 : orbAt.x + orbRect.width + 6}px`;
   cuesEl.style.top = `${orbAt.y + 26 + 56}px`;
-  // The drawing card goes in the empty half of the screen.
-  if (stage.offsetWidth) {
-    const at = placeCard(orbRect, { width: stage.offsetWidth, height: stage.offsetHeight }, view());
-    stage.style.left = `${at.x}px`;
-    stage.style.top = `${at.y}px`;
-  }
+  // Drawing cards (drawing v2) lay themselves out on the screen, clear of the orb, its
+  // cues and any open popover; they fill columns from the side away from the orb.
+  const box = (el: HTMLElement) => {
+    if (el.hidden || !el.offsetWidth) return undefined;
+    const r = el.getBoundingClientRect();
+    return { x: r.left, y: r.top, w: r.width, h: r.height };
+  };
+  const avoid = [{ x: orbRect.x, y: orbRect.y, w: orbRect.width, h: orbRect.height }, box(cuesEl), box(popover), box(approvalsEl)];
+  sketch?.setObstacles(avoid.filter((r) => !!r), left ? "left" : "right");
 }
 new MutationObserver(() => {
   // A question for you brings Jett back from the dot: approvals sit beside the orb.
@@ -506,11 +511,6 @@ function showShortcuts(on: boolean) {
 $<HTMLButtonElement>("open-shortcuts").onclick = () => showShortcuts(true);
 $<HTMLButtonElement>("close-shortcuts").onclick = () => showShortcuts(false);
 
-// The drawing on the screen: its X hides it until something new is drawn.
-$("clear-canvas").onclick = () => {
-  stage.dataset.dismissed = "true";
-  renderCaptions();
-};
 
 // ---- the call (ticket 37): like a phone call -------------------------------------
 let orb: Orb = orbStart;
@@ -747,7 +747,8 @@ function renderCaptions() {
   });
   // The bottom caption bar: only while a drawing is on screen.
   const bar = shownCaptions(captions, now);
-  $("captions").hidden = !cues.bar;
+  // While a drawing's own caption bar shows the line being drawn, this one steps aside.
+  $("captions").hidden = !cues.bar || !!sketch?.captionActive();
   for (const [el, text] of [[capUser, bar.user], [capModel, bar.model]] as const) {
     if (text && el.textContent !== text) el.textContent = text;
     el.hidden = !text;
@@ -1072,6 +1073,8 @@ window.addEventListener("keydown", (e) => {
     if (e.defaultPrevented) return;
     if (!shortcutsEl.hidden) return showShortcuts(false);
     if (layer === "center") return setLayer("escape");
+    // Cards on screen: Esc closes them all first.
+    if (sketch?.openCount()) return sketch.clearAll();
     // Jett talking: Esc stops the reply. Otherwise, in a call, it hangs up.
     if (orb.state === "speaking") return void coreRef?.stopReply().catch(() => {});
     if (call === "live" || call === "joining") void endCall();
@@ -1173,7 +1176,8 @@ async function boot() {
     readerPath: $("reader-path"), readerText: $("reader-text"), closeReader: $<HTMLButtonElement>("close-reader"), transcript: $("brain-lists"),
   });
   mountChatView(core, reader, { list: $<HTMLUListElement>("chat-list"), empty: $("chats-empty") });
-  mountSketch(core, stage);
+  sketch = mountSketch(core, stage, { onCaption: () => renderCaptions() });
+  placeFloaters();
   say(WORDS[lang].hi);
   feedOrb({ type: "core.ready" });
 

@@ -265,24 +265,10 @@ html:not([data-polled]) .dock:hover .quick-btn, .dock.hover .quick-btn, .quick-b
 .cap.model { color: var(--led); border: 1px solid var(--glass-edge); text-shadow: 0 0 10px rgba(120, 255, 226, .25); }
 @keyframes cap-in { from { opacity: 0; transform: translateY(4px); } }
 
-/* ---- the drawing, straight on the screen (tickets 32 to 36) ---- */
-/* A terminal-style glass card in the empty half of the screen (main.ts places it). */
-.stage {
-  position: absolute; left: 24px; top: 8vh;
-  width: min(760px, 52vw, calc(56vh * 5 / 3)); pointer-events: none;
-  border-radius: 14px; overflow: hidden;
-  background: rgba(3, 12, 14, .5); border: 1px solid rgba(120, 255, 226, .22);
-  box-shadow: 0 16px 44px rgba(0, 0, 0, .35);
-  backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
-  animation: pop-in .25s var(--ease);
-}
-.stage:not([data-view="sketch"]), .stage[data-dismissed="true"] { display: none; }
-.stage-head { display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 6px 0 12px; background: rgba(0, 0, 0, .3); border-bottom: 1px solid rgba(120, 255, 226, .12); }
-.stage-dots { display: flex; gap: 5px; }
-.stage-dots i { width: 8px; height: 8px; border-radius: 50%; background: rgba(200, 255, 244, .22); }
-.stage-title { flex: 1; color: var(--ink-3); font: 600 11px/1 var(--mono); letter-spacing: .04em; }
-.stage-x { width: 22px; height: 22px; border-radius: 6px; color: var(--ink-3); }
-.stage .sketch { padding: 6px 8px 8px; }
+/* ---- the drawing, straight on the screen (tickets 32 to 36, drawing v2) ---- */
+/* A full-screen layer: HUD cards float on the desktop (sketch-view.ts, sketch.css). */
+#stage { position: fixed; inset: 0; pointer-events: none; z-index: 2; }
+#stage:not([data-view="sketch"]), #stage[data-dismissed="true"] { display: none; }
 
 /* ---- the cues beside the orb (ticket 37) ---- */
 .cues { position: absolute; width: 380px; display: flex; flex-direction: column; gap: 8px; transform: translateY(-50%); pointer-events: none; }

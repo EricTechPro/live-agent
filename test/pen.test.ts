@@ -3,12 +3,12 @@
 // start on the core's `canvas.speak`, wait a little for it otherwise, speed up
 // when the voice is ahead, and stop on an interruption.
 import { expect, test } from "bun:test";
-import { beatMs, emptyPen, penAddBeat, penInterrupt, penSpeak, slotOf, VOICE, type Pen } from "../app/src/pen.ts";
+import { beatMs, emptyPen, penAddBeat, penInterrupt, penSpeak, slotOf, spread, VOICE, type Pen } from "../app/src/pen.ts";
 
 const SHORT = "Mic to core.";
 const LONG = "The microphone sends your voice to the core, which thinks and then answers out loud.";
 const add = (pen: Pen, key: string, say: string, ids: string[], now: number, reduced = false) =>
-  penAddBeat(pen, { key, say, ids, lengths: ids.map(() => 300) }, now, reduced);
+  penAddBeat(pen, { key, say, ids, durations: ids.map(() => 1500) }, now, reduced);
 const end = (pen: Pen, ids: string[]) => Math.max(...ids.map((id) => slotOf(pen, id)!.end));
 
 test("a beat lasts about as long as its line takes to say, within bounds", () => {
@@ -22,13 +22,29 @@ test("the speaking rate is a parameter: a slower voice gives a longer beat (the 
   expect(beatMs(LONG, VOICE.charsPerSec / 2)).toBeGreaterThan(beatMs(LONG));
 });
 
-test("the first beat starts at once, its marks one after another, finishing about when the line ends", () => {
+test("the first beat starts at once; marks start spread across the first 80% of the line", () => {
+  const slots = spread(1000, 10_000, [500, 500, 500, 500]);
+  expect(slots.map((s) => s.start)).toEqual([1000, 3000, 5000, 7000]);
+  // Each keeps its natural time when the pen is free.
+  for (const s of slots) expect(s.end - s.start).toBe(500);
   const pen = add(emptyPen, "c1:0", LONG, ["p1", "p2", "p3"], 1000);
-  const [a, b, c] = ["p1", "p2", "p3"].map((id) => slotOf(pen, id)!);
-  expect(a!.start).toBe(1000);
-  expect(b!.start).toBeGreaterThanOrEqual(a!.end);
-  expect(c!.start).toBeGreaterThanOrEqual(b!.end);
-  expect(Math.abs(c!.end - (1000 + beatMs(LONG)))).toBeLessThan(50);
+  expect(slotOf(pen, "p1")!.start).toBe(1000);
+});
+
+test("a beat lasts at least 1.2 s and about 15 characters a second", () => {
+  expect(VOICE.minBeatMs).toBe(1200);
+  expect(VOICE.charsPerSec).toBe(15);
+});
+
+test("a pen that falls behind speeds up, at most 2.5x, and never draws two marks at once", () => {
+  const slots = spread(0, 1200, [2000, 2000, 2000]);
+  for (let i = 1; i < slots.length; i++) expect(slots[i]!.start).toBeGreaterThanOrEqual(slots[i - 1]!.end);
+  expect(slots[0]!.end - slots[0]!.start).toBe(2000);
+  const later = slots.slice(1).map((s) => s.end - s.start);
+  for (const ms of later) {
+    expect(ms).toBeLessThan(2000);
+    expect(ms).toBeGreaterThanOrEqual(2000 / VOICE.maxSpeedup - 0.001);
+  }
 });
 
 test("with no speak signal the next beat still draws, after a short wait for the voice (text turns)", () => {
@@ -46,7 +62,7 @@ test("a speak signal starts a waiting beat right away", () => {
   const at = slotOf(pen, "p1")!.end + 100; // the pen is free, the voice starts line 2 now
   pen = penSpeak(pen, "c1:1", at, false);
   expect(slotOf(pen, "p2")!.start).toBe(at);
-  expect(Math.abs(end(pen, ["p2"]) - (at + beatMs(SHORT)))).toBeLessThan(50);
+  expect(end(pen, ["p2"]) - at).toBe(1500);
 });
 
 test("pen behind the voice: the late beat's last marks hurry, and the spoken beat follows at once", () => {

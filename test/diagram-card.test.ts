@@ -12,7 +12,8 @@ import { bundledTools } from "../src/core/bundled-tools.ts";
 import { loadTools } from "../src/core/registry.ts";
 import { systemInstruction } from "../src/core/tone.ts";
 import { scriptedModel } from "../src/models/scripted.ts";
-import { addCanvasEvent, cardBox, diagramCards, emptyScene, fitBoard, inkFor } from "../app/src/sketch.ts";
+import { addCanvasEvent, diagramCards, emptyScene } from "../app/src/sketch.ts";
+import { layoutScene } from "../app/src/layout.ts";
 import { drawsOnCanvas } from "../app/src/cues.ts";
 
 const tools = await loadTools();
@@ -105,11 +106,14 @@ test("the README tool table and the system prompt name draw, not draw_diagram", 
 
 // ---- window: the card --------------------------------------------------------
 
-test("a diagram card draws a pen frame (4 sides) with its title written inside", () => {
-  const ink = inkFor(card as Mark);
-  expect(ink.parts.filter((p) => p.kind === "stroke")).toHaveLength(4);
-  expect(ink.parts.at(-1)).toMatchObject({ kind: "text", text: "How it works" });
-  expect(inkFor({ ...card, title: undefined } as Mark).parts.filter((p) => p.kind === "text")).toEqual([]);
+test("a diagram card is laid out as a HUD card with a body box for the Mermaid SVG, inside the card", () => {
+  const out = layoutScene({ marks: [{ mark: card as Mark, say: "Here.", beatKey: "d1:0" }], view: { width: 1440, height: 900 } });
+  const [c] = out.cards;
+  expect(c!.title).toBe("how it works");
+  expect(c!.body!.x).toBeGreaterThan(0);
+  expect(c!.body!.y).toBeGreaterThanOrEqual(26);
+  expect(c!.body!.x + c!.body!.w).toBeLessThan(c!.w);
+  expect(c!.body!.y + c!.body!.h).toBeLessThan(c!.h);
 });
 
 test("the scene lists its diagram cards, edits and erases included", () => {
@@ -120,17 +124,6 @@ test("the scene lists its diagram cards, edits and erases included", () => {
   expect(diagramCards(scene)[0]!.title).toBe("New");
   scene = addCanvasEvent(scene, { type: "canvas.erase", id: "e2", ids: ["p1"], all: false });
   expect(diagramCards(scene)).toEqual([]);
-});
-
-test("the card's diagram sits inside the frame, below the title, scaled with the board", () => {
-  const fit = fitBoard(500, 300); // half size
-  const box = cardBox(card as Mark & { kind: "diagram" }, fit);
-  expect(box.left).toBeGreaterThan(fit.x + 100 * 0.5);
-  expect(box.top).toBeGreaterThan(fit.y + 80 * 0.5);
-  expect(box.left + box.width).toBeLessThan(fit.x + 600 * 0.5);
-  expect(box.top + box.height).toBeLessThan(fit.y + 380 * 0.5);
-  const untitled = cardBox({ ...card, title: undefined } as Mark & { kind: "diagram" }, fit);
-  expect(untitled.top).toBeLessThan(box.top);
 });
 
 test("a canvas event shows the drawing on screen (the old diagram event is gone)", () => {

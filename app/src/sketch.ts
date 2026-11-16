@@ -71,24 +71,28 @@ export function addCanvasEvent(scene: Scene, event: AgentEvent): Scene {
 
 export type DiagramMark = Extract<Mark, { kind: "diagram" }>;
 
-/** A card's inner padding and title band, in board units. */
-export const CARD = { pad: 14, titleH: 34 } as const;
-
 /** The diagram cards on the canvas, in drawing order. */
 export function diagramCards(scene: Scene): DiagramMark[] {
   return scene.marks.flatMap(({ mark }) => (mark.kind === "diagram" ? [mark] : []));
 }
 
-/** Where a card's diagram goes, in panel CSS pixels: inside the frame, below the title. */
-export function cardBox(mark: DiagramMark, fit: { scale: number; x: number; y: number }) {
-  const top = mark.y + (mark.title ? CARD.titleH : CARD.pad);
-  return {
-    left: fit.x + (mark.x + CARD.pad) * fit.scale,
-    top: fit.y + top * fit.scale,
-    width: Math.max(0, mark.w - 2 * CARD.pad) * fit.scale,
-    height: Math.max(0, mark.y + mark.h - CARD.pad - top) * fit.scale,
-  };
-}
+// ---- resolved ink marks ------------------------------------------------------------
+
+/**
+ * A free-ink mark with every number filled in (layout.ts resolves the model's hints
+ * or card targets into these). Coordinates are in whatever space the caller draws in.
+ */
+export type InkMark =
+  | { kind: "box"; id: string; x: number; y: number; w: number; h: number; label?: string; color?: Color }
+  | { kind: "text"; id: string; x: number; y: number; text: string; size?: number; color?: Color }
+  | { kind: "arrow"; id: string; from: Pt; to: Pt; label?: string; color?: Color }
+  | { kind: "line"; id: string; from: Pt; to: Pt; color?: Color }
+  | { kind: "circle"; id: string; x: number; y: number; r: number; ry?: number; color?: Color }
+  | { kind: "underline"; id: string; x: number; y: number; w: number; color?: Color }
+  | { kind: "check"; id: string; x: number; y: number; size?: number; color?: Color }
+  | { kind: "cross"; id: string; x: number; y: number; size?: number; color?: Color }
+  | { kind: "step"; id: string; x: number; y: number; n: number; label?: string; color?: Color };
+type Color = (typeof COLORS)[number];
 
 // ---- fitting the board into the panel ------------------------------------------
 
@@ -102,9 +106,9 @@ export function fitBoard(width: number, height: number) {
 
 // ---- colours -----------------------------------------------------------------
 
-/** Pen colours, light enough to glow on the dark teal background. */
+/** Pen colours, light enough to glow on the dark teal background. Ink is the teal pen (drawing v2). */
 export const INK_COLORS: Record<(typeof COLORS)[number], string> = {
-  ink: "#e8fffa",
+  ink: "#78ffe2",
   red: "#ff8a7a",
   blue: "#7cc8ff",
   green: "#8dfba4",
@@ -128,11 +132,11 @@ export function seededRandom(seed: string): () => number {
   };
 }
 
-type Rand = () => number;
+export type Rand = () => number;
 const jitter = (rand: Rand, amount: number) => (rand() - 0.5) * 2 * amount;
 
 /** A hand-drawn line from a to b: a gentle bow plus a small slow waver, ends nudged a little. */
-function roughLine(a: Pt, b: Pt, rand: Rand, waver = 1): Pt[] {
+export function roughLine(a: Pt, b: Pt, rand: Rand, waver = 1): Pt[] {
   const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
   const n = Math.max(8, Math.ceil(len / 10));
   const ux = (b.x - a.x) / len;
@@ -155,8 +159,8 @@ function roughLine(a: Pt, b: Pt, rand: Rand, waver = 1): Pt[] {
   return points;
 }
 
-/** A ring: a bit more than a full turn, radius drifting slightly, so it overlaps where it started. */
-function roughRing(c: Pt, r: number, rand: Rand): Pt[] {
+/** A ring: a bit more than a full turn, radius drifting slightly, so it overlaps where it started. `ry` makes it an oval. */
+export function roughRing(c: Pt, r: number, rand: Rand, ry = r): Pt[] {
   const from = rand() * Math.PI * 2;
   const sweep = Math.PI * 2 + 0.35 + rand() * 0.3;
   const n = Math.max(28, Math.ceil((r * sweep) / 7));
@@ -168,7 +172,7 @@ function roughRing(c: Pt, r: number, rand: Rand): Pt[] {
     const t = i / n;
     const a = from + sweep * t;
     const rr = r * (1 + drift * (t - 0.5) + 0.015 * Math.sin(3 * a + phase));
-    points.push({ x: c.x + Math.cos(a) * rr * squash, y: c.y + Math.sin(a) * rr / squash });
+    points.push({ x: c.x + Math.cos(a) * rr * squash, y: c.y + (Math.sin(a) * rr * (ry / r)) / squash });
   }
   return points;
 }
@@ -208,7 +212,7 @@ function overshoot(a: Pt, b: Pt, by: number): [Pt, Pt] {
 }
 
 /** The strokes and words for one mark, in drawing order. Deterministic per mark id. */
-export function inkFor(mark: Mark): Ink {
+export function inkFor(mark: InkMark): Ink {
   const rand = seededRandom(mark.id);
   const parts: Part[] = [];
   switch (mark.kind) {
@@ -250,7 +254,7 @@ export function inkFor(mark: Mark): Ink {
       parts.push(stroke(roughLine(mark.from, mark.to, rand)));
       break;
     case "circle":
-      parts.push(stroke(roughRing({ x: mark.x, y: mark.y }, mark.r, rand)));
+      parts.push(stroke(roughRing({ x: mark.x, y: mark.y }, mark.r, rand, mark.ry ?? mark.r)));
       break;
     case "underline":
       parts.push(stroke(roughLine({ x: mark.x, y: mark.y }, { x: mark.x + mark.w, y: mark.y + jitter(rand, 2) }, rand, 1.6), PEN * 1.1));
@@ -268,18 +272,6 @@ export function inkFor(mark: Mark): Ink {
       const { x, y } = mark;
       parts.push(stroke(roughLine({ x: x - s, y: y - s }, { x: x + s, y: y + s }, rand, 0.4), PEN * 1.2));
       parts.push(stroke(roughLine({ x: x + s, y: y - s }, { x: x - s, y: y + s }, rand, 0.4), PEN * 1.2));
-      break;
-    }
-    case "diagram": {
-      // A card: the pen draws its frame and writes the title; the diagram itself is
-      // Mermaid's SVG on top (sketch-view.ts), placed by cardBox.
-      const { x, y, w, h } = mark;
-      const corners: Pt[] = [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }];
-      for (let i = 0; i < 4; i++) {
-        const [a, b] = overshoot(corners[i]!, corners[(i + 1) % 4]!, 1.5 + rand() * 2);
-        parts.push(stroke(roughLine(a, b, rand, 0.6)));
-      }
-      if (mark.title) parts.push(write(x + CARD.pad, y + CARD.titleH / 2 + 4, mark.title, 16, "left"));
       break;
     }
     case "step": {

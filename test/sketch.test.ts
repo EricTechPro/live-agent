@@ -16,6 +16,7 @@ import {
   planMarks,
   seededRandom,
   taper,
+  type InkMark,
 } from "../app/src/sketch.ts";
 
 const beat = (beatIndex: number, marks: Mark[], say = `line ${beatIndex}`, id = "c1"): AgentEvent => ({
@@ -105,13 +106,13 @@ test("the wobble is seeded by the mark id: same id, same numbers", () => {
 });
 
 test("redrawing a mark gives exactly the same strokes (no jitter on resize)", () => {
-  const m: Mark = { kind: "circle", id: "p4", x: 500, y: 300, r: 80 };
+  const m: InkMark = { kind: "circle", id: "p4", x: 500, y: 300, r: 80 };
   expect(inkFor(m)).toEqual(inkFor(m));
 });
 
 // ---- strokes per mark kind ---------------------------------------------------
 
-const all: Mark[] = [
+const all: InkMark[] = [
   { kind: "box", id: "p1", x: 100, y: 100, w: 200, h: 100, label: "Mic" },
   { kind: "text", id: "p2", x: 100, y: 300, text: "hello" },
   { kind: "arrow", id: "p3", from: { x: 300, y: 150 }, to: { x: 500, y: 150 }, label: "audio" },
@@ -132,7 +133,7 @@ test("every mark kind turns into at least one pen stroke or written text", () =>
 });
 
 test("shapes draw the strokes you'd expect: box 4 sides, arrow shaft and 2 head strokes, cross 2, check 1", () => {
-  const strokes = (m: Mark) => inkFor(m).parts.filter((p) => p.kind === "stroke").length;
+  const strokes = (m: InkMark) => inkFor(m).parts.filter((p) => p.kind === "stroke").length;
   expect(strokes(all[0]!)).toBe(4);
   expect(strokes(all[2]!)).toBe(3);
   expect(strokes(all[7]!)).toBe(2);
@@ -174,7 +175,7 @@ test("a ring stays near its radius and closes on itself", () => {
 
 test("every colour has an ink that reads on the dark teal background", () => {
   expect(Object.keys(INK_COLORS).sort()).toEqual(["blue", "green", "ink", "orange", "purple", "red"]);
-  expect(inkFor({ ...all[0]!, color: "red" } as Mark).color).toBe(INK_COLORS.red);
+  expect(inkFor({ ...all[0]!, color: "red" } as InkMark).color).toBe(INK_COLORS.red);
   expect(inkFor(all[0]!).color).toBe(INK_COLORS.ink);
 });
 
