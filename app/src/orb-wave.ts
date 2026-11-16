@@ -8,6 +8,9 @@
 // - speaking: the height follows Jett's output level; with none known, a gentle
 //   speech-like motion, only while speaking
 // - thinking, connecting: a slow dot sweeping along a flat line, not the speech wave
+// - reconnecting (ticket 40): a flat line in the orb's own colour (not white-hot), the
+//   orb dimmed with a slow soft pulse and a short arc turning on the rim
+// - offline (Can't reach Gemini): the same soft flat line, dim and still
 // With prefers-reduced-motion nothing moves over time (levels still set the height).
 import type { CallLook } from "./call-state.ts";
 
@@ -21,6 +24,12 @@ export interface Wave {
   dim: boolean;
   /** Sweep only: where the dot is along the line, -1 (left) .. 1 (right). */
   sweep?: number;
+  /** Draw the line in the orb's tint, not white-hot, and the whole orb at `glow` (ticket 40). */
+  soft?: boolean;
+  /** Soft only: the orb's brightness, 0..1. */
+  glow?: number;
+  /** Soft only: the angle (radians) of a short bright arc on the rim; none when still. */
+  arc?: number;
 }
 
 export interface WaveInputs {
@@ -53,6 +62,12 @@ export function waveFor({ look, t, mic = 0, voice, still = false }: WaveInputs):
       const amp = still ? 0.45 : 0.25 + 0.4 * Math.abs(Math.sin(t * 5.1) * Math.sin(t * 1.3 + 0.7));
       return { kind: "wave", amp, dim: false };
     }
+    case "reconnecting":
+      return still
+        ? { kind: "flat", amp: 0, dim: false, soft: true, glow: 0.5, arc: 0 }
+        : { kind: "flat", amp: 0, dim: false, soft: true, glow: 0.5 + 0.12 * Math.sin(t * 1.6), arc: (t * 2.2) % (Math.PI * 2) };
+    case "offline":
+      return { kind: "flat", amp: 0, dim: false, soft: true, glow: 0.42 };
     case "thinking":
     case "joining":
       return { kind: "sweep", amp: 0, dim: false, sweep: still ? 0 : Math.sin(t * 1.4) };

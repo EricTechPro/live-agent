@@ -51,8 +51,9 @@ test("a typed turn with no call still shows Thinking… and Speaking…", () => 
   expect(callView({ orb: "thinking", call: "off", muted: false })).toMatchObject({ look: "thinking", buttons: ["start"] });
 });
 
-test("the core down: Offline, no buttons", () => {
-  expect(callView({ orb: "offline", call: "live", muted: false })).toMatchObject({ look: "offline", buttons: [] });
+test("the core down: Can't reach Gemini with Retry; only Hang up, and only in a call (ticket 40)", () => {
+  expect(callView({ orb: "offline", call: "live", muted: false })).toMatchObject({ look: "offline", buttons: ["hangup"], retry: "Retry" });
+  expect(callView({ orb: "offline", call: "off", muted: false })).toMatchObject({ look: "offline", buttons: [] });
 });
 
 test("a core pause never shows as Muted: only the user's mute does", () => {

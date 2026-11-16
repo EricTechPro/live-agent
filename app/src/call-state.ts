@@ -12,7 +12,7 @@ import type { Lang } from "./lang.ts";
 /** off: no call. joining: connecting to the room. live: in the call. ended: just hung up (shows "Call ended" for a moment). */
 export type CallPhase = "off" | "joining" | "live" | "ended";
 
-export type CallLook = "starting" | "idle" | "joining" | "listening" | "thinking" | "speaking" | "muted" | "ended" | "offline";
+export type CallLook = "starting" | "idle" | "joining" | "listening" | "thinking" | "speaking" | "muted" | "ended" | "reconnecting" | "offline";
 export type CallButton = "start" | "mute" | "unmute" | "hangup";
 
 export interface CallInputs {
@@ -31,6 +31,8 @@ export interface CallView {
   buttons: CallButton[];
   /** Show the mic-slash badge on the orb. */
   mutedBadge: boolean;
+  /** Offline only (ticket 40): the small text button after the label ("Retry"). */
+  retry?: string;
 }
 
 /** The window's words follow the language the user last spoke (lang.ts). */
@@ -44,7 +46,8 @@ export const LABELS: Record<Lang, Record<CallLook, string>> = {
     speaking: "Speaking…",
     muted: "Muted",
     ended: "Call ended",
-    offline: "Offline",
+    reconnecting: "Reconnecting…",
+    offline: "Can't reach Gemini",
   },
   zh: {
     starting: "启动中…",
@@ -55,7 +58,8 @@ export const LABELS: Record<Lang, Record<CallLook, string>> = {
     speaking: "说话中…",
     muted: "已静音",
     ended: "通话结束",
-    offline: "离线",
+    reconnecting: "重新连接中…",
+    offline: "连不上 Gemini",
   },
 };
 
@@ -66,7 +70,9 @@ export function callView({ orb, call, muted, lang = "en" }: CallInputs): CallVie
     buttons,
     mutedBadge,
   });
-  if (orb === "offline") return view("offline", []);
+  // Ticket 40: no red, no dead end. It comes back by itself; Retry only once it has tried a while.
+  if (orb === "reconnecting") return view("reconnecting", call === "live" || call === "joining" ? ["hangup"] : []);
+  if (orb === "offline") return { ...view("offline", call === "live" || call === "joining" ? ["hangup"] : []), retry: RETRY[lang] };
   if (orb === "connecting") return view("starting", ["start"]);
   if (call === "joining") return view("joining", ["hangup"]);
   if (call === "live") {
@@ -78,6 +84,16 @@ export function callView({ orb, call, muted, lang = "en" }: CallInputs): CallVie
   // No call: a typed turn still thinks and answers.
   if (orb === "thinking" || orb === "speaking") return view(orb, ["start"]);
   return view(call === "ended" ? "ended" : "idle", ["start"]);
+}
+
+const RETRY: Record<Lang, string> = { en: "Retry", zh: "重试" };
+
+/** The faint line under "Reconnecting…" (ticket 40): when the next try is. */
+export function retryHint(orb: { state: string; retryAt?: number }, now: number, lang: Lang): string | undefined {
+  if ((orb.state !== "reconnecting" && orb.state !== "offline") || orb.retryAt === undefined) return undefined;
+  const secs = Math.ceil((orb.retryAt - now) / 1000);
+  if (secs <= 0) return lang === "zh" ? "正在重试…" : "retrying…";
+  return lang === "zh" ? `${secs} 秒后重试` : `retrying in ${secs}s`;
 }
 
 /** Push to talk counts as learned after this many uses; the hint goes away (ticket 38). */

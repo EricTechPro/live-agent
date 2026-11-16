@@ -36,6 +36,13 @@ export type ModelEvent =
    * per drop (and again if it gives up reconnecting).
    */
   | { type: "disconnected"; message: string }
+  /**
+   * No network (ticket 40): the adapter could not reach the model and tries again in
+   * `retryInMs`. It keeps trying; `attempt` counts the tries in a row. Input sent now is dropped.
+   */
+  | { type: "reconnecting"; attempt: number; retryInMs: number; message: string }
+  /** Reached the model again after `reconnecting`. */
+  | { type: "connected" }
   /** The connection or the model reported a problem. */
   | { type: "error"; message: string };
 
@@ -83,6 +90,8 @@ export interface ModelSession {
   sendAudio(data: Int16Array, sampleRate: number): void;
   /** Answer a `tool.call`. Replies (if any) arrive through `onEvent`. */
   sendToolResponse(response: ToolResponse): void;
+  /** No network (ticket 40): stop waiting out the backoff and try to connect now. */
+  retryNow?(): void;
   close(): Promise<void>;
 }
 

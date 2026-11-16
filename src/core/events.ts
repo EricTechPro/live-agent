@@ -94,6 +94,12 @@ export type AgentEvent =
    * An interruption also erases the beats not yet spoken (ticket 34), so the canvas keeps only what was said.
    */
   | { type: "canvas.erase"; id: string; ids: string[]; all: boolean }
+  /**
+   * The link to the model (ticket 40). `reconnecting`: no network, the core tries again in
+   * `retryInMs` (it never gives up; the window shows "Reconnecting…"). `connected`: back.
+   */
+  | { type: "connection"; state: "reconnecting"; attempt: number; retryInMs: number; message: string }
+  | { type: "connection"; state: "connected" }
   /** The model finished its reply. `reply` is the whole reply, joined for you. */
   | { type: "turn.done"; reply: string }
   /** Something went wrong in the session. The session may still be usable. */

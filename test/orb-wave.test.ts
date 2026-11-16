@@ -2,8 +2,8 @@
 import { expect, test } from "bun:test";
 import { QUIET, waveFor } from "../app/src/orb-wave.ts";
 
-test("at rest, call ended, starting and offline: a flat line", () => {
-  for (const look of ["idle", "ended", "starting", "offline"] as const) {
+test("at rest, call ended and starting: a flat line (offline and reconnecting: test/reconnecting-view.test.ts)", () => {
+  for (const look of ["idle", "ended", "starting"] as const) {
     for (const t of [0, 1.3, 7]) expect(waveFor({ look, t, mic: 0.9 })).toEqual({ kind: "flat", amp: 0, dim: false });
   }
 });

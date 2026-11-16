@@ -5,7 +5,13 @@
 //   {"type":"ready","url":"http://127.0.0.1:53121","launchToken":"..."}
 // Everything else it says goes to stderr, which we pass through to our stderr.
 // The core starts and stops LiveKit itself, so the shell only owns one child.
+//
+// If the core dies anyway (ticket 40: it used to exit on a DNS failure after the Mac
+// slept), the shell starts it again by itself with backoff and tells the window
+// (`core-restarting`, then `core-ready`). Only after RESTART_DELAYS_MS run out in a row
+// is it `core-down`; the window's Retry calls `restart_core`.
 use serde::Serialize;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager, RunEvent};
@@ -25,12 +31,49 @@ struct CoreInfo {
 enum CoreStatus {
     Starting,
     Ready { info: CoreInfo },
+    /// It died; the shell starts it again in `retry_in_ms`.
+    #[serde(rename_all = "camelCase")]
+    Restarting { attempt: u32, retry_in_ms: u64, reason: String },
     Down { reason: String },
 }
 
 struct Core {
     status: Mutex<CoreStatus>,
     child: Mutex<Option<CommandChild>>,
+    /// Restarts in a row without a long healthy run in between.
+    restarts: Mutex<u32>,
+    /// When the running core said it was ready.
+    ready_at: Mutex<Option<Instant>>,
+    /// Set when we stop it on purpose (quit): no restart then.
+    quitting: AtomicBool,
+}
+
+/// Waits before each automatic restart: 1 s, 2 s, 5 s, 10 s, then 30 s three times.
+/// After that the window shows Retry (`restart_core`).
+const RESTART_DELAYS_MS: [u64; 7] = [1_000, 2_000, 5_000, 10_000, 30_000, 30_000, 30_000];
+
+/// A core that ran this long before dying was healthy: its restarts count from the start again.
+const HEALTHY_RUN: Duration = Duration::from_secs(60);
+
+/// The wait before restart number `attempt` (0-based), or None when they are used up.
+fn restart_delay(attempt: u32) -> Option<Duration> {
+    RESTART_DELAYS_MS.get(attempt as usize).map(|ms| Duration::from_millis(*ms))
+}
+
+/// The restart number to use after a core that ran for `ran` dies (after `previous` restarts in a row).
+fn next_restart(previous: u32, ran: Option<Duration>) -> u32 {
+    match ran {
+        Some(ran) if ran >= HEALTHY_RUN => 0,
+        _ => previous,
+    }
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Restarting {
+    attempt: u32,
+    retry_in_ms: u64,
+    reason: String,
 }
 
 #[tauri::command]
@@ -105,7 +148,10 @@ fn start_core(app: &tauri::AppHandle) -> Result<(), String> {
                 CommandEvent::Stdout(bytes) => {
                     let line = String::from_utf8_lossy(&bytes);
                     if let Some(info) = parse_ready(&line) {
-                        *core.status.lock().unwrap() = CoreStatus::Ready { info };
+                        *core.status.lock().unwrap() = CoreStatus::Ready { info: info.clone() };
+                        *core.ready_at.lock().unwrap() = Some(Instant::now());
+                        // After a restart the window reconnects to the new address.
+                        let _ = app.emit("core-ready", info);
                     }
                 }
                 CommandEvent::Stderr(bytes) => {
@@ -121,15 +167,67 @@ fn start_core(app: &tauri::AppHandle) -> Result<(), String> {
                     } else {
                         last_err.clone()
                     };
-                    *core.status.lock().unwrap() = CoreStatus::Down { reason: reason.clone() };
                     core.child.lock().unwrap().take();
-                    let _ = app.emit("core-down", reason);
+                    if core.quitting.load(Ordering::SeqCst) {
+                        *core.status.lock().unwrap() = CoreStatus::Down { reason };
+                        continue;
+                    }
+                    let ran = core.ready_at.lock().unwrap().take().map(|at| at.elapsed());
+                    eprintln!("live-agent: the core stopped ({reason}); restarting it");
+                    schedule_restart(&app, ran, reason);
                 }
                 _ => {}
             }
         }
     });
     Ok(())
+}
+
+/// The core died: start it again after the next backoff wait, or give up and say `core-down`.
+fn schedule_restart(app: &tauri::AppHandle, ran: Option<Duration>, reason: String) {
+    let core = app.state::<Core>();
+    let attempt = {
+        let mut restarts = core.restarts.lock().unwrap();
+        *restarts = next_restart(*restarts, ran);
+        let attempt = *restarts;
+        *restarts += 1;
+        attempt
+    };
+    let Some(wait) = restart_delay(attempt) else {
+        *core.status.lock().unwrap() = CoreStatus::Down { reason: reason.clone() };
+        let _ = app.emit("core-down", reason);
+        return;
+    };
+    let retry_in_ms = wait.as_millis() as u64;
+    *core.status.lock().unwrap() = CoreStatus::Restarting { attempt: attempt + 1, retry_in_ms, reason: reason.clone() };
+    let _ = app.emit("core-restarting", Restarting { attempt: attempt + 1, retry_in_ms, reason });
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(wait);
+        let core = app.state::<Core>();
+        if core.quitting.load(Ordering::SeqCst) || core.child.lock().unwrap().is_some() {
+            return;
+        }
+        *core.status.lock().unwrap() = CoreStatus::Starting;
+        if let Err(reason) = start_core(&app) {
+            schedule_restart(&app, None, reason);
+        }
+    });
+}
+
+/// The window's Retry (after the automatic restarts ran out): start the core again now.
+#[tauri::command]
+fn restart_core(app: tauri::AppHandle) -> Result<(), String> {
+    let core = app.state::<Core>();
+    if core.child.lock().unwrap().is_some() {
+        return Ok(()); // already running
+    }
+    *core.restarts.lock().unwrap() = 0;
+    *core.status.lock().unwrap() = CoreStatus::Starting;
+    start_core(&app).map_err(|reason| {
+        *core.status.lock().unwrap() = CoreStatus::Down { reason: reason.clone() };
+        reason
+    })
 }
 
 /// How long the core gets to stop on its own before we force it.
@@ -142,6 +240,7 @@ const CORE_STOP_GRACE: Duration = Duration::from_secs(30);
 
 /// Ask the core to stop (SIGTERM: it saves the chat, stops LiveKit), then force it after the grace.
 fn stop_core(core: &Core) {
+    core.quitting.store(true, Ordering::SeqCst);
     let Some(child) = core.child.lock().unwrap().take() else { return };
     #[cfg(unix)]
     {
@@ -351,9 +450,15 @@ pub fn run() {
                 })
                 .build(),
         )
-        .manage(Core { status: Mutex::new(CoreStatus::Starting), child: Mutex::new(None) })
+        .manage(Core {
+            status: Mutex::new(CoreStatus::Starting),
+            child: Mutex::new(None),
+            restarts: Mutex::new(0),
+            ready_at: Mutex::new(None),
+            quitting: AtomicBool::new(false),
+        })
         .manage(TrayToggle(Mutex::new(None)))
-        .invoke_handler(tauri::generate_handler![core_status, open_key_page, reveal_log, overlay_poll, set_click_through, set_tray_shown])
+        .invoke_handler(tauri::generate_handler![core_status, restart_core, open_key_page, reveal_log, overlay_poll, set_click_through, set_tray_shown])
         .setup(|app| {
             // No Dock icon: Jett lives in the menu bar and floats over everything.
             #[cfg(target_os = "macos")]
@@ -374,7 +479,7 @@ pub fn run() {
                 }
             }
             if let Err(reason) = start_core(app.handle()) {
-                *app.state::<Core>().status.lock().unwrap() = CoreStatus::Down { reason };
+                schedule_restart(app.handle(), None, reason);
             }
             Ok(())
         })
@@ -403,4 +508,29 @@ pub fn run() {
             RunEvent::Exit => stop_core(&app.state::<Core>()),
             _ => {}
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn restarts_back_off_then_run_out() {
+        let waits: Vec<_> = (0..8).map(|n| restart_delay(n).map(|d| d.as_millis() as u64)).collect();
+        assert_eq!(waits, vec![Some(1_000), Some(2_000), Some(5_000), Some(10_000), Some(30_000), Some(30_000), Some(30_000), None]);
+    }
+
+    #[test]
+    fn a_long_healthy_run_resets_the_count() {
+        assert_eq!(next_restart(5, Some(Duration::from_secs(120))), 0);
+        assert_eq!(next_restart(5, Some(Duration::from_secs(3))), 5);
+        assert_eq!(next_restart(2, None), 2);
+    }
+
+    #[test]
+    fn reads_the_ready_line() {
+        let info = parse_ready(r#"{"type":"ready","url":"http://127.0.0.1:1","launchToken":"t"}"#).unwrap();
+        assert_eq!(info.url, "http://127.0.0.1:1");
+        assert!(parse_ready("live-agent: hi").is_none());
+    }
 }

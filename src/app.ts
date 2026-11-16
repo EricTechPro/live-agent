@@ -36,6 +36,7 @@
 //   POST /chat/new -> { ok }: end this chat (note + tidy job) and start the next
 //   POST /pause    -> { paused } in and out: Jett stops speaking and hearing, the chat stays
 //   POST /reply/stop -> { ok }: Esc in the window, stop the reply being spoken (an `interrupted`)
+//   POST /reconnect -> { ok }: no network (a `connection` reconnecting event): try again now
 //   GET  /brain/tree -> the brain's three parts as a file tree (markdown only, junk folders skipped)
 //   GET  /brain/file?path=wiki/x.md -> { path, text }: one note, read only. 400 for anything
 //                     outside the three part folders (.., absolute, a symlink out), 404 when gone
@@ -214,6 +215,12 @@ export async function startApp(options: AppOptions): Promise<App> {
         if (typeof paused !== "boolean") return json({ error: "send { paused: true | false }" }, 400);
         session.setPaused(paused);
         return json({ paused: session.paused() });
+      },
+
+      // The window's Retry (ticket 40): no network, try to reach Gemini now instead of after the backoff.
+      "POST /reconnect"({ session }) {
+        session.reconnectNow();
+        return json({ ok: true });
       },
 
       // Esc in the window (ticket 37): stop the reply being spoken; the call stays on.

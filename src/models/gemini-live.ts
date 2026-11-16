@@ -14,6 +14,11 @@
 // one conversation that outlives its connections: the server keeps handing us
 // a resumption handle, and a new connection made with it carries on the same
 // chat. Context window compression lifts the 15-minute audio session limit.
+//
+// No network (ticket 40: the Mac slept, Wi-Fi dropped, DNS fails): the adapter never
+// gives up and never throws out of `connect()` for that. It keeps dialing with backoff
+// (1 s, 2 s, 5 s, 10 s, then every 30 s) and says so with `reconnecting` / `connected`
+// events, so the core stays up and the window shows "Reconnecting…".
 import { errorMessage } from "../errors.ts";
 import {
   Behavior,
@@ -31,6 +36,28 @@ import type { Model, ModelEvent } from "../core/model.ts";
 
 export const DEFAULT_LIVE_MODEL = "gemini-3.8-live";
 
+const NETWORK_CODES = /\b(ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH|EHOSTUNREACH|ENETDOWN|EPIPE|ECONNABORTED)\b/;
+
+/** A failure that is the network's fault (DNS, refused, reset, timeout), not the key's or the model's. */
+export function isNetworkError(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code;
+  if (typeof code === "string" && NETWORK_CODES.test(code)) return true;
+  const message = errorMessage(err);
+  return NETWORK_CODES.test(message) || /fetch failed|getaddrinfo|Unable to connect|socket connection was closed/i.test(message);
+}
+
+/** Backoff while the network is down: 1 s, 2 s, 5 s, 10 s, then every 30 s, for as long as it takes. */
+export const NETWORK_DELAYS_MS = [1000, 2000, 5000, 10_000, 30_000];
+export function networkRetryDelay(attempt: number, delays: number[] = NETWORK_DELAYS_MS): number {
+  return delays[Math.min(attempt, delays.length - 1)]!;
+}
+
+// Google closed the connection because nothing was sent for a while (no call, mic off).
+// Nothing is lost: connect again when there is something to send, not in a loop.
+const IDLE_CLOSE = /inactivity/i;
+// The resume handle is no good any more: the next connection must start a fresh session.
+const STALE_HANDLE = /not found|expired|already exists/i;
+
 /** The bits of a Live connection we use (what `ai.live.connect` resolves with). */
 export interface LiveSocket {
   sendRealtimeInput(params: LiveSendRealtimeInputParameters): void;
@@ -47,6 +74,8 @@ export type GeminiLiveOptions = {
   connect?: LiveConnect;
   /** Waits between reconnect attempts after a drop. Default [500, 2000, 5000] ms, then give up until the next send. */
   retryDelaysMs?: number[];
+  /** Waits between attempts while the network is down; the last repeats forever. Default NETWORK_DELAYS_MS. */
+  networkDelaysMs?: number[];
 } & (
   | {
       /** Read it from the environment (GEMINI_API_KEY). Never hard-code it. */
@@ -75,6 +104,7 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
       return ai.live.connect(params);
     });
   const retryDelaysMs = options.retryDelaysMs ?? [500, 2000, 5000];
+  const networkDelaysMs = options.networkDelaysMs ?? NETWORK_DELAYS_MS;
 
   return {
     async connect(onEvent, connectOptions) {
@@ -119,6 +149,16 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
       let handle: string | undefined; // the latest resumption handle
       let closing = false; // set while *we* close, so our own goodbye is not an error
       let reconnecting: Promise<void> | undefined;
+      // Cuts the current wait between network retries short (the window's Retry).
+      let wake: (() => void) | undefined;
+      const nap = (ms: number) =>
+        new Promise<void>((done) => {
+          const timer = setTimeout(done, ms);
+          wake = () => {
+            clearTimeout(timer);
+            done();
+          };
+        }).finally(() => (wake = undefined));
       // Input sent while there is no live connection, delivered once there is.
       let pending: ((socket: LiveSocket) => void)[] = [];
       // Which connection each tool call came from: its answer goes back there.
@@ -126,7 +166,7 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
 
       async function dial(): Promise<Link> {
         const link: Link = { open: true, retired: false };
-        link.socket = await open({
+        const socket = await open({
           model: options.model ?? DEFAULT_LIVE_MODEL,
           config: { ...config, sessionResumption: handle ? { handle } : {} },
           callbacks: {
@@ -145,15 +185,26 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
             onclose: (e) => {
               link.open = false;
               links.delete(link);
-              const planned = closing ? "we closed it" : link.retired ? "after a goAway handover" : "a drop";
+              const idle = IDLE_CLOSE.test(e.reason ?? "");
+              const planned = closing ? "we closed it" : link.retired ? "after a goAway handover" : idle ? "idle, reconnects on the next input" : "a drop";
               console.error(`live-agent: Gemini Live closed: ${e.code} ${e.reason || "(no reason)"} (${planned})`);
+              if (STALE_HANDLE.test(e.reason ?? "")) handle = undefined;
               if (closing || link.retired || link !== live) return;
               live = undefined;
+              // Idle: nothing was in flight, so nothing to report; the next send dials.
+              if (idle) return;
               onEvent({ type: "disconnected", message: `Gemini Live closed: ${e.code} ${e.reason}`.trim() });
               void reconnect();
             },
           },
         });
+        link.socket = socket;
+        // close() ran while this one was dialing: hang it up, never leave it running.
+        if (closing) {
+          link.open = false;
+          socket.close();
+          throw new Error("closed");
+        }
         links.add(link);
         return link;
       }
@@ -170,17 +221,31 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
       function reconnect(): Promise<void> {
         reconnecting ??= (async () => {
           let lastError: unknown;
-          for (let attempt = 0; attempt <= retryDelaysMs.length && !closing; attempt++) {
+          let offline = 0; // tries in a row that failed for the network
+          for (let attempt = 0; !closing; attempt++) {
             try {
               live = await dial();
+              if (offline) onEvent({ type: "connected" });
               for (const deliver of pending.splice(0)) deliver(live.socket!);
               return;
             } catch (err) {
+              if (closing) return;
               lastError = err;
+              if (isNetworkError(err)) {
+                // No network: keep going, slower and slower, for as long as it takes.
+                // Input that was waiting is old by the time it is back: drop it.
+                pending = [];
+                const wait = networkRetryDelay(offline++, networkDelaysMs);
+                console.error(`live-agent: no network (${errorMessage(err)}): retrying in ${wait / 1000}s`);
+                onEvent({ type: "reconnecting", attempt: offline, retryInMs: wait, message: errorMessage(err) });
+                await nap(wait);
+                continue;
+              }
               // A stale handle can be the problem: the next try starts a fresh session.
               if (attempt > 0) handle = undefined;
               const wait = retryDelaysMs[attempt];
-              if (wait !== undefined) await Bun.sleep(wait);
+              if (wait === undefined) break;
+              await Bun.sleep(wait);
             }
           }
           if (closing) return;
@@ -199,7 +264,14 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
         void reconnect();
       }
 
-      live = await dial();
+      // The first connection. With no network the session still opens: it keeps
+      // dialing in the background (reconnecting events) instead of failing the start.
+      try {
+        live = await dial();
+      } catch (err) {
+        if (!isNetworkError(err)) throw err;
+        void reconnect();
+      }
 
       return {
         sendText(text) {
@@ -210,7 +282,8 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
         },
         sendAudio(data, sampleRate) {
           // Mic audio while reconnecting is dropped, not queued: it is already old.
-          if (!live?.socket) return;
+          // But it does wake an idle-closed connection.
+          if (!live?.socket) return void reconnect();
           const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength); // Int16 little-endian
           live.socket.sendRealtimeInput({
             audio: { data: bytes.toString("base64"), mimeType: `audio/pcm;rate=${sampleRate}` },
@@ -235,8 +308,14 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
             ],
           });
         },
+        retryNow() {
+          // Waiting out a network backoff: try now. Nothing going on: dial now.
+          if (wake) wake();
+          else if (!live) void reconnect();
+        },
         async close() {
           closing = true;
+          wake?.();
           for (const link of links) link.socket?.close();
         },
       };

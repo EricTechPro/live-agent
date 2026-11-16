@@ -60,6 +60,8 @@ export interface CoreClient {
   pause(on: boolean): Promise<void>;
   /** Esc (ticket 37): stop the reply being spoken; the call stays on. The core sends `interrupted`. */
   stopReply(): Promise<void>;
+  /** Retry (ticket 40): no network, try to reach Gemini now instead of after the backoff. */
+  reconnect(): Promise<void>;
   /** The brain's three parts as a file tree (ticket 23). */
   brainTree(): Promise<BrainTree>;
   /** One note's text, read only. Rejects with the core's plain reason (outside the brain, gone). */
@@ -68,14 +70,39 @@ export interface CoreClient {
   pastChats(): Promise<PastChat[]>;
 }
 
-/** Wait for Rust to report the core is up. Rejects with the reason if it failed to start. */
-export async function waitForCore(): Promise<CoreInfo> {
+type CoreStatus = { state: "starting" | "ready" | "restarting" | "down"; info?: CoreInfo; reason?: string; attempt?: number; retryInMs?: number };
+
+/**
+ * Wait for Rust to report the core is up. Rejects with the reason only when the shell has
+ * given up restarting it (ticket 40); while it restarts, `onRestart` hears each try.
+ */
+export async function waitForCore(onRestart?: (attempt: number, retryInMs: number) => void): Promise<CoreInfo> {
+  let seen = 0;
   for (;;) {
-    const status = await invoke<{ state: "starting" | "ready" | "down"; info?: CoreInfo; reason?: string }>("core_status");
+    const status = await invoke<CoreStatus>("core_status");
     if (status.state === "ready" && status.info) return status.info;
     if (status.state === "down") throw new Error(status.reason ?? "the core stopped");
+    if (status.state === "restarting" && status.attempt !== seen) {
+      seen = status.attempt ?? 0;
+      onRestart?.(seen, status.retryInMs ?? 0);
+    }
     await new Promise((r) => setTimeout(r, 200));
   }
+}
+
+/** The window's Retry once the shell stopped restarting the core by itself (ticket 40). */
+export function restartCore(): Promise<void> {
+  return invoke<void>("restart_core");
+}
+
+/** The core died and the shell starts it again in `retryInMs` (ticket 40). */
+export function onCoreRestarting(cb: (r: { attempt: number; retryInMs: number; reason: string }) => void) {
+  return listen<{ attempt: number; retryInMs: number; reason: string }>("core-restarting", (e) => cb(e.payload));
+}
+
+/** A (re)started core is up at a new address (ticket 40). */
+export function onCoreReady(cb: (info: CoreInfo) => void) {
+  return listen<CoreInfo>("core-ready", (e) => cb(e.payload));
 }
 
 /** Does the core still need a Gemini key (first launch, ticket 19)? Ask before `connectCore`. */
@@ -198,7 +225,7 @@ export function setClickThrough(on: boolean): Promise<void> {
 /** Running inside the Tauri app (not a plain browser preview). */
 export const inTauri = () => "__TAURI_INTERNALS__" in window;
 
-/** Called once if the core process dies after starting. */
+/** The core process died and the shell gave up restarting it (ticket 40: Retry then). */
 export function onCoreDown(cb: (reason: string) => void) {
   return listen<string>("core-down", (e) => cb(e.payload));
 }
@@ -260,6 +287,10 @@ export function connectCore(info: CoreInfo): CoreClient {
     async stopReply() {
       const res = await fetch(`${info.url}/reply/stop`, { method: "POST", headers: auth });
       if (!res.ok) throw new Error(`core /reply/stop: ${res.status}`);
+    },
+    async reconnect() {
+      const res = await fetch(`${info.url}/reconnect`, { method: "POST", headers: auth });
+      if (!res.ok) throw new Error(`core /reconnect: ${res.status}`);
     },
     async answerCall(id, approve) {
       const res = await fetch(`${info.url}/approvals/${encodeURIComponent(id)}/${approve ? "approve" : "decline"}`, { method: "POST", headers: auth });

@@ -11,8 +11,8 @@ import { mountApprovals } from "./approvals-view.ts";
 import { mountBrainView } from "./brain-view.ts";
 import { mountChatView } from "./chat-view.ts";
 import {
-  connectCore, getSetup, inTauri, onCoreDown, onNewChat, onOpenPanel, onShowShortcuts, onToggleMini, overlayPoll, revealLog, setClickThrough, setTrayShown,
-  waitForCore, type CoreClient,
+  connectCore, getSetup, inTauri, onCoreDown, onCoreReady, onCoreRestarting, onNewChat, onOpenPanel, onShowShortcuts, onToggleMini, overlayPoll, restartCore,
+  revealLog, setClickThrough, setTrayShown, waitForCore, type CoreClient,
 } from "./core-client.ts";
 import { waveFor, QUIET } from "./orb-wave.ts";
 import { isNewChatKey, SHORTCUTS, SHORTCUTS_TITLE } from "./shortcuts.ts";
@@ -24,7 +24,7 @@ import { nextLayer, startLayer, type Layer, type LayerAction } from "./layers.ts
 import { mountLedOrb, type Mood } from "./led-orb.ts";
 import { nextOrb, orbStart, type Orb, type OrbInput } from "./orb-state.ts";
 import { addToTranscript, emptyTranscript, type Transcript } from "./transcript.ts";
-import { callView, showCallButtons, spaceAction, talkHint, type CallLook, type CallPhase, type CallView } from "./call-state.ts";
+import { callView, retryHint, showCallButtons, spaceAction, talkHint, type CallLook, type CallPhase, type CallView } from "./call-state.ts";
 import { addCaption, noCaptions, shownCaptions, type Captions } from "./captions.ts";
 import { spokenLang, WORDS, type Lang } from "./lang.ts";
 import { followMic } from "./mic-follow.ts";
@@ -44,6 +44,7 @@ const overlay = $("overlay");
 const dock = $("dock");
 const orbEl = $<HTMLButtonElement>("orb");
 const orbLabel = $("orb-label");
+const retryBtn = $<HTMLButtonElement>("orb-retry");
 const orbHint = $("orb-hint");
 const talkBtn = $<HTMLButtonElement>("talk");
 const muteBtn = $<HTMLButtonElement>("mute");
@@ -502,7 +503,9 @@ const LOOKS: Record<CallLook, { mood: Mood; tint: string }> = {
   speaking: { mood: "speak", tint: "140,206,255" },
   muted: { mood: "off", tint: "150,170,168" },
   ended: { mood: "off", tint: "150,170,168" },
-  offline: { mood: "off", tint: "255,150,130" },
+  // Ticket 40: calm teal while it comes back by itself; a muted amber once out of retries.
+  reconnecting: { mood: "idle", tint: "120,255,226" },
+  offline: { mood: "idle", tint: "222,182,112" },
 };
 const BUTTON_TIPS: Record<Lang, Record<"start" | "mute" | "unmute" | "hangup", string>> = {
   en: { start: "Start call", mute: "Mute", unmute: "Unmute", hangup: "Hang up" },
@@ -515,6 +518,8 @@ function render() {
   dock.dataset.look = v.look;
   orbEl.dataset.state = orb.state;
   orbLabel.textContent = v.label;
+  retryBtn.hidden = !v.retry;
+  if (v.retry) retryBtn.textContent = v.retry;
   pillEl.dataset.look = v.look;
   // The pill's quick actions follow the call buttons (pill.ts `pillActions`).
   pillList = pillActions(v.buttons);
@@ -533,10 +538,7 @@ function render() {
   pillHangupBtn.dataset.tip = BUTTON_TIPS[lang].hangup;
   pillHangupBtn.setAttribute("aria-label", BUTTON_TIPS[lang].hangup);
   if (pillOpen) placePillActions();
-  // The faint "or hold ⌃⌥" under Tap to talk, until push to talk has been used twice.
-  const hint = talkHint(v.look, lang, pttUses);
-  orbHint.hidden = !hint;
-  orbHint.textContent = hint ?? "";
+  renderHint();
   $("muted-badge").hidden = !v.mutedBadge;
   const tipsFor = BUTTON_TIPS[lang];
   talkBtn.hidden = !v.buttons.includes("start");
@@ -567,6 +569,29 @@ function render() {
   applyLang();
   updateControls();
 }
+/** The faint line under the label: "or hold ⌃⌥" until push to talk is learned, or when the next retry is (ticket 40). */
+function renderHint() {
+  const hint = retryHint(orb, performance.now(), lang) ?? talkHint(shown?.look ?? "starting", lang, pttUses);
+  if (orbHint.hidden !== !hint) orbHint.hidden = !hint;
+  if (orbHint.textContent !== (hint ?? "")) orbHint.textContent = hint ?? "";
+}
+/**
+ * Retry (ticket 40). The core gone (the shell stopped restarting it): start it again; it
+ * says `core-ready` and the window reconnects. Only the network gone: ask the core to try now.
+ */
+retryBtn.onclick = async () => {
+  try {
+    if (orb.coreDead || !coreRef) {
+      feedOrb({ type: "core.restarting", attempt: 1, retryInMs: 0 });
+      await restartCore();
+    } else {
+      await coreRef.reconnect();
+    }
+  } catch (err) {
+    feedOrb({ type: "core.down" });
+    showError(`retry: ${errorText(err)}`);
+  }
+};
 // One UI language (ticket 39): every static tooltip and label follows the language you last spoke.
 const UI_IDS: [string, UiKey][] = [
   ["hide", "hide"], ["grip", "move"], ["open-center", "menu"], ["orb-new-chat", "newChat"], ["new-chat", "newChat"], ["jobs-toggle", "jobs"],
@@ -773,6 +798,7 @@ function say(text: string) {
 setInterval(() => {
   renderCaptions();
   updateControls();
+  if (orb.retryAt !== undefined) renderHint(); // "retrying in 5s" counts down
   if (orb.heardAt !== undefined) feedOrb({ type: "tick" });
 }, 200);
 
@@ -964,21 +990,32 @@ async function boot() {
   void onShowShortcuts(() => showShortcuts(true)).catch(() => {});
   void onNewChat(() => void startNewChat()).catch(() => {});
   render();
+  // Ticket 40: the shell restarts a core that died. Until it is back the orb says
+  // Reconnecting…; once a new one is up, the page reloads to talk to its new address.
+  let booted = false;
+  void onCoreRestarting(({ attempt, retryInMs }) => feedOrb({ type: "core.restarting", attempt, retryInMs })).catch(() => {});
+  void onCoreReady(() => {
+    if (booted) location.reload();
+  }).catch(() => {});
   let core: CoreClient;
   try {
-    const info = await waitForCore();
+    const info = await waitForCore((attempt, retryInMs) => feedOrb({ type: "core.restarting", attempt, retryInMs }));
+    booted = true;
     // First launch (no config file) or no Gemini key yet: the setup wizard first.
     const status = await getSetup(info);
     core = status.needed || status.keyNeeded ? await runWizard(info, status) : connectCore(info);
   } catch (err) {
+    booted = true; // a Retry that brings the core up reloads the page
     feedOrb({ type: "core.down" });
-    say(`Core did not start: ${errorText(err)}`);
+    console.error(`core did not start: ${errorText(err)}`);
     return;
   }
   coreRef = core;
+  // The shell restarts a core that dies (onCoreRestarting above); core-down means it gave up.
+  void onCoreRestarting(() => void endCall()).catch(() => {});
   onCoreDown((reason) => {
     feedOrb({ type: "core.down" });
-    say(`Core stopped: ${reason}`);
+    console.error(`core stopped: ${reason}`);
     void endCall();
     talkBtn.disabled = true;
     sendBtn.disabled = true;
@@ -1083,6 +1120,10 @@ if (import.meta.env.DEV) {
     /** Minimise to the pill, or bring Jett back (tickets 38, 39). */
     __jettMini(on: boolean) {
       return setMini(on, false);
+    },
+    /** Feed the orb an input, e.g. a `connection` reconnecting event (ticket 40 screenshots). */
+    __jettOrb(input: OrbInput) {
+      feedOrb(input);
     },
     /** Open or close the pill's quick actions, as the poll's hover would. */
     __jettPillHover(on: boolean) {

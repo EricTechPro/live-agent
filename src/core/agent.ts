@@ -122,6 +122,8 @@ export interface AgentSession {
    * stream. The call and the mic stay on.
    */
   stopReply(): void;
+  /** No network (ticket 40): try to reach the model now instead of after the backoff (the window's Retry). */
+  reconnectNow(): void;
   /** Shift+Tab: Ask me -> Auto edits -> Bypass -> Ask me. Returns the new mode. */
   cycleMode(): SafetyMode;
   /** The setup wizard (the window's click-through setup). */
@@ -191,6 +193,8 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   let closed = false;
   // The window's Pause: no voice out, no mic in, same chat.
   let paused = false;
+  /** No network (ticket 40): the model is out of reach until a `connected`. Typed turns end at once. */
+  let offline = false;
   /** Esc stopped the reply (ticket 37): drop its voice until the user speaks or the turn ends. */
   let silenced = false;
 
@@ -349,6 +353,18 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       case "error":
         emit({ type: "error", message: event.message });
         break;
+      case "reconnecting":
+        offline = true;
+        emit({ type: "connection", state: "reconnecting", attempt: event.attempt, retryInMs: event.retryInMs, message: event.message });
+        // Same as a drop for the turn in flight: nothing more will come for it.
+        toolCalls.forgetConnection("the connection to the model dropped");
+        if (turn) turn.awaiting = turn.running = 0;
+        finishTurnIfOver();
+        break;
+      case "connected":
+        offline = false;
+        emit({ type: "connection", state: "connected" });
+        break;
       case "disconnected":
         // Whatever the model owed us will never come. End the turn now (a tool
         // still running finishes on its own) so nothing waits forever.
@@ -366,6 +382,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   let connection = 0;
   function connectModel() {
     const mine = ++connection;
+    offline = false; // a fresh connection says `reconnecting` again if the network is still down
     return options.model.connect((event) => mine === connection && onModelEvent(event), {
       tools: tools.map(({ name, description, parameters }) => ({ name, description, parameters })),
       voice: config.voice,
@@ -446,6 +463,11 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         // approved, so the "yes" text itself is not sent.
         if (approvals.hear(text)) return;
         approvals.closeTurn(true);
+        if (offline) {
+          // Ticket 40: say why at once instead of waiting on a model nobody can reach.
+          emit({ type: "error", message: "No network: Jett is reconnecting to Gemini. Try again in a moment." });
+          return finishTurnIfOver();
+        }
         typed.awaiting++;
         modelSession.sendText(text);
       });
@@ -461,6 +483,9 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       emit({ type: "paused", paused: on });
     },
     paused: () => paused,
+    reconnectNow() {
+      modelSession.retryNow?.();
+    },
     stopReply() {
       silenced = true;
       playAudio({ type: "clear" });

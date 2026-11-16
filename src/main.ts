@@ -13,7 +13,7 @@
 // watchdog) even if this process is killed hard.
 import { startApp, disposeNative } from "./app.ts";
 import { loadConfig } from "./config/index.ts";
-import { geminiLiveModel } from "./models/gemini-live.ts";
+import { geminiLiveModel, isNetworkError, networkRetryDelay } from "./models/gemini-live.ts";
 import { geminiTidyModel } from "./models/gemini-tidy.ts";
 import { tidiesSettled } from "./brain/tidy.ts";
 import { existsSync } from "node:fs";
@@ -54,7 +54,10 @@ if (coreLog) captureConsole(coreLog);
 if (!apiKey) console.error("live-agent: no Gemini key yet: waiting for it in the window.");
 
 const config = loadConfig();
-const app = await startApp({
+// Ticket 40: a network failure while starting (the Mac just woke, Wi-Fi not back yet)
+// must not end the core. The model adapter already retries on its own; this is the
+// net under it: try the whole start again with backoff instead of exiting.
+const startOnce = () => startApp({
   config,
   geminiApiKey: apiKey,
   // The key pasted in the window: checked with Google, saved to <home>/.env (600), never logged.
@@ -76,7 +79,20 @@ const app = await startApp({
   tools: existsSync(TOOLS_DIR) ? undefined : bundledTools,
   // Ten quiet minutes end a chat on their own (note + tidy), like pressing New chat.
   chatIdleMs: 10 * 60_000,
-}).catch(async (err: unknown) => {
+});
+async function startWithRetry() {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await startOnce();
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+      const wait = networkRetryDelay(attempt);
+      console.error(`live-agent: no network while starting (${errorMessage(err)}): retrying in ${wait / 1000}s`);
+      await Bun.sleep(wait);
+    }
+  }
+}
+const app = await startWithRetry().catch(async (err: unknown) => {
   // startApp already stopped LiveKit; say what broke in one line.
   console.error(`live-agent: could not start: ${errorMessage(err)}`);
   await disposeNative();
