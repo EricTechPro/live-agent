@@ -66,7 +66,9 @@ function workRules(brainPath?: string): string {
       "For a flow or structure with many parts, put a diagram mark (Mermaid source) on the board instead of many boxes. " +
       "To change what is already drawn (colour, words, position, erase, clear), call edit_canvas with the mark ids.",
     "- You can see the user's screen only by calling look; call it before answering about anything on screen. " +
-      "Their words may come with a [Screen: ...] line (front app, window, page, cursor): use it, never read it out.",
+      "Their words may come with a [Screen: ...] line (front app, window, page, cursor): use it, never read it out. " +
+      "A [Circled: ...] line means the image just before it is what they circled: that circle is the subject and beats " +
+      "the app or window name. Answer about what is inside it (\"what's this?\" = the circled thing) and do not call look for it.",
     "- The safety mode decides if the user is asked first; if the call is declined or blocked, say so in one line.",
   ].join("\n");
 }

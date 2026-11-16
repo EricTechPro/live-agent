@@ -3,7 +3,7 @@
 // The helper is a fake `Eyes`; the model is scripted and logs every input it gets.
 import { describe, expect, test } from "bun:test";
 import type { LiveConnectParameters, LiveSendRealtimeInputParameters } from "@google/genai";
-import { startSession } from "../src/core/agent.ts";
+import { isVoice, startSession } from "../src/core/agent.ts";
 import type { ModelInput } from "../src/core/model.ts";
 import { ScreenPermissionError, type Eyes, type ShotOptions } from "../src/screen/eyes.ts";
 import type { Pt } from "../src/screen/geometry.ts";
@@ -121,8 +121,10 @@ describe("every turn carries the front app as text", () => {
   });
 });
 
+const loud = () => Int16Array.from({ length: 160 }, (_, k) => (k % 2 ? 9000 : -9000));
+
 describe("circling while holding Ctrl+Option", () => {
-  test("a closed loop sends the padded crop with the ink, where it is, and the cursor", async () => {
+  test("the crop goes in as its own image the moment the loop closes; release adds only the circle's label", async () => {
     const inputs: ModelInput[] = [];
     const seen: string[] = [];
     const model = scriptedModel([[{ type: "text", text: "That's a pig." }]], { inputs });
@@ -130,57 +132,76 @@ describe("circling while holding Ctrl+Option", () => {
     const session = await startSession({ model, tools: [], eyes, chatEndNote: false });
     session.onEvent((e) => seen.push(e.type));
 
+    // Keys still held: the window saw the ink close.
+    expect(await session.screen!.circle(circlePath)).toEqual({ circled: true });
+    expect(inputs.map((i) => i.type)).toEqual(["image"]);
+    // The loop's box (150..250, 110..190) padded by 48 and grown to 320 x 220, kept on screen.
+    expect(shots).toEqual([{ rect: { x: 40, y: 40, w: 320, h: 220 }, ink: [circlePath] }]);
+
+    const releasedAt = performance.now();
     const out = await session.screen!.release({ stroke: circlePath, cursor: { x: 210, y: 160 }, holdMs: 1800 });
 
     expect(out).toMatchObject({ sent: true, circled: true });
-    // The loop's box (150..250, 110..190) padded by 48 and grown to 320 x 220, kept on screen.
-    expect(shots).toHaveLength(1);
-    expect(shots[0]!.rect).toEqual({ x: 40, y: 40, w: 320, h: 220 });
-    expect(shots[0]!.ink).toHaveLength(1);
+    // The label waits until the frame has had its 1.5 s to land.
+    expect(performance.now() - releasedAt).toBeGreaterThan(1400);
+    expect(shots).toHaveLength(1); // not captured twice
     expect(inputs.map((i) => i.type)).toEqual(["image", "text"]);
     const text = (inputs[1] as { text: string }).text;
-    expect(text).toContain("I circled something at the top left of the screen.");
-    expect(text).toContain("cursor at (210, 160)");
-    expect(text).toContain("front app Google Chrome");
+    expect(text).toStartWith("[Circled: the image just sent is the region the user just circled (at the top left of the screen)");
+    expect(text).toContain("Answer about what is inside the circle");
+    expect(text).toContain("(210, 160)");
+    // The window title would pull the answer away from the circle: it stays out of this turn.
+    expect(text).not.toContain("Google Chrome");
+    expect(text).not.toContain("Wikipedia");
     await Bun.sleep(5);
     expect(seen).toContain("screen.shot");
     expect(seen).toContain("turn.done");
     await session.close();
   });
 
-  test("an open stroke with no words sends nothing (an accidental hold never makes Jett talk)", async () => {
+  test("a circle the window never reported is still sent on release", async () => {
     const inputs: ModelInput[] = [];
     const { eyes, shots } = fakeEyes();
-    const session = await startSession({ model: scriptedModel([], { inputs }), tools: [], eyes, chatEndNote: false });
+    const session = await startSession({ model: scriptedModel([[{ type: "text", text: "ok" }]], { inputs }), tools: [], eyes, chatEndNote: false, screenFrameGapMs: 0 });
+    const out = await session.screen!.release({ stroke: circlePath, cursor: { x: 210, y: 160 }, holdMs: 1800 });
+    expect(out).toMatchObject({ sent: true, circled: true });
+    expect(shots).toHaveLength(1);
+    expect(inputs.map((i) => i.type)).toEqual(["image", "text"]);
+    await session.close();
+  });
 
+  test("an open stroke with no voice sends nothing (an accidental hold never makes Jett talk)", async () => {
+    const inputs: ModelInput[] = [];
+    const { eyes, shots } = fakeEyes();
+    const session = await startSession({ model: scriptedModel([[]], { inputs }), tools: [], eyes, chatEndNote: false });
+    session.sendAudio(new Int16Array(160), 16000); // a held key, a quiet room
+
+    expect(await session.screen!.circle(threeQuarters)).toEqual({ circled: false });
     const out = await session.screen!.release({ stroke: threeQuarters, cursor: { x: 700, y: 500 }, holdMs: 900 });
 
     expect(out).toEqual({ sent: false, circled: false });
     expect(shots).toEqual([]);
-    expect(inputs).toEqual([]);
+    expect(inputs.filter((i) => i.type !== "audio")).toEqual([]);
     await session.close();
   });
 
-  test("talking with no circle: the turn gets the context line and the cursor only", async () => {
+  test("talking with no circle: the context line goes in on release even before any transcript", async () => {
     const inputs: ModelInput[] = [];
-    // The user's words arrive (input transcription), then the keys are let go.
-    const model = scriptedModel(
-      [
-        [{ type: "user.text", text: "what's under my cursor?" }],
-        [{ type: "text", text: "The Pig article's infobox." }],
-      ],
-      { inputs },
-    );
+    // The mic carries the question; no transcription has arrived yet when the keys come up.
+    const model = scriptedModel([[], [{ type: "text", text: "The Pig article's infobox." }]], { inputs });
     const { eyes, shots } = fakeEyes();
     const session = await startSession({ model, tools: [], eyes, chatEndNote: false });
-    session.sendAudio(new Int16Array(160), 16000); // the spoken question
-    await Bun.sleep(5);
+    session.sendAudio(loud(), 16000);
 
+    const started = performance.now();
     const out = await session.screen!.release({ stroke: [{ x: 900, y: 300 }], cursor: { x: 900, y: 300 }, holdMs: 1500 });
 
+    expect(performance.now() - started).toBeLessThan(200); // no waiting on a transcript
     expect(out).toMatchObject({ sent: true, circled: false });
     expect(shots).toEqual([]);
-    expect((inputs.at(-1) as { text: string }).text).toContain("cursor at (900, 300)");
+    const text = (inputs.at(-1) as { text: string }).text;
+    expect(text).toContain('front app Google Chrome, window "Pigs - Wikipedia"');
+    expect(text).toContain("cursor at (900, 300)");
     await session.close();
   });
 });
@@ -201,4 +222,10 @@ describe("the Gemini Live adapter", () => {
     expect(sent).toEqual([{ video: { data: Buffer.from(JPEG).toString("base64"), mimeType: "image/jpeg" } }]);
     await session.close();
   });
+});
+
+test("voice is told from a quiet mic", () => {
+  expect(isVoice(new Int16Array(320))).toBe(false);
+  expect(isVoice(Int16Array.from({ length: 320 }, () => 300))).toBe(false);
+  expect(isVoice(loud())).toBe(true);
 });

@@ -17,11 +17,17 @@ export interface ScreenDeps {
   sendText(text: string): void;
   emit(event: AgentEvent): void;
   /**
-   * Did the user say anything since `since` (ms, Date.now())? Waits up to `waitMs` for the
-   * transcription to arrive. A hold with no words and no circle sends nothing, so an
-   * accidental Ctrl+Option never makes Jett talk.
+   * Did the user talk since `since` (ms, Date.now())? Read from the mic audio itself (it reaches
+   * the core while the keys are held), so it never waits on a transcript. A hold with no voice
+   * and no circle sends nothing, so an accidental Ctrl+Option never makes Jett talk.
    */
-  heardSince(since: number, waitMs: number): Promise<boolean>;
+  spokeSince(since: number): boolean;
+  /**
+   * Least time between the circled crop going in and its label (ms). Default 1500. Why: Live
+   * takes a frame in on its own clock; text sent right behind it is answered before the image
+   * is seen (a real run said "I can't see that clearly" with no gap, named the photo with 2 s).
+   */
+  frameGapMs?: number;
 }
 
 export interface ReleaseInput {
@@ -36,9 +42,24 @@ export interface ReleaseInput {
 export interface Screen {
   look(): Promise<Record<string, unknown>>;
   note(cursor?: Pt): Promise<string>;
+  /**
+   * The ink closed into a loop while the keys are still held: send the crop now, as its own
+   * image, so it is in before the spoken question ends. Once per hold; `release` does it if
+   * this was never called.
+   */
+  circle(stroke: Pt[]): Promise<{ circled: boolean }>;
   release(input: ReleaseInput): Promise<{ sent: boolean; circled: boolean; text?: string }>;
   permission(): Promise<boolean>;
   requestPermission(): Promise<boolean>;
+}
+
+/** The words that go with a circled crop. No app or window: the circle is the subject. */
+export function circleLabel(where: string, cursor?: Pt): string {
+  const at = cursor ? ` The pointer is at (${Math.round(cursor.x)}, ${Math.round(cursor.y)}).` : "";
+  return (
+    `[Circled: the image just sent is the region the user just circled (${where.replace(/^I circled something /, "").replace(/\.$/, "")}), ` +
+    `with their teal pen mark on it. Answer about what is inside the circle, not about the app or window.${at}]`
+  );
 }
 
 /** "[Screen: Google Chrome, window "Pricing", https://x.com · cursor at (812, 440)]" */
@@ -71,6 +92,27 @@ export function createScreen(deps: ScreenDeps): Screen {
 
   const state = () => eyes.state().catch(() => null);
 
+  // The circle sent in the hold now going on: when, and the sentence saying where.
+  let sent: { at: number; where: string; imageAt: number; done: Promise<void> } | undefined;
+  const frameGapMs = deps.frameGapMs ?? 1500;
+
+  function circle(stroke: Pt[]): Promise<{ circled: boolean }> {
+    const loop = findLoop(stroke);
+    if (!loop) return Promise.resolve({ circled: false });
+    const mine = { at: Date.now(), where: "", imageAt: 0, done: Promise.resolve() };
+    sent = mine;
+    mine.done = guarded(async () => {
+      const now = await state();
+      if (!now) throw new Error("could not read the screen layout");
+      const shot = await eyes.shot({ rect: inkCrop(loop, now.display), ink: [stroke] });
+      deps.sendImage(shot.jpeg, "image/jpeg");
+      mine.imageAt = Date.now();
+      mine.where = circleSentence(loop, now.display);
+      emit({ type: "screen.shot", reason: "circle", width: shot.map.px.w, height: shot.map.px.h, map: shot.map, text: mine.where });
+    });
+    return mine.done.then(() => ({ circled: true }));
+  }
+
   return {
     async note(cursor) {
       return contextLine(await state(), cursor);
@@ -88,28 +130,28 @@ export function createScreen(deps: ScreenDeps): Screen {
         };
       }),
 
+    circle,
+
     async release({ stroke = [], cursor, holdMs = 0 }) {
-      const loop = findLoop(stroke);
-      if (!loop && !(await deps.heardSince(Date.now() - holdMs - 500, 1500))) return { sent: false, circled: false };
-      const now = await state();
-      const lines: string[] = [];
-      if (loop && now) {
-        const rect = inkCrop(loop, now.display);
-        await guarded(async () => {
-          // The ink as drawn (run-up and all), framed on the loop.
-          const shot = await eyes.shot({ rect, ink: [stroke] });
-          deps.sendImage(shot.jpeg, "image/jpeg");
-          const text = circleSentence(loop, now.display);
-          emit({ type: "screen.shot", reason: "circle", width: shot.map.px.w, height: shot.map.px.h, map: shot.map, text });
-          lines.push(`${text} The image I just sent is that area with my pen mark drawn on it in teal. That's what I mean.`);
-        });
+      const holdStart = Date.now() - holdMs - 300;
+      // The window sends the circle as soon as it closes; if it did not, do it now.
+      if (!(sent && sent.at >= holdStart)) await circle(stroke);
+      const mine = sent && sent.at >= holdStart ? sent : undefined;
+      sent = undefined;
+      if (mine) {
+        await mine.done;
+        const wait = mine.imageAt + frameGapMs - Date.now();
+        if (wait > 0) await Bun.sleep(wait);
+        // A circle turn carries only the circle's label: app and window would pull the answer away.
+        const text = circleLabel(mine.where, cursor);
+        deps.sendText(text);
+        return { sent: true, circled: true, text };
       }
-      const line = contextLine(now, cursor);
-      if (line) lines.push(line);
-      if (!lines.length) return { sent: false, circled: !!loop };
-      const text = lines.join("\n");
+      if (!deps.spokeSince(holdStart)) return { sent: false, circled: false };
+      const text = contextLine(await state(), cursor);
+      if (!text) return { sent: false, circled: false };
       deps.sendText(text);
-      return { sent: true, circled: !!loop, text };
+      return { sent: true, circled: false, text };
     },
 
     permission: () => eyes.permission(),

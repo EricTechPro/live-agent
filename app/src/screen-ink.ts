@@ -4,8 +4,9 @@
 //
 // While talking (Ctrl+Option held), the pointer path is drawn in teal on a see-through layer,
 // no clicking. A stroke that closes into a loop glows; loose lines just fade. On release the
-// whole path goes to the core (POST /screen/release), which decides again which part is a
-// loop (src/screen/geometry.ts, the same code) and sends the circled crop to the model.
+// The moment the ink closes, the path goes to the core (POST /screen/circle), which checks the
+// loop with the same code (src/screen/geometry.ts) and sends the circled crop to the model.
+// On release, POST /screen/release adds the words for the turn.
 import { invoke } from "@tauri-apps/api/core";
 import type { AgentEvent } from "../../src/core/events.ts";
 import { findLoop, type Pt } from "../../src/screen/geometry.ts";
@@ -75,7 +76,11 @@ export function createScreenInk(info: CoreInfo): ScreenInk {
     const last = stroke.at(-1);
     if (last && Math.hypot(at.x - last.x, at.y - last.y) < MIN_STEP) return;
     stroke.push({ x: at.x, y: at.y });
-    if (!closed && stroke.length >= 8) closed = !!findLoop(stroke);
+    if (!closed && stroke.length >= 8 && findLoop(stroke)) {
+      closed = true;
+      // Send the crop now, while the question is still being spoken, so it is in before it ends.
+      void fetch(`${info.url}/screen/circle`, { method: "POST", headers: auth, body: JSON.stringify({ stroke }) }).catch(() => {});
+    }
     draw();
   }
 

@@ -43,6 +43,13 @@ import { systemInstruction } from "./tone.ts";
 import { newTurn, turnIsOver, type Turn } from "./turn.ts";
 import type { Eyes } from "../screen/eyes.ts";
 import { createScreen, type ReleaseInput, type Screen } from "../screen/service.ts";
+import type { Pt } from "../screen/geometry.ts";
+
+/** A mic chunk with someone talking in it (not room hum): any sample past ~8% of full scale. */
+export function isVoice(data: Int16Array, threshold = 2600): boolean {
+  for (let k = 0; k < data.length; k++) if (Math.abs(data[k]!) > threshold) return true;
+  return false;
+}
 
 export interface SessionOptions {
   /** Which model to talk to: `geminiLiveModel(...)` for real, `scriptedModel(...)` in tests. */
@@ -82,6 +89,8 @@ export interface SessionOptions {
    * carry the front app and window as text, and `screenRelease` sends circles. Unset: no screen.
    */
   eyes?: Eyes;
+  /** Least gap between a circled crop and its label (ms, src/screen/service.ts). Tests set 0. */
+  screenFrameGapMs?: number;
 }
 
 /** What `onAudio` hears: a chunk of the model's voice, or "drop what you queued" (interrupted). */
@@ -135,7 +144,7 @@ export interface AgentSession {
    * Screen awareness. `release`: Ctrl+Option was let go; a closed loop in `stroke` sends the
    * circled crop, and the turn gets the front app and cursor as text. Undefined without eyes.
    */
-  screen?: Pick<Screen, "release" | "permission" | "requestPermission">;
+  screen?: Pick<Screen, "circle" | "release" | "permission" | "requestPermission">;
   /** Shift+Tab: Ask me -> Auto edits -> Bypass -> Ask me. Returns the new mode. */
   cycleMode(): SafetyMode;
   /** The setup wizard (the window's click-through setup). */
@@ -220,31 +229,17 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   });
   // The sketch canvas's marks (tickets 31, 33). A new chat starts a clean board.
   const canvas = createBoard(emit);
-  // Jett's eyes (src/screen). `lastHeardAt`: when the user's words last came in, so a
-  // Ctrl+Option hold with no words and no circle sends nothing.
-  let lastHeardAt = 0;
-  const heardWaiters = new Set<() => void>();
+  // Jett's eyes (src/screen). `lastVoiceAt`: when the mic last carried a voice (or a
+  // transcript came in), so a Ctrl+Option hold with no voice and no circle sends nothing.
+  let lastVoiceAt = 0;
   const screen: Screen | undefined = options.eyes
     ? createScreen({
         eyes: options.eyes,
         emit,
         sendImage: (data, mimeType) => modelSession.sendImage?.(data, mimeType),
         sendText: (text) => modelSession.sendText(text),
-        heardSince: (since, waitMs) =>
-          new Promise((done) => {
-            if (lastHeardAt >= since) return done(true);
-            const wake = () => {
-              if (lastHeardAt < since) return;
-              clearTimeout(timer);
-              heardWaiters.delete(wake);
-              done(true);
-            };
-            const timer = setTimeout(() => {
-              heardWaiters.delete(wake);
-              done(false);
-            }, waitMs);
-            heardWaiters.add(wake);
-          }),
+        spokeSince: (since) => lastVoiceAt >= since,
+        frameGapMs: options.screenFrameGapMs,
       })
     : undefined;
   const toolCalls = createToolCalls({
@@ -353,8 +348,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         silenced = false;
         const voice = openVoiceTurn();
         voice.heard += event.text;
-        lastHeardAt = Date.now();
-        for (const wake of [...heardWaiters]) wake();
+        lastVoiceAt = Date.now();
         emit({ type: "transcript", role: "user", text: event.text });
         // A spoken yes approves like a typed one. Why at the first match (not at
         // turn end): "yes" leads the sentence, and the model is already replying.
@@ -520,6 +514,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     },
     sendAudio(data, sampleRate) {
       if (paused) return;
+      if (screen && isVoice(data)) lastVoiceAt = Date.now();
       modelSession.sendAudio(data, sampleRate);
     },
     setPaused(on) {
@@ -533,6 +528,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       modelSession.retryNow?.();
     },
     screen: screen && {
+      circle: (stroke: Pt[]) => screen.circle(stroke),
       release: (input: ReleaseInput) => screen.release(input),
       permission: () => screen.permission(),
       requestPermission: () => screen.requestPermission(),

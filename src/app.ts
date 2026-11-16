@@ -44,6 +44,8 @@
 //   Screen awareness (needs `eyes`; 404 { error } without them):
 //   POST /screen/release -> { stroke?: [{x,y}], cursor?: {x,y}, holdMs? } in (global points), { sent, circled }
 //                     out: Ctrl+Option was let go; a closed loop sends the circled crop with the ink
+//   POST /screen/circle -> { stroke } in, { circled }: the ink just closed into a loop (keys still
+//                     held): the circled crop goes to the model now, before the question ends
 //   GET  /screen/permission -> { granted }: is Screen Recording on for Jett?
 //   POST /screen/permission -> { granted }: ask macOS for it and open the Settings pane
 //
@@ -125,6 +127,11 @@ function corsHeaders(req: Request): Record<string, string> {
 }
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
+/** A {x, y} point from a request body, or undefined. */
+const toPt = (v: unknown): Pt | undefined =>
+  v && typeof v === "object" && Number.isFinite((v as Pt).x) && Number.isFinite((v as Pt).y)
+    ? { x: (v as Pt).x, y: (v as Pt).y }
+    : undefined;
 // A command the core refused right now (e.g. a turn is already in progress).
 const refused = (err: unknown) => json({ error: errorMessage(err) }, 409);
 const readBody = async (req: Request): Promise<Record<string, unknown>> =>
@@ -287,14 +294,22 @@ export async function startApp(options: AppOptions): Promise<App> {
       async "POST /screen/release"({ session }, req) {
         if (!session.screen) return json({ error: "no screen helper" }, 404);
         const body = await readBody(req);
-        const pt = (v: unknown) =>
-          v && typeof v === "object" && Number.isFinite((v as Pt).x) && Number.isFinite((v as Pt).y)
-            ? { x: (v as Pt).x, y: (v as Pt).y }
-            : undefined;
+        const pt = toPt;
         const stroke = Array.isArray(body.stroke) ? body.stroke.slice(0, 2000).map(pt).filter((p): p is Pt => !!p) : [];
         const holdMs = typeof body.holdMs === "number" && body.holdMs > 0 ? Math.min(body.holdMs, 120_000) : 0;
         try {
           return json(await session.screen.release({ stroke, cursor: pt(body.cursor), holdMs }));
+        } catch (err) {
+          return json({ error: errorMessage(err) }, 500);
+        }
+      },
+
+      async "POST /screen/circle"({ session }, req) {
+        if (!session.screen) return json({ error: "no screen helper" }, 404);
+        const body = await readBody(req);
+        const stroke = Array.isArray(body.stroke) ? body.stroke.slice(0, 2000).map(toPt).filter((p): p is Pt => !!p) : [];
+        try {
+          return json(await session.screen.circle(stroke));
         } catch (err) {
           return json({ error: errorMessage(err) }, 500);
         }

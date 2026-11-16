@@ -12,7 +12,8 @@ export default defineTool<Record<string, never>>({
     "Take a screenshot of the user's screen and see it. Call it before answering anything about what is on " +
     "the screen ('what's this', 'what am I looking at', 'where is the button', 'read this', 'explain this page'). " +
     "The screenshot arrives as an image right after you call it; answer from that image. Never guess what is on " +
-    "the screen without looking. If the user circled something, the circled crop was already sent with their words.",
+    "the screen without looking. Do not call it when the user circled something: the circled crop was already sent, " +
+    "so answer about what is inside the circle.",
   risk: "read",
   parameters: { type: "object", properties: {} },
   async run(_args, { screen }) {
