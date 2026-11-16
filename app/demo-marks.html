@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jett screen marks demo</title>
+    <!-- Dev only (slice 4): screen marks over a full-screen app backdrop, with no Gemini and no core.
+         Open http://localhost:1420/demo-marks.html on the Vite dev server. Not part of the app build.
+         The backdrop stands in for a screenshot of a real app; each mark's rect is measured from it
+         the way the locator measures the real screen, and its words are the "texts" a chip avoids. -->
+    <link rel="stylesheet" href="/src/pixel.css" />
+    <link rel="stylesheet" href="/src/sketch.css" />
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; }
+      body { background: #0f0f10; color: #f1f1f1; font: 14px/1.5 -apple-system, "Helvetica Neue", Arial, sans-serif; }
+      .app { position: fixed; inset: 0; display: grid; grid-template-columns: 1fr 360px; }
+      .top { position: fixed; left: 0; right: 0; top: 0; height: 52px; display: flex; align-items: center; gap: 18px; padding: 0 20px; background: #161617; border-bottom: 1px solid #262628; }
+      .logo { font-weight: 800; letter-spacing: -.5px; font-size: 18px; }
+      .search { flex: 0 1 520px; height: 32px; border-radius: 16px; background: #222; border: 1px solid #333; color: #999; display: flex; align-items: center; padding: 0 14px; }
+      main { padding: 72px 28px 20px 28px; overflow: hidden; }
+      .video { width: 100%; max-width: 900px; aspect-ratio: 16 / 9; border-radius: 12px; background: radial-gradient(circle at 40% 45%, #2d6b66, #0c2a2a 55%, #050b0c); position: relative; }
+      .video b { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 70px; height: 70px; border-radius: 50%; background: rgba(255,255,255,.14); }
+      h1 { font-size: 20px; margin: 14px 0 10px; max-width: 900px; }
+      .row { display: flex; align-items: center; gap: 12px; max-width: 900px; }
+      .avatar { width: 40px; height: 40px; border-radius: 50%; background: #3a7; }
+      .chan b { display: block; } .chan span { color: #aaa; font-size: 12px; }
+      .sub { margin-left: 8px; background: #f1f1f1; color: #0f0f0f; border: 0; border-radius: 18px; padding: 9px 16px; font-weight: 600; font-size: 14px; }
+      .acts { margin-left: auto; display: flex; gap: 8px; }
+      .acts span { background: #272727; border-radius: 18px; padding: 8px 14px; font-size: 13px; }
+      .desc { margin-top: 14px; max-width: 900px; background: #1f1f1f; border-radius: 12px; padding: 12px 14px; color: #ddd; }
+      .desc p { margin: 0 0 6px; }
+      aside { background: #18181a; border-left: 1px solid #2a2a2c; padding: 70px 18px 18px; }
+      aside h3 { margin: 0 0 12px; font-size: 13px; color: #9ad; letter-spacing: .4px; }
+      .tabs { display: flex; gap: 6px; margin-bottom: 16px; } .tabs span { padding: 6px 10px; border-radius: 6px; background: #232326; font-size: 12px; }
+      .tabs span:first-child { background: #2e3a3c; }
+      .field { display: grid; grid-template-columns: 90px 1fr 64px; align-items: center; gap: 10px; margin: 12px 0; font-size: 13px; color: #cfcfcf; }
+      .slider { height: 4px; background: #3a3a3e; border-radius: 2px; position: relative; } .slider i { position: absolute; left: 30%; top: -5px; width: 14px; height: 14px; border-radius: 50%; background: #ddd; }
+      .num { background: #232326; border: 1px solid #333; border-radius: 6px; padding: 4px 8px; text-align: right; font-size: 12px; }
+      .up { margin-top: 18px; color: #aaa; font-size: 12px; }
+      .card2 { display: flex; gap: 10px; margin: 10px 0; } .card2 i { width: 120px; height: 68px; border-radius: 8px; background: #2a3036; flex: none; } .card2 span { font-size: 12px; color: #ccc; }
+      #stage { position: fixed; inset: 0; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <div class="top" aria-hidden="true"><span class="logo">▶ VidTube</span><span class="search">Search</span></div>
+    <div class="app" aria-hidden="true">
+      <main>
+        <div class="video"><b></b></div>
+        <h1><span id="title">I built a Jarvis that draws on my screen while it talks</span></h1>
+        <div class="row">
+          <div class="avatar"></div>
+          <div class="chan"><b id="channel">Eric Tech</b><span>182K subscribers</span></div>
+          <button class="sub" id="subscribe">Subscribe</button>
+          <div class="acts"><span>👍 4.1K</span><span>Share</span><span id="download">Download</span><span>···</span></div>
+        </div>
+        <div class="desc">
+          <p><b>96K views · 2 days ago</b></p>
+          <p>Jett is a desktop agent built with <span id="gemini">Gemini Live</span>. It hears you, sees your screen when you ask, and points at the real buttons.</p>
+          <p>Chapters: 0:00 intro · 1:10 circle to ask · 1:19 find the controls · 1:41 explain this page</p>
+        </div>
+      </main>
+      <aside>
+        <div class="tabs"><span>Video</span><span>Animation</span><span>Adjust</span></div>
+        <h3>TRANSFORM</h3>
+        <div class="field"><span>Scale</span><div class="slider"><i></i></div><span class="num" id="scale">100%</span></div>
+        <div class="field"><span>Position</span><span class="num">X 0</span><span class="num">Y 0</span></div>
+        <div class="field"><span>Rotate</span><span></span><span class="num">0.00°</span></div>
+        <div class="up">Up next</div>
+        <div class="card2"><i></i><span>Claude Code in 10 minutes</span></div>
+        <div class="card2"><i></i><span>Build an AI agent with tools</span></div>
+      </aside>
+    </div>
+    <section id="stage" class="stage" aria-label="Drawing"></section>
+    <script type="module" src="/src/demo-marks.ts"></script>
+  </body>
+</html>
