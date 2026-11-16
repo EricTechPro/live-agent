@@ -73,6 +73,22 @@ test("a move keeps the mark's shape: a box moves its corner, an arrow moves both
   await s.close();
 });
 
+test("a relative move (dx / dy) shifts a loose mark by that much, an arrow's ends together, clamped onto the board", async () => {
+  const { s, turns } = await afterSketch({ edits: [{ id: "p1", dy: 50 }, { id: "p3", dx: -40, dy: 10 }, { id: "p4", dx: 500 }] });
+  const marks = (canvasEvents(turns[0]!) as EventOf<"canvas.edit">[]).map((e) => e.mark);
+  expect(marks[0]).toMatchObject({ id: "p1", x: 40, y: 250, w: 200, h: 100 });
+  expect(marks[1]).toMatchObject({ id: "p3", from: { x: 200, y: 260 }, to: { x: 360, y: 260 } });
+  expect(marks[2]).toMatchObject({ id: "p4", x: 1000, y: 100 });
+  await s.close();
+});
+
+test("relative moves add up across turns", async () => {
+  const { s, turns } = await afterSketch({ edits: [{ id: "p2", dx: 30 }] }, { edits: [{ id: "p2", dx: 30, dy: -20 }] });
+  const [second] = canvasEvents(turns[1]!) as EventOf<"canvas.edit">[];
+  expect(second!.mark).toMatchObject({ id: "p2", x: 460, y: 180 });
+  await s.close();
+});
+
 test("edits stick: a later edit builds on the earlier one", async () => {
   const { s, turns } = await afterSketch({ edits: [{ id: "p2", color: "red" }] }, { edits: [{ id: "p2", x: 500 }] });
   const [second] = canvasEvents(turns[1]!) as EventOf<"canvas.edit">[];
@@ -110,6 +126,9 @@ const refused: [string, Record<string, unknown>, string][] = [
   ["no edits and no erase", {}, "edits or erase"],
   ["a label on a mark that has none", { edits: [{ id: "p4", label: "ok" }] }, "p4 is a check: it has no label"],
   ["an unknown id given as the only edit", { edits: [{ id: "p5", label: "x" }] }, "p5 is not on the canvas"],
+  ["x and dx together", { edits: [{ id: "p2", x: 100, dx: 10 }] }, "not both"],
+  ["a relative move off the scale", { edits: [{ id: "p2", dy: 5000 }] }, "dx and dy are -1000 to 1000"],
+  ["a relative move that is not a number", { edits: [{ id: "p2", dx: "a bit" }] }, "dx"],
   ["a colour that is not a pen", { edits: [{ id: "p2", color: "pink" }] }, "color"],
 ];
 
