@@ -112,7 +112,15 @@ export function saveSetup(configPath: string, answers: SetupAnswers): { config: 
     }
   }
 
-  // Keys in the schema's order, so the file reads the same way every time.
+  writeConfig(configPath, raw, config);
+
+  // An empty folder gets all three parts; a mapped one only what it lacks.
+  for (const folder of folders) mkdirSync(join(root, folder), { recursive: true });
+  return { config };
+}
+
+// Keys in the schema's order, so the file reads the same way every time.
+function writeConfig(configPath: string, raw: Record<string, any>, config: Config) {
   const file: Record<string, unknown> = raw.$schema ? { $schema: raw.$schema } : {};
   for (const key of Object.keys(defaultConfig())) file[key] = config[key as keyof Config];
   mkdirSync(dirname(configPath), { recursive: true });
@@ -120,8 +128,19 @@ export function saveSetup(configPath: string, answers: SetupAnswers): { config: 
   const temp = `${configPath}.tmp-${process.pid}`;
   writeFileSync(temp, JSON.stringify(file, null, 2) + "\n");
   renameSync(temp, configPath);
+}
 
-  // An empty folder gets all three parts; a mapped one only what it lacks.
-  for (const folder of folders) mkdirSync(join(root, folder), { recursive: true });
+/**
+ * Save Jett's voice and speaking style (the set_voice tool) into the same file
+ * the wizard writes. Only these two change; an empty `voiceStyle` clears the style.
+ * Throws ConfigError (and writes nothing) for a bad value or an unreadable file.
+ */
+export function saveVoice(configPath: string, change: { voice?: string; voiceStyle?: string }): { config: Config } {
+  const raw = readRaw(configPath);
+  const next: Record<string, any> = { ...raw };
+  if (change.voice !== undefined) next.voice = change.voice;
+  if (change.voiceStyle !== undefined) next.voiceStyle = change.voiceStyle.trim();
+  const config = checkConfig(next);
+  writeConfig(configPath, raw, config);
   return { config };
 }

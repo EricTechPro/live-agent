@@ -2,6 +2,7 @@
 // the core sends text in chunks; this joins them into lines the window shows.
 import type { AgentEvent } from "../../src/core/events.ts";
 import { joinText } from "../../src/core/join-text.ts";
+import { VOICES } from "../../src/core/voices.ts";
 
 export interface Line {
   role: "user" | "model" | "note";
@@ -37,6 +38,12 @@ export function addToTranscript(t: Transcript, event: AgentEvent): Transcript {
     case "setup.saved": {
       const text = `Setup saved to ${event.configPath}. The new settings are in use now.`;
       return { lines: [...t.lines, { role: "note", text }], open: false };
+    }
+    // set_voice: the new voice in plain words, once, under the chat.
+    case "voice.changed": {
+      const voice = VOICES.find((v) => v.id === event.voice)?.label ?? event.voice;
+      const text = `Voice: ${voice}${event.style ? `, ${event.style}` : ""}. Saved to your settings.`;
+      return { lines: [...t.lines, { role: "note", text }], open: t.open };
     }
     default:
       return t;

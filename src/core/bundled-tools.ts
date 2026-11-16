@@ -15,6 +15,7 @@ import markScreen from "../../tools/mark-screen.ts";
 import readFile from "../../tools/read-file.ts";
 import remember from "../../tools/remember.ts";
 import searchBrain from "../../tools/search-brain.ts";
+import setVoice from "../../tools/set-voice.ts";
 import startHelper from "../../tools/start-helper.ts";
 
-export const bundledTools: Tool[] = [cancelJob, draw, editCanvas, findOnScreen, look, markScreen, readFile, remember, searchBrain, startHelper];
+export const bundledTools: Tool[] = [cancelJob, draw, editCanvas, findOnScreen, look, markScreen, readFile, remember, searchBrain, setVoice, startHelper];
