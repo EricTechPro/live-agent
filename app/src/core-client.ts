@@ -186,9 +186,10 @@ export function revealLog(): Promise<void> {
 
 /**
  * One poll of the overlay (tickets 36, 37): the cursor inside the window in CSS pixels
- * (null when it is outside), and whether Ctrl+Option is held (push to talk).
+ * (null when it is outside), whether Ctrl+Option is held (push to talk), and whether the
+ * left mouse button is down (ticket 40: a drag ends when it is not).
  */
-export function overlayPoll(): Promise<{ point: [number, number] | null; talkKeys: boolean }> {
+export function overlayPoll(): Promise<{ point: [number, number] | null; talkKeys: boolean; mouseDown: boolean }> {
   return invoke("overlay_poll");
 }
 

@@ -157,6 +157,32 @@ export function isDrag(from: Point, now: Point, threshold = DRAG_PX): boolean {
   return Math.hypot(now.x - from.x, now.y - from.y) > threshold;
 }
 
+/** With no word on the mouse button (a browser preview), a drag this long without movement is over. */
+export const DRAG_IDLE_MS = 4000;
+
+export interface DragSigns {
+  now: number;
+  /** The latest overlay poll: when it was asked, and whether the left button was down then. */
+  poll?: { askedAt: number; buttonDown: boolean };
+  blur?: boolean;
+  escape?: boolean;
+}
+
+/**
+ * Ticket 40: is this drag over, and why? Pointer up is not enough: WebKit can miss it
+ * (released over another app while click-through flipped, focus moved), and a drag left
+ * on keeps the whole window taking the mouse while every move drags the orb. So the
+ * drag also ends when the Rust poll reads the left button up (a poll asked after the
+ * press began), on blur, on Esc, and, with no poll to go by, after DRAG_IDLE_MS still.
+ */
+export function dragEnd(drag: { startedAt: number; lastMoveAt: number }, signs: DragSigns): "button-up" | "blur" | "escape" | "idle" | undefined {
+  if (signs.escape) return "escape";
+  if (signs.blur) return "blur";
+  const poll = signs.poll && signs.poll.askedAt > drag.startedAt ? signs.poll : undefined;
+  if (poll) return poll.buttonDown ? undefined : "button-up";
+  return signs.now - drag.lastMoveAt > DRAG_IDLE_MS ? "idle" : undefined;
+}
+
 /** Two clicks on the orb within this many ms are a double-click (minimise). */
 export const DOUBLE_MS = 280;
 

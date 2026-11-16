@@ -29,7 +29,7 @@ import { addCaption, noCaptions, shownCaptions, type Captions } from "./captions
 import { spokenLang, WORDS, type Lang } from "./lang.ts";
 import { followMic } from "./mic-follow.ts";
 import {
-  capture, DOUBLE_MS, dragTo, followStep, isDoubleClick, pollHover, isDrag, keepOn, parseSaved, placeCard, placeOrb, placePopover,
+  capture, DOUBLE_MS, dragEnd, dragTo, followStep, isDoubleClick, pollHover, isDrag, keepOn, parseSaved, placeCard, placeOrb, placePopover,
   pttCallIdle, pttIdle, pttPress, pttRelease, pttStep, type PttCall, type Point, type Ptt, type Rect,
 } from "./overlay.ts";
 import { UI, type UiKey } from "./ui-words.ts";
@@ -201,18 +201,22 @@ $<HTMLButtonElement>("hide").onclick = () => void setMini(true);
 // ---- dragging (tickets 38, 39): press and move drags the whole orb, the grip or the pill; a
 // press without movement is still a click (overlay.ts `isDrag`). ----
 const grip = $<HTMLButtonElement>("grip");
-let drag: { what: "orb" | "pill"; el: HTMLElement; start: Point; from: Point; moved: boolean } | undefined;
+let drag: { what: "orb" | "pill"; el: HTMLElement; start: Point; from: Point; moved: boolean; startedAt: number; lastMoveAt: number; pointerId: number } | undefined;
 /** A drag just ended on this press: the click that follows it is swallowed. */
 let swallowClick = false;
 function pressDrag(el: HTMLElement, what: "orb" | "pill", e: PointerEvent, now = false) {
   if (e.button !== 0) return;
   swallowClick = false;
-  drag = { what, el, start: what === "pill" ? pillAt(pillSpot, view()) : orbAt, from: { x: e.clientX, y: e.clientY }, moved: now };
+  const t = performance.now();
+  drag = { what, el, start: what === "pill" ? pillAt(pillSpot, view()) : orbAt, from: { x: e.clientX, y: e.clientY }, moved: now, startedAt: t, lastMoveAt: t, pointerId: e.pointerId };
   el.setPointerCapture(e.pointerId);
   if (now) (what === "pill" ? pillEl : dock).classList.add("dragging");
 }
 function moveDrag(e: PointerEvent) {
   if (!drag) return;
+  // Ticket 40: no button held means the press is over, whatever WebKit missed.
+  if (e.buttons === 0) return endDrag();
+  drag.lastMoveAt = performance.now();
   const now = { x: e.clientX, y: e.clientY };
   if (!drag.moved) {
     if (!isDrag(drag.from, now)) return;
@@ -234,6 +238,11 @@ function endDrag() {
   if (!drag) return;
   const d = drag;
   drag = undefined;
+  try {
+    if (d.el.hasPointerCapture(d.pointerId)) d.el.releasePointerCapture(d.pointerId);
+  } catch {
+    // Already released.
+  }
   dock.classList.remove("dragging");
   pillEl.classList.remove("dragging");
   if (!d.moved) return;
@@ -246,7 +255,23 @@ for (const [el, what, now] of [[grip, "orb", true], [orbEl, "orb", false], [pill
   el.addEventListener("pointermove", moveDrag);
   el.addEventListener("pointerup", endDrag);
   el.addEventListener("pointercancel", endDrag);
+  // Ticket 40: capture can go without a pointer up (focus moved, another app took the click).
+  el.addEventListener("lostpointercapture", endDrag);
 }
+/** Ticket 40: end a drag on any sign the press is over (overlay.ts `dragEnd`). */
+function checkDrag(signs: Omit<Parameters<typeof dragEnd>[1], "now">) {
+  if (drag && dragEnd(drag, { now: performance.now(), ...signs })) endDrag();
+}
+window.addEventListener("blur", () => checkDrag({ blur: true }));
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && drag) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    checkDrag({ escape: true });
+  }
+}, true);
+// No poll in a browser preview: a drag held still for a few seconds ends.
+setInterval(() => checkDrag({}), 1000);
 // The pill: a click (not a drag) brings the orb back where it was. Its quick actions:
 // expand, the mic (start a call, or mute / unmute) and hang up.
 pillEl.addEventListener("click", () => {
@@ -326,14 +351,20 @@ try {
 } catch {
   // Storage off: stay where dragged.
 }
+const followingBtn = $<HTMLButtonElement>("following");
 function showFollow() {
+  // Ticket 40: following is never a mystery; a small badge on the orb says so and stops it.
+  dock.dataset.following = String(following);
+  followingBtn.hidden = !following;
+  followingBtn.dataset.tip = UI[lang].stopFollowing;
+  followingBtn.setAttribute("aria-label", UI[lang].stopFollowing);
   followBtn.setAttribute("aria-pressed", String(following));
   followBtn.dataset.tip = UI[lang][following ? "stay" : "follow"];
   followBtn.setAttribute("aria-label", UI[lang].follow);
   tips.refresh(followBtn);
 }
-followBtn.onclick = () => {
-  following = !following;
+function setFollowing(on: boolean) {
+  following = on;
   showFollow();
   if (!following) moveOrb(orbAt, true);
   try {
@@ -341,7 +372,9 @@ followBtn.onclick = () => {
   } catch {
     // Not remembered; works for this run.
   }
-};
+}
+followBtn.onclick = () => setFollowing(!following);
+followingBtn.onclick = () => setFollowing(false);
 showFollow();
 
 /**
@@ -358,7 +391,9 @@ function startOverlayPoll() {
     if (busy) return;
     busy = true;
     try {
+      const askedAt = performance.now();
       const poll = await overlayPoll();
+      checkDrag({ poll: { askedAt, buttonDown: poll.mouseDown } });
       const point = poll.point ? { x: poll.point[0], y: poll.point[1] } : undefined;
       const step = pttStep(ptt, poll.talkKeys && !!wizardEl.hidden, performance.now());
       ptt = step.ptt;

@@ -287,6 +287,9 @@ struct OverlayPoll {
     point: Option<(f64, f64)>,
     /// Ctrl+Option held (and no Cmd or Shift): push to talk.
     talk_keys: bool,
+    /// The left mouse button is down right now (ticket 40): a drag ends when it is not,
+    /// even if WebKit never delivered the pointer up.
+    mouse_down: bool,
 }
 
 fn cursor_in(window: &tauri::WebviewWindow) -> Option<(f64, f64)> {
@@ -306,6 +309,19 @@ fn cursor_in(window: &tauri::WebviewWindow) -> Option<(f64, f64)> {
 extern "C" {
     /// The modifier keys held right now. 0 = kCGEventSourceStateCombinedSessionState.
     fn CGEventSourceFlagsState(state_id: i32) -> u64;
+    /// Is this mouse button down right now (0 = left)? The same answer as
+    /// NSEvent.pressedMouseButtons, without Objective-C, and it needs no permission.
+    fn CGEventSourceButtonState(state_id: i32, button: u32) -> bool;
+}
+
+#[cfg(target_os = "macos")]
+fn left_button_down() -> bool {
+    unsafe { CGEventSourceButtonState(0, 0) }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn left_button_down() -> bool {
+    false
 }
 
 #[cfg(target_os = "macos")]
@@ -325,7 +341,7 @@ fn talk_keys_held() -> bool {
 
 #[tauri::command]
 fn overlay_poll(window: tauri::WebviewWindow) -> OverlayPoll {
-    OverlayPoll { point: cursor_in(&window), talk_keys: talk_keys_held() }
+    OverlayPoll { point: cursor_in(&window), talk_keys: talk_keys_held(), mouse_down: left_button_down() }
 }
 
 /// Click-through on (clicks reach the apps below) or off (the window takes the mouse).
