@@ -25,6 +25,7 @@ import { captureConsole, openCoreLog } from "./core-log.ts";
 import { geminiApiKey, verifyGeminiKey } from "./gemini-key.ts";
 import { errorMessage } from "./errors.ts";
 import pkg from "../package.json" with { type: "json" };
+import { findEyesBin, helperEyes } from "./screen/eyes.ts";
 
 // The installed app sets LIVE_AGENT_HOME (~/Desktop/live-agent): work from there and
 // read the key from its .env, because opened from Finder there is no terminal (src/home.ts).
@@ -54,6 +55,13 @@ if (coreLog) captureConsole(coreLog);
 if (!apiKey) console.error("live-agent: no Gemini key yet: waiting for it in the window.");
 
 const config = loadConfig();
+// Jett's eyes (macOS): the jett-eyes helper, bundled next to the core. As the Tauri sidecar
+// our parent is the app itself: leave its windows (orb, captions, cards, ink) out of every shot.
+const eyesBin = process.platform === "darwin" ? findEyesBin() : undefined;
+const eyes = eyesBin
+  ? helperEyes({ bin: eyesBin, excludePids: process.env.LIVE_AGENT_EXIT_WITH_PARENT ? [process.ppid] : [] })
+  : undefined;
+if (process.platform === "darwin" && !eyesBin) console.error("live-agent: no jett-eyes helper: Jett can't see the screen (run app/scripts/build-eyes.sh)");
 // Ticket 40: a network failure while starting (the Mac just woke, Wi-Fi not back yet)
 // must not end the core. The model adapter already retries on its own; this is the
 // net under it: try the whole start again with backoff instead of exiting.
@@ -79,6 +87,7 @@ const startOnce = () => startApp({
   tools: existsSync(TOOLS_DIR) ? undefined : bundledTools,
   // Ten quiet minutes end a chat on their own (note + tidy), like pressing New chat.
   chatIdleMs: 10 * 60_000,
+  eyes,
 });
 async function startWithRetry() {
   for (let attempt = 0; ; attempt++) {

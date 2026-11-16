@@ -41,6 +41,15 @@ import type { Tool } from "./tool.ts";
 import { createToolCalls } from "./tool-calls.ts";
 import { systemInstruction } from "./tone.ts";
 import { newTurn, turnIsOver, type Turn } from "./turn.ts";
+import type { Eyes } from "../screen/eyes.ts";
+import { createScreen, type ReleaseInput, type Screen } from "../screen/service.ts";
+import type { Pt } from "../screen/geometry.ts";
+
+/** A mic chunk with someone talking in it (not room hum): any sample past ~8% of full scale. */
+export function isVoice(data: Int16Array, threshold = 2600): boolean {
+  for (let k = 0; k < data.length; k++) if (Math.abs(data[k]!) > threshold) return true;
+  return false;
+}
 
 export interface SessionOptions {
   /** Which model to talk to: `geminiLiveModel(...)` for real, `scriptedModel(...)` in tests. */
@@ -75,6 +84,13 @@ export interface SessionOptions {
    * pressed New chat. Unset: chats only end on `newChat()` or `close()`.
    */
   chatIdleMs?: number;
+  /**
+   * Jett's eyes (src/screen/eyes.ts). Set: the `look` tool can see the screen, typed turns
+   * carry the front app and window as text, and `screenRelease` sends circles. Unset: no screen.
+   */
+  eyes?: Eyes;
+  /** Least gap between a circled crop and its label (ms, src/screen/service.ts). Tests set 0. */
+  screenFrameGapMs?: number;
 }
 
 /** What `onAudio` hears: a chunk of the model's voice, or "drop what you queued" (interrupted). */
@@ -124,6 +140,11 @@ export interface AgentSession {
   stopReply(): void;
   /** No network (ticket 40): try to reach the model now instead of after the backoff (the window's Retry). */
   reconnectNow(): void;
+  /**
+   * Screen awareness. `release`: Ctrl+Option was let go; a closed loop in `stroke` sends the
+   * circled crop, and the turn gets the front app and cursor as text. Undefined without eyes.
+   */
+  screen?: Pick<Screen, "circle" | "release" | "permission" | "requestPermission">;
   /** Shift+Tab: Ask me -> Auto edits -> Bypass -> Ask me. Returns the new mode. */
   cycleMode(): SafetyMode;
   /** The setup wizard (the window's click-through setup). */
@@ -208,6 +229,19 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   });
   // The sketch canvas's marks (tickets 31, 33). A new chat starts a clean board.
   const canvas = createBoard(emit);
+  // Jett's eyes (src/screen). `lastVoiceAt`: when the mic last carried a voice (or a
+  // transcript came in), so a Ctrl+Option hold with no voice and no circle sends nothing.
+  let lastVoiceAt = 0;
+  const screen: Screen | undefined = options.eyes
+    ? createScreen({
+        eyes: options.eyes,
+        emit,
+        sendImage: (data, mimeType) => modelSession.sendImage?.(data, mimeType),
+        sendText: (text) => modelSession.sendText(text),
+        spokeSince: (since) => lastVoiceAt >= since,
+        frameGapMs: options.screenFrameGapMs,
+      })
+    : undefined;
   const toolCalls = createToolCalls({
     tools,
     jobs,
@@ -227,6 +261,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         claudeCode: config.helpers.claudeCode,
         worktrees: config.worktrees,
       },
+      screen: screen && { look: () => screen.look() },
     }),
     closing: () => closed,
     canvas,
@@ -313,6 +348,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         silenced = false;
         const voice = openVoiceTurn();
         voice.heard += event.text;
+        lastVoiceAt = Date.now();
         emit({ type: "transcript", role: "user", text: event.text });
         // A spoken yes approves like a typed one. Why at the first match (not at
         // turn end): "yes" leads the sentence, and the model is already replying.
@@ -469,11 +505,16 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
           return finishTurnIfOver();
         }
         typed.awaiting++;
-        modelSession.sendText(text);
+        if (!screen) return modelSession.sendText(text);
+        // Screen awareness: the typed words go in with the front app and window as context.
+        // Capped, so a slow lookup never holds a turn up.
+        const note = Promise.race([screen.note().catch(() => ""), Bun.sleep(1000).then(() => "")]);
+        void note.then((line) => modelSession.sendText(line ? `${line}\n${text}` : text));
       });
     },
     sendAudio(data, sampleRate) {
       if (paused) return;
+      if (screen && isVoice(data)) lastVoiceAt = Date.now();
       modelSession.sendAudio(data, sampleRate);
     },
     setPaused(on) {
@@ -485,6 +526,12 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     paused: () => paused,
     reconnectNow() {
       modelSession.retryNow?.();
+    },
+    screen: screen && {
+      circle: (stroke: Pt[]) => screen.circle(stroke),
+      release: (input: ReleaseInput) => screen.release(input),
+      permission: () => screen.permission(),
+      requestPermission: () => screen.requestPermission(),
     },
     stopReply() {
       silenced = true;
