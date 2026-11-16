@@ -26,6 +26,7 @@ import { geminiApiKey, verifyGeminiKey } from "./gemini-key.ts";
 import { errorMessage } from "./errors.ts";
 import pkg from "../package.json" with { type: "json" };
 import { findEyesBin, helperEyes } from "./screen/eyes.ts";
+import { geminiGround } from "./screen/grounding.ts";
 
 // The installed app sets LIVE_AGENT_HOME (~/Desktop/live-agent): work from there and
 // read the key from its .env, because opened from Finder there is no terminal (src/home.ts).
@@ -88,6 +89,8 @@ const startOnce = () => startApp({
   // Ten quiet minutes end a chat on their own (note + tidy), like pressing New chat.
   chatIdleMs: 10 * 60_000,
   eyes,
+  // Finding things on screen, last tier: one Gemini Flash call on a fresh screenshot (key read when it runs).
+  ground: (shot, describe) => geminiGround({ apiKey: geminiApiKey() ?? "" })(shot, describe),
 });
 async function startWithRetry() {
   for (let attempt = 0; ; attempt++) {

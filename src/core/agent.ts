@@ -44,6 +44,7 @@ import { newTurn, turnIsOver, type Turn } from "./turn.ts";
 import type { Eyes } from "../screen/eyes.ts";
 import { createScreen, type ReleaseInput, type Screen } from "../screen/service.ts";
 import { createFollow, type Follow } from "../screen/follow.ts";
+import { createLocator, type Ground } from "../screen/locator.ts";
 import type { Pt } from "../screen/geometry.ts";
 
 /** A mic chunk with someone talking in it (not room hum): any sample past ~8% of full scale. */
@@ -92,6 +93,11 @@ export interface SessionOptions {
   eyes?: Eyes;
   /** Least gap between a circled crop and its label (ms, src/screen/service.ts). Tests set 0. */
   screenFrameGapMs?: number;
+  /**
+   * The locator's last tier (src/screen/grounding.ts): a vision call that boxes a described
+   * element on a screenshot. Unset: only Accessibility and OCR find things.
+   */
+  ground?: Ground;
 }
 
 /** What `onAudio` hears: a chunk of the model's voice, or "drop what you queued" (interrupted). */
@@ -262,6 +268,20 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         frameGapMs: options.screenFrameGapMs,
       })
     : undefined;
+  // Finding real UI elements (slice 3): Accessibility, then OCR, then grounding.
+  const locate = options.eyes
+    ? createLocator({
+        eyes: options.eyes,
+        ground: options.ground,
+        onAxOff: () =>
+          emit({
+            type: "screen.permission",
+            kind: "accessibility",
+            granted: false,
+            message: "Accessibility is off for Jett, so it can only find things on screen by reading them.",
+          }),
+      })
+    : undefined;
   const toolCalls = createToolCalls({
     tools,
     jobs,
@@ -281,7 +301,11 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         claudeCode: config.helpers.claudeCode,
         worktrees: config.worktrees,
       },
-      screen: screen && { look: () => screen.look() },
+      screen: screen && {
+        look: () => screen.look(),
+        find: (target) => locate!(target),
+        pin: (ids, front) => follow?.pin(ids, front),
+      },
     }),
     closing: () => closed,
     canvas,

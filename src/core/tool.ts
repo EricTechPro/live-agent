@@ -18,6 +18,8 @@ import type { HelperPaths } from "../helpers/cli-job.ts";
 import type { CanvasChange } from "./board.ts";
 import type { Beat } from "./canvas.ts";
 import type { Jobs } from "./jobs.ts";
+import type { FrontWindow } from "../screen/eyes.ts";
+import type { Found, Target } from "../screen/locator.ts";
 
 export type RiskClass = "read" | "edit" | "command" | "helper";
 
@@ -54,7 +56,13 @@ export interface ToolContext {
    * Jett's eyes (src/screen): `look` sends one screenshot of the screen into the model and
    * answers with what it is. Missing when the session has no eyes (tests, non-macOS).
    */
-  screen?: { look(): Promise<Record<string, unknown>> };
+  screen?: {
+    look(): Promise<Record<string, unknown>>;
+    /** Find a real UI element by its words or a description (src/screen/locator.ts). Throws when not found. */
+    find?(target: Target): Promise<Found>;
+    /** Pin screen marks to the window they were found in: they are erased when it changes. */
+    pin?(ids: string[], front: FrontWindow | null): void;
+  };
 }
 
 export interface HelperSettings extends HelperPaths {
