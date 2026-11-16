@@ -43,6 +43,7 @@ import { systemInstruction } from "./tone.ts";
 import { newTurn, turnIsOver, type Turn } from "./turn.ts";
 import type { Eyes } from "../screen/eyes.ts";
 import { createScreen, type ReleaseInput, type Screen } from "../screen/service.ts";
+import { createFollow, type Follow } from "../screen/follow.ts";
 import type { Pt } from "../screen/geometry.ts";
 
 /** A mic chunk with someone talking in it (not room hum): any sample past ~8% of full scale. */
@@ -196,7 +197,15 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   function emit(event: AgentEvent) {
     turn?.events.push(event);
     for (const listener of listeners) listener(event);
+    if (follow && (event.type.startsWith("canvas.") || event.type === "chat.started")) {
+      // Erased marks need no following; a drawing on screen keeps the front window reported.
+      if (event.type === "canvas.erase") follow.unpin(event.all ? undefined : event.ids);
+      if (event.type === "chat.started") follow.unpin();
+      follow.active(canvas.ids().length > 0);
+    }
   }
+  // Set once the canvas exists (below), when the session has eyes that can watch.
+  let follow: Follow | undefined;
   function playAudio(out: AudioOut) {
     for (const listener of audioListeners) listener(out);
   }
@@ -229,6 +238,17 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   });
   // The sketch canvas's marks (tickets 31, 33). A new chat starts a clean board.
   const canvas = createBoard(emit);
+  if (options.eyes?.watch)
+    follow = createFollow({
+      eyes: options.eyes,
+      emit,
+      onStale(ids, reason) {
+        const live = ids.filter((id) => canvas.ids().includes(id));
+        if (!live.length) return;
+        emit({ type: "screen.stale", ids: live, reason });
+        canvas.change("screen-stale", { edits: [], erase: live });
+      },
+    });
   // Jett's eyes (src/screen). `lastVoiceAt`: when the mic last carried a voice (or a
   // transcript came in), so a Ctrl+Option hold with no voice and no circle sends nothing.
   let lastVoiceAt = 0;
@@ -574,6 +594,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     // cancels it: it runs on with no model session (the tidy model is its own
     // call) and a failure is just a "failed" job, never an error for the next chat.
     async close() {
+      follow?.stop();
       closed = true;
       let notePath: string | null = null;
       try {

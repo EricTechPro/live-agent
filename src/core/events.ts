@@ -12,6 +12,7 @@ import type { JobInfo } from "./jobs.ts";
 import type { SafetyMode, Verdict } from "./safety.ts";
 import type { RiskClass } from "./tool.ts";
 import type { ShotMap } from "../screen/geometry.ts";
+import type { FrontWindow } from "../screen/eyes.ts";
 
 export type AgentEvent =
   /** Something said in the chat. Model text arrives in chunks: join them in order. */
@@ -107,8 +108,19 @@ export type AgentEvent =
    * `map` turns the shot's pixels back into global screen points.
    */
   | { type: "screen.shot"; reason: "look" | "circle"; width: number; height: number; map: ShotMap; text?: string }
-  /** Screen Recording is off: Jett cannot see. The window shows how to turn it on. */
-  | { type: "screen.permission"; granted: boolean; message?: string }
+  /**
+   * A permission Jett needs is off: Screen Recording (`kind` missing or "screen": Jett cannot
+   * see) or Accessibility ("accessibility": real controls cannot be found by their words).
+   * The window shows how to turn it on.
+   */
+  | { type: "screen.permission"; granted: boolean; message?: string; kind?: "screen" | "accessibility" }
+  /**
+   * The front app's window (global points), sent while a drawing is up and whenever it changes,
+   * so cards keep off it. `front` null: no window (the desktop).
+   */
+  | { type: "screen.front"; front: FrontWindow | null }
+  /** Screen marks went stale (the window moved, the app switched, a scroll or click): they are erased next. */
+  | { type: "screen.stale"; ids: string[]; reason: string }
   /** The model finished its reply. `reply` is the whole reply, joined for you. */
   | { type: "turn.done"; reply: string }
   /** Something went wrong in the session. The session may still be usable. */

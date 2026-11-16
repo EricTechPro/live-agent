@@ -541,7 +541,7 @@ pub fn run() {
         })
         .manage(TrayToggle(Mutex::new(None)))
         .manage(PrevApp(Mutex::new(None)))
-        .invoke_handler(tauri::generate_handler![core_status, restart_core, open_key_page, reveal_log, overlay_poll, set_click_through, set_tray_shown, quick_type_focus, screen::pointer_global, screen::open_screen_settings])
+        .invoke_handler(tauri::generate_handler![core_status, restart_core, open_key_page, reveal_log, overlay_poll, set_click_through, set_tray_shown, quick_type_focus, screen::pointer_global, screen::open_screen_settings, screen::overlay_origin, screen::open_accessibility_settings])
         .setup(|app| {
             // No Dock icon: Jett lives in the menu bar and floats over everything.
             #[cfg(target_os = "macos")]

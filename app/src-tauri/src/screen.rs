@@ -32,3 +32,20 @@ pub fn open_screen_settings() {
         .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
         .spawn();
 }
+
+/// This window's top-left corner in global points: the page subtracts it from screen-mark and
+/// front-window rects (global points) to draw them in CSS pixels.
+#[tauri::command]
+pub fn overlay_origin(window: tauri::WebviewWindow) -> Option<(f64, f64)> {
+    let at = window.inner_position().ok()?;
+    let scale = window.scale_factor().ok()?;
+    Some((at.x as f64 / scale, at.y as f64 / scale))
+}
+
+/// The "Accessibility is off" notice's button: open that Settings pane (fixed URL).
+#[tauri::command]
+pub fn open_accessibility_settings() {
+    let _ = std::process::Command::new("open")
+        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        .spawn();
+}
