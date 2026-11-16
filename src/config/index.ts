@@ -25,6 +25,10 @@ export interface Config {
   helpers: { geminiCli: boolean; codex: boolean; claudeCode: boolean; maxAtOnce: number };
   worktrees: boolean;
   voice: string;
+  /** How Jett speaks, in plain words ("slower", "like a radio host"). Empty: none. */
+  voiceStyle: string;
+  /** The Gemini Live model (src/models/gemini-live.ts LIVE_MODELS). */
+  liveModel: string;
   tone: Tone;
   brainFolders: BrainFolders;
 }

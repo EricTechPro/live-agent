@@ -10,10 +10,10 @@ test("starting up: one start button, plain words", () => {
   expect(callView({ orb: "connecting", call: "off", muted: false })).toEqual({ look: "starting", label: "Starting…", buttons: ["start"], mutedBadge: false });
 });
 
-test("not in a call: one button only, and it says Tap to talk", () => {
+test("not in a call: one button only, and the state is Ready", () => {
   const v = callView({ orb: orbAfter([{ type: "core.ready" }]), call: "off", muted: false });
   expect(v.look).toBe("idle");
-  expect(v.label).toBe("Tap to talk");
+  expect(v.label).toBe("Ready");
   expect(v.buttons).toEqual(["start"]);
 });
 
@@ -71,7 +71,7 @@ test("Space: start a call, then mute and unmute; nothing while connecting", () =
 
 test("the words follow the user's language", () => {
   expect(callView({ orb: "listening", call: "live", muted: false, lang: "zh" }).label).toBe("在听…");
-  expect(callView({ orb: "listening", call: "off", muted: false, lang: "zh" }).label).toBe("点我说话");
+  expect(callView({ orb: "listening", call: "off", muted: false, lang: "zh" }).label).toBe("就绪");
   expect(spokenLang("你好，今天有什么安排")).toBe("zh");
   expect(spokenLang("what's on today")).toBe("en");
   expect(spokenLang("Jett 你好")).toBe("zh");

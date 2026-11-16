@@ -36,6 +36,13 @@ import type { Model, ModelEvent } from "../core/model.ts";
 
 export const DEFAULT_LIVE_MODEL = "gemini-3.8-live";
 
+/**
+ * The Live models Jett can talk with: the window's model picker lists exactly these, and the
+ * core refuses any other. Add one here only once the adapter has been checked against it
+ * (audio out, transcriptions, NON_BLOCKING tools, session resumption).
+ */
+export const LIVE_MODELS: { id: string; label: string }[] = [{ id: DEFAULT_LIVE_MODEL, label: "Gemini 3.8 Live" }];
+
 const NETWORK_CODES = /\b(ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH|EHOSTUNREACH|ENETDOWN|EPIPE|ECONNABORTED)\b/;
 
 /** A failure that is the network's fault (DNS, refused, reset, timeout), not the key's or the model's. */
@@ -83,8 +90,8 @@ export type GeminiLiveOptions = {
       token?: never;
     }
   | {
-      /** Mints a fresh single-use ephemeral token for each connection. */
-      token: () => Promise<string>;
+      /** Mints a fresh single-use ephemeral token for each connection, locked to `model`. */
+      token: (model: string) => Promise<string>;
       apiKey?: never;
     }
 );
@@ -99,7 +106,7 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
     options.connect ??
     (async (params) => {
       const ai = options.token
-        ? new GoogleGenAI({ apiKey: await options.token(), httpOptions: { apiVersion: "v1alpha" } })
+        ? new GoogleGenAI({ apiKey: await options.token(params.model), httpOptions: { apiVersion: "v1alpha" } })
         : new GoogleGenAI({ apiKey: options.apiKey, httpOptions: { apiVersion: "v1beta" } });
       return ai.live.connect(params);
     });
@@ -143,7 +150,7 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
 
       // One entry per connection we opened. `retired`: replaced after a goAway,
       // so its close is expected, but it may still finish what it was saying.
-      type Link = { socket?: LiveSocket; open: boolean; retired: boolean };
+      type Link = { socket?: LiveSocket; open: boolean; retired: boolean; hangUpAfterTurn?: boolean };
       const links = new Set<Link>();
       let live: Link | undefined; // where new input goes
       let handle: string | undefined; // the latest resumption handle
@@ -167,7 +174,7 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
       async function dial(): Promise<Link> {
         const link: Link = { open: true, retired: false };
         const socket = await open({
-          model: options.model ?? DEFAULT_LIVE_MODEL,
+          model: connectOptions?.model ?? options.model ?? DEFAULT_LIVE_MODEL,
           config: { ...config, sessionResumption: handle ? { handle } : {} },
           callbacks: {
             onmessage: (message) => {
@@ -175,6 +182,7 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
               if (update?.resumable && update.newHandle) handle = update.newHandle;
               for (const call of message.toolCall?.functionCalls ?? []) if (call.id) callLink.set(call.id, link);
               toModelEvents(message).forEach(onEvent);
+              if (link.hangUpAfterTurn && message.serverContent?.turnComplete) link.socket?.close();
               if (message.goAway) {
                 // Logged (core.log) so planned handovers can be told apart from drops.
                 console.error(`live-agent: Gemini Live goAway (time left ${message.goAway.timeLeft ?? "?"}): handing over to a new connection`);
@@ -313,6 +321,24 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
               },
             ],
           });
+        },
+        async reconfigure(change) {
+          // Voice and system instruction are fixed per connection: change the config, then
+          // hand over to a new connection made with the resume handle, like after a goAway.
+          if (change.voice) config.speechConfig = { voiceConfig: { prebuiltVoiceConfig: { voiceName: change.voice } } };
+          if (change.systemInstruction) config.systemInstruction = change.systemInstruction;
+          const old = live;
+          if (!old) return; // idle or reconnecting: the next connection picks the new config up
+          old.retired = true;
+          live = undefined;
+          await reconnect();
+          // Answers to calls made on the old connection (set_voice's own) go to the new one,
+          // so the reply after the switch is spoken in the new voice.
+          if (live) for (const [id, link] of callLink) if (link === old) callLink.set(id, live);
+          // Like a goAway handover, the old connection may finish what it was saying (its
+          // turn end is still owed to the core); hang it up after that, or after 15 s.
+          old.hangUpAfterTurn = true;
+          setTimeout(() => old.socket?.close(), 15_000).unref?.();
         },
         retryNow() {
           // Waiting out a network backoff: try now. Nothing going on: dial now.

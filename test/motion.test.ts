@@ -1,7 +1,7 @@
 // Drawing v2 motion (app/src/motion.ts): how one card or ink mark draws.
 import { expect, test } from "bun:test";
 import type { Prim } from "../app/src/layout.ts";
-import { MOTION, stepAt, strokeMs, textMs, typed, unitPlan } from "../app/src/motion.ts";
+import { HAND, handDrawn, MOTION, stepAt, strokeMs, textMs, typed, unitPlan } from "../app/src/motion.ts";
 
 const id = (p: { x: number; y: number }) => p;
 const line = (len: number): Prim => ({ t: "stroke", pts: [{ x: 0, y: 0 }, { x: len, y: 0 }], width: 4, tone: "ink" });
@@ -39,4 +39,26 @@ test("words type one character at a time; the last two stay hot until they settl
   expect(half.hot).toBe(2);
   expect(typed(["Star"], 1)).toEqual({ lines: ["Star"], hot: 0 });
   expect(typed(["Star"], 0)).toEqual({ lines: [], hot: 0 });
+});
+
+test("strokes look hand drawn: a line bows and wobbles a little, the same way every redraw", () => {
+  const line = [{ x: 0, y: 0 }, { x: 300, y: 0 }];
+  const a = handDrawn(line, "p3:0");
+  expect(a.length).toBeGreaterThan(20);
+  expect(handDrawn(line, "p3:0")).toEqual(a);
+  expect(handDrawn(line, "p4:0")).not.toEqual(a);
+  const off = a.map((p) => Math.abs(p.y));
+  expect(Math.max(...off)).toBeGreaterThan(0.3);
+  expect(Math.max(...off)).toBeLessThan(HAND.maxBow + HAND.wobble * 2 + HAND.jitter);
+  expect(a[0]!.x).toBeCloseTo(0, -1);
+  expect(a.at(-1)!.x).toBeCloseTo(300, -1);
+});
+
+test("a closed loop keeps its ends together, and a tick barely moves", () => {
+  const loop = Array.from({ length: 65 }, (_, i) => ({ x: 100 + 80 * Math.cos((i / 64) * Math.PI * 2), y: 100 + 40 * Math.sin((i / 64) * Math.PI * 2) }));
+  const h = handDrawn(loop, "p9:0");
+  expect(Math.hypot(h[0]!.x - h.at(-1)!.x, h[0]!.y - h.at(-1)!.y)).toBeLessThan(0.5);
+  const tick = handDrawn([{ x: 0, y: 0 }, { x: 6, y: 6 }, { x: 16, y: -8 }], "p2:1");
+  const d = Math.max(...tick.map((p, i) => (i ? 0 : Math.hypot(p.x, p.y))));
+  expect(d).toBeLessThan(1);
 });

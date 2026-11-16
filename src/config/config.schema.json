@@ -85,6 +85,17 @@
       "minLength": 1,
       "default": "Puck"
     },
+    "voiceStyle": {
+      "description": "How Jett speaks, in plain words (e.g. slower, more excited, like a radio host). Empty: no style note. Jett's set_voice tool sets it.",
+      "type": "string",
+      "default": ""
+    },
+    "liveModel": {
+      "description": "The Gemini Live model Jett talks with (the orchestrator). One of the models in src/models/gemini-live.ts LIVE_MODELS. A change applies from the next connection: at once when the chat is empty, else from the next new chat.",
+      "type": "string",
+      "minLength": 1,
+      "default": "gemini-3.8-live"
+    },
     "tone": {
       "description": "How the agent talks. short: answer first, few plain words, one idea per line. casual: relaxed, like texting a friend. friendly: warm and upbeat. pro: polite and precise.",
       "type": "string",

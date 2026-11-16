@@ -26,3 +26,12 @@ test("arrow keys move between tabs and wrap; Home and End jump", () => {
   expect(tabForKey("jobs", "End")).toBe("brain");
   expect(tabForKey("jobs", "Enter")).toBeUndefined();
 });
+
+test("the gear opens settings over the tab; picking any tab (or the gear again) leaves it", () => {
+  const settings = run([{ type: "panel.select", tab: "jobs" }, { type: "panel.settings" }]);
+  expect(settings).toEqual({ tab: "jobs", settings: true });
+  expect(nextPanel(settings, { type: "panel.settings" })).toEqual({ tab: "jobs" });
+  expect(nextPanel(settings, { type: "panel.select", tab: "jobs" })).toEqual({ tab: "jobs" });
+  expect(nextPanel(settings, { type: "panel.jobs-button" })).toEqual({ tab: "jobs" });
+  expect(nextPanel(settings, { type: "panel.settings", open: true })).toBe(settings);
+});

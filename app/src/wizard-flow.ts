@@ -3,6 +3,7 @@
 // app/src/wizard.ts draws them; test/wizard-flow.test.ts checks them.
 import type { BrainFolders, Config, SafetyMode, Tone } from "../../src/config/index.ts";
 import type { SetupAnswers } from "../../src/setup/index.ts";
+import { VOICES } from "../../src/core/voices.ts";
 
 export type StepName = "welcome" | "key" | "mic" | "notes" | "tone" | "safety" | "test";
 export type Part = keyof BrainFolders;
@@ -12,12 +13,7 @@ export const PARTS: Part[] = ["raw", "wiki", "projects"];
 export const SAMPLE_BRAIN = "sample-brain";
 
 /** Plain words on the chips; the Gemini Live voice name is what the config keeps. */
-export const VOICES: { id: string; label: string; line: string }[] = [
-  { id: "Puck", label: "Upbeat", line: "Hey hey!" },
-  { id: "Charon", label: "Calm", line: "Hello. Nice to meet you." },
-  { id: "Kore", label: "Firm", line: "Ready when you are." },
-  { id: "Zephyr", label: "Bright", line: "Hi! This is fun!" },
-];
+export { VOICES };
 
 export const TONES: Record<Tone, { label: string; line: string }> = {
   short: { label: "Short", line: "Got it." },

@@ -40,7 +40,7 @@ export function placeOrb(saved: Point | undefined, size: Size, view: Size): Poin
   return keepOn({ x: view.width - size.width - START_INSET.right, y: view.height - size.height - START_INSET.bottom }, size, view);
 }
 
-/** Dragging by the grip: the orb moves with the pointer, kept on screen. */
+/** Dragging the orb: it moves with the pointer, kept on screen. */
 export function dragTo(start: Point, from: Point, now: Point, size: Size, view: Size): Point {
   return keepOn({ x: start.x + now.x - from.x, y: start.y + now.y - from.y }, size, view);
 }

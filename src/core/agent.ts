@@ -46,6 +46,7 @@ import { createScreen, type ReleaseInput, type Screen } from "../screen/service.
 import { createFollow, type Follow } from "../screen/follow.ts";
 import { createLocator, type Ground } from "../screen/locator.ts";
 import type { Pt } from "../screen/geometry.ts";
+import { saveLiveModel, saveVoice } from "../setup/index.ts";
 
 /** A mic chunk with someone talking in it (not room hum): any sample past ~8% of full scale. */
 export function isVoice(data: Int16Array, threshold = 2600): boolean {
@@ -147,6 +148,22 @@ export interface AgentSession {
   stopReply(): void;
   /** No network (ticket 40): try to reach the model now instead of after the backoff (the window's Retry). */
   reconnectNow(): void;
+  /** The voice now (config `voice`, a Gemini prebuilt name). */
+  voice(): string;
+  /**
+   * The window's voice picker: the same path as the set_voice tool (saved to the config,
+   * `voice.changed` on the stream, the model moved to a connection that speaks with it).
+   */
+  setVoice(voice: string): Promise<{ voice: string; style: string; applied: boolean }>;
+  /** The Gemini Live model saved in the config (`liveModel`). */
+  liveModel(): string;
+  /**
+   * The window's model picker: save `liveModel`. A model is fixed per connection and a
+   * resume handle does not cross models, so it applies at once only while the chat is
+   * empty and nothing is in flight (a fresh connection loses nothing); otherwise from the
+   * next new chat. `applied` says which.
+   */
+  setLiveModel(model: string): Promise<{ model: string; applied: boolean }>;
   /**
    * Screen awareness. `release`: Ctrl+Option was let go; a closed loop in `stroke` sends the
    * circled crop, and the turn gets the front app and cursor as text. Undefined without eyes.
@@ -307,6 +324,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         claudeCode: config.helpers.claudeCode,
         worktrees: config.worktrees,
       },
+      setVoice,
       screen: screen && {
         look: () => screen.look(),
         find: (target) => locate!(target),
@@ -472,8 +490,28 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     return options.model.connect((event) => mine === connection && onModelEvent(event), {
       tools: tools.map(({ name, description, parameters }) => ({ name, description, parameters })),
       voice: config.voice,
-      systemInstruction: systemInstruction(config.tone, { brainPath }),
+      systemInstruction: systemInstruction(config.tone, { brainPath, voiceStyle: config.voiceStyle }),
+      model: config.liveModel,
     });
+  }
+
+  // set_voice: save the voice and style where the wizard saves them, then move the model to a
+  // resumed connection that speaks with them (same chat, unlike the wizard's new chat).
+  async function setVoice(change: { voice?: string; style?: string }) {
+    const { config: saved } = saveVoice(configPath, { voice: change.voice, voiceStyle: change.style });
+    applyConfig(saved);
+    emit({ type: "voice.changed", voice: saved.voice, style: saved.voiceStyle });
+    let applied = !!modelSession.reconfigure;
+    try {
+      await modelSession.reconfigure?.({
+        voice: saved.voice,
+        systemInstruction: systemInstruction(saved.tone, { brainPath, voiceStyle: saved.voiceStyle }),
+      });
+    } catch (err) {
+      applied = false;
+      emit({ type: "error", message: `could not switch the voice now: ${errorMessage(err)}` });
+    }
+    return { voice: saved.voice, style: saved.voiceStyle, applied };
   }
   let modelSession = await connectModel();
 
@@ -576,6 +614,23 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     paused: () => paused,
     reconnectNow() {
       modelSession.retryNow?.();
+    },
+    voice: () => config.voice,
+    setVoice: (voice) => setVoice({ voice }),
+    liveModel: () => config.liveModel,
+    async setLiveModel(model) {
+      const { config: saved } = saveLiveModel(configPath, model);
+      applyConfig(saved);
+      if (busy() || chat.length || closed) return { model: saved.liveModel, applied: false };
+      switching = true;
+      try {
+        toolCalls.forgetConnection("the model changed");
+        await modelSession.close();
+        modelSession = await connectModel();
+      } finally {
+        switching = false;
+      }
+      return { model: saved.liveModel, applied: true };
     },
     screen: screen && {
       circle: (stroke: Pt[]) => screen.circle(stroke),

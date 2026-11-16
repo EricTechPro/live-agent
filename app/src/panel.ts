@@ -7,6 +7,8 @@ export const TABS: readonly Tab[] = ["chat", "jobs", "brain"];
 
 export interface Panel {
   tab: Tab;
+  /** Settings (the header's gear) shows in place of the tab's view; picking a tab leaves it. */
+  settings?: true;
 }
 
 export const startPanel: Panel = { tab: "chat" };
@@ -15,11 +17,18 @@ export type PanelAction =
   /** A tab was clicked, or picked with the arrow keys. */
   | { type: "panel.select"; tab: Tab }
   /** The orb's running-jobs badge. */
-  | { type: "panel.jobs-button" };
+  | { type: "panel.jobs-button" }
+  /** The gear: settings on or off (`open` forces it, e.g. /model or coming back from help). */
+  | { type: "panel.settings"; open?: boolean };
 
 export function nextPanel(panel: Panel, action: PanelAction): Panel {
+  if (action.type === "panel.settings") {
+    const open = action.open ?? !panel.settings;
+    if (open === !!panel.settings) return panel;
+    return open ? { tab: panel.tab, settings: true } : { tab: panel.tab };
+  }
   const tab = action.type === "panel.select" ? action.tab : "jobs";
-  return panel.tab === tab ? panel : { tab };
+  return panel.tab === tab && !panel.settings ? panel : { tab };
 }
 
 /** Arrow keys (and Home / End) on the tab list: the tab to move to, or undefined for any other key. */

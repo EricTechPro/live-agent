@@ -23,6 +23,8 @@ describe("config file", () => {
       helpers: { geminiCli: true, codex: false, claudeCode: false, maxAtOnce: 1 },
       worktrees: false,
       voice: "Puck",
+      voiceStyle: "",
+      liveModel: "gemini-3.8-live",
       tone: "short",
       brainFolders: { raw: "raw", wiki: "wiki", projects: "projects" },
     });
@@ -43,6 +45,8 @@ describe("config file", () => {
       helpers: { geminiCli: true, codex: true, claudeCode: false, maxAtOnce: 1 },
       worktrees: false,
       voice: "Puck",
+      voiceStyle: "",
+      liveModel: "gemini-3.8-live",
       tone: "short",
       brainFolders: { raw: "raw", wiki: "wiki", projects: "projects" },
     });

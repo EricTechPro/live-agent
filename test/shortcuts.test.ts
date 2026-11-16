@@ -1,26 +1,27 @@
-// Discoverable shortcuts (ticket 38): the hint under "Tap to talk" and the Shortcuts card.
+// Discoverable shortcuts (ticket 38): the Shortcuts card, and the orb's quiet look.
 import { expect, test } from "bun:test";
-import { PTT_HINT_USES, talkHint } from "../app/src/call-state.ts";
+import { callButton, showsWords } from "../app/src/call-state.ts";
 import { isNewChatKey, SHORTCUTS } from "../app/src/shortcuts.ts";
 import { WORDS } from "../app/src/lang.ts";
 
-test("the push-to-talk hint shows under Tap to talk until it has been used twice", () => {
-  expect(PTT_HINT_USES).toBe(2);
-  expect(talkHint("idle", "en", 0)).toBe("or hold ⌃⌥");
-  expect(talkHint("idle", "en", 1)).toBe("or hold ⌃⌥");
-  expect(talkHint("idle", "en", 2)).toBeUndefined();
-  expect(talkHint("idle", "zh", 0)).toBe("或按住 ⌃⌥");
-});
-
-test("the hint shows only at rest", () => {
-  for (const look of ["listening", "speaking", "thinking", "muted", "ended", "starting", "offline", "joining"] as const) {
-    expect(talkHint(look, "en", 0)).toBeUndefined();
+test("no hint labels: words under the orb only when you have to act", () => {
+  expect(showsWords("offline")).toBe(true);
+  for (const look of ["idle", "listening", "speaking", "thinking", "muted", "ended", "starting", "joining", "reconnecting"] as const) {
+    expect(showsWords(look)).toBe(false);
   }
 });
 
+test("one call button: Start call, then Hang up in its place while a call is joining or live", () => {
+  expect(callButton(["start"])).toBe("start");
+  expect(callButton(["hangup"])).toBe("hangup");
+  expect(callButton(["mute", "hangup"])).toBe("hangup");
+  expect(callButton(["unmute", "hangup"])).toBe("hangup");
+  expect(callButton([])).toBeUndefined();
+});
+
 test("the Shortcuts card lists every shortcut, in both languages", () => {
-  expect(SHORTCUTS.en.map((s) => s.keys)).toEqual(["Tap orb · Space", "Hold ⌃⌥", "Space", "Esc", "⌘.", "⌘N", "⌃⌥T", "⌃⌥S", "Double-click orb"]);
-  expect(SHORTCUTS.en.map((s) => s.what)).toEqual(["Talk", "Push to talk", "Mute in a call", "Stop the reply", "Hang up", "New chat", "Type to Jett", "Hide / show", "Minimise"]);
+  expect(SHORTCUTS.en.map((s) => s.keys)).toEqual(["Mic button · Space", "Hold ⌃⌥", "Space", "Esc", "⌘.", "⌘N", "Click orb · ⌃⌥T", "Right-click orb", "⌃⌥S", "Double-click orb"]);
+  expect(SHORTCUTS.en.map((s) => s.what)).toEqual(["Talk", "Push to talk", "Mute in a call", "Stop the reply", "Hang up", "New chat", "Type to Jett (voice muted)", "New chat, chats, jobs, brain", "Hide / show", "Minimise"]);
   expect(SHORTCUTS.zh).toHaveLength(SHORTCUTS.en.length);
 });
 

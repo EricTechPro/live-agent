@@ -100,6 +100,13 @@ export interface ModelSession {
   sendToolResponse(response: ToolResponse): void;
   /** No network (ticket 40): stop waiting out the backoff and try to connect now. */
   retryNow?(): void;
+  /**
+   * Speak with a new voice and system instruction, same conversation (the set_voice tool).
+   * Gemini fixes both per connection, so the adapter opens a new connection with the
+   * session resume handle and moves over to it. Optional: without it, the change
+   * applies from the next connection.
+   */
+  reconfigure?(change: Pick<ConnectOptions, "voice" | "systemInstruction">): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -110,6 +117,8 @@ export interface ConnectOptions {
   voice?: string;
   /** Who the model is and how it talks (built from config `tone`, see src/core/tone.ts). */
   systemInstruction?: string;
+  /** Which model to talk with (config `liveModel`). Unset: the adapter's own default. */
+  model?: string;
 }
 
 export interface Model {

@@ -1,7 +1,9 @@
 /* The setup wizard ("Jett setup"): the approved Pixel look. LED-panel style: dot-matrix
    headings, mono body, stepped pixel frames, an LED step bar and the orb on a stage with a
    speech bubble. Tokens and shared parts (.pf, .led, .btn, .chip, .field, .sel) are in
-   pixel.css; every rule here is scoped to #wizard so the main view's styles never mix in. */
+   pixel.css; every rule here is scoped to #wizard so the main view's styles never mix in.
+   Class names are w- prefixed where the main view has its own (#stage, .stage): a global
+   rule there once laid the drawing card over this window's orb column. */
 
 
 #wizard * { box-sizing: border-box; }
@@ -25,8 +27,16 @@
   width: min(960px, 100%); height: min(600px, calc(100vh - 32px)); min-height: 520px;
   display: grid; grid-template-columns: 300px minmax(0,1fr); }
 
+/* Close (×, or Esc): top right, over the panel's empty corner. Keeps what is saved (wizard.ts). */
+#wizard .w-close { --frame: var(--edge-hi); position: absolute; top: 12px; right: 12px; z-index: 1;
+  appearance: none; border: 0; width: 32px; height: 32px; padding: 0; display: grid; place-items: center;
+  color: var(--ink-2); cursor: pointer; }
+#wizard .w-close:hover { --frame: var(--edge-hot); color: var(--ink); }
+#wizard .w-close:focus-visible { color: var(--ink); }
+#wizard .w-close svg { display: block; }
+
 /* ---- stage: the orb on its pad, talking in a bubble ---- */
-#wizard .stage { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
+#wizard .w-stage { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
 #wizard .say {
   --frame: var(--led); --fill: #04191b;
   margin: 0 0 18px; max-width: 236px; min-height: 40px; padding: 8px 12px 9px; text-align: center;
@@ -39,7 +49,7 @@
 #wizard .pad { width: 150px; height: 30px; margin-top: -8px; border: 2px dashed rgba(120,255,226,.26); border-radius: 50%; }
 
 /* ---- panel ---- */
-#wizard .panel { display: flex; flex-direction: column; min-width: 0; padding: 40px 30px 22px 8px; }
+#wizard .w-panel { display: flex; flex-direction: column; min-width: 0; padding: 40px 30px 22px 8px; }
 #wizard .progress { display: flex; gap: 4px; margin: 0 0 22px; padding: 0; list-style: none; }
 #wizard .progress li { width: 22px; height: 6px; background: var(--off); transition: background-color .3s var(--ease), box-shadow .3s var(--ease); }
 #wizard .progress li.done { background: #2fae9b; }
@@ -123,11 +133,11 @@
 @media (max-width: 760px) {
   #wizard { place-items: start center; align-content: start; }
   #wizard .win { grid-template-columns: minmax(0,1fr); height: auto; min-height: 0; }
-  #wizard .stage { flex-direction: row; flex-wrap: wrap; justify-content: flex-start; gap: 10px; padding: 16px 16px 0; }
+  #wizard .w-stage { flex-direction: row; flex-wrap: wrap; justify-content: flex-start; gap: 10px; padding: 16px 56px 0 16px; }
   #wizard #w-orb { width: 72px; height: 72px; flex: none; order: -1; }
   #wizard .pad, #wizard .tail { display: none; }
   #wizard .say { margin: 0; max-width: none; flex: 1; text-align: left; font-size: 14px; }
-  #wizard .panel { padding: 18px 16px 16px; }
+  #wizard .w-panel { padding: 18px 16px 16px; }
   #wizard .step { overflow: visible; padding-right: 0; }
   #wizard .choices, #wizard .choices.three { grid-template-columns: minmax(0,1fr); }
   #wizard .pick { min-height: 0; }

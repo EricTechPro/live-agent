@@ -68,6 +68,22 @@ export interface CoreClient {
   brainFile(path: string): Promise<{ path: string; text: string; truncated?: boolean }>;
   /** Past chats, newest first: the chat-end notes in raw (ticket 24). */
   pastChats(): Promise<PastChat[]>;
+  /** Delete one past chat's note (the panel's per-row delete). Resolves false when it was already gone. */
+  deleteChat(path: string): Promise<boolean>;
+  /** The Gemini Live model saved, and the ones the core supports. */
+  getModel(): Promise<{ model: string; models: Choice[] }>;
+  /** Save the Live model. `applied`: in use now (empty chat); else from the next new chat. */
+  setModel(model: string): Promise<{ model: string; applied: boolean }>;
+  /** Jett's voice now, and the choices (the wizard's list). */
+  getVoice(): Promise<{ voice: string; voices: Choice[] }>;
+  /** Switch the voice: the set_voice path (the core also sends `voice.changed`). */
+  setVoice(voice: string): Promise<{ voice: string; applied: boolean }>;
+}
+
+/** One pick in a settings list: the value the core keeps, and the word people see. */
+export interface Choice {
+  id: string;
+  label: string;
 }
 
 type CoreStatus = { state: "starting" | "ready" | "restarting" | "down"; info?: CoreInfo; reason?: string; attempt?: number; retryInMs?: number };
@@ -314,5 +330,10 @@ export function connectCore(info: CoreInfo): CoreClient {
     brainTree: () => setupCall<BrainTree>(info, "/brain/tree"),
     brainFile: (path) => setupCall(info, `/brain/file?path=${encodeURIComponent(path)}`),
     pastChats: async () => (await setupCall<{ chats: PastChat[] }>(info, "/brain/chats")).chats,
+    deleteChat: async (path) => (await setupCall<{ deleted: boolean }>(info, "/brain/chats/delete", { path })).deleted,
+    getModel: () => setupCall(info, "/model"),
+    setModel: (model) => setupCall(info, "/model", { model }),
+    getVoice: () => setupCall(info, "/voice"),
+    setVoice: (voice) => setupCall(info, "/voice", { voice }),
   };
 }
