@@ -11,7 +11,7 @@ import type { Mark, MarkChange } from "./canvas.ts";
 import type { JobInfo } from "./jobs.ts";
 import type { SafetyMode, Verdict } from "./safety.ts";
 import type { RiskClass } from "./tool.ts";
-import type { ShotMap } from "../screen/geometry.ts";
+import type { Rect, ShotMap } from "../screen/geometry.ts";
 import type { FrontWindow } from "../screen/eyes.ts";
 
 export type AgentEvent =
@@ -119,6 +119,11 @@ export type AgentEvent =
    * so cards keep off it. `front` null: no window (the desktop).
    */
   | { type: "screen.front"; front: FrontWindow | null }
+  /**
+   * What the locator read on the front window (words, controls; global points): where it is
+   * busy. With a window that fills the screen, cards go where it is emptiest.
+   */
+  | { type: "screen.boxes"; boxes: Rect[]; front: FrontWindow | null }
   /** Screen marks went stale (the window moved, the app switched, a scroll or click): they are erased next. */
   | { type: "screen.stale"; ids: string[]; reason: string }
   /** The model finished its reply. `reply` is the whole reply, joined for you. */

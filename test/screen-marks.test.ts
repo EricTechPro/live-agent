@@ -229,3 +229,40 @@ function boxOf(pts: { x: number; y: number }[]): Rect {
   const ys = pts.map((p) => p.y);
   return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
 }
+
+describe("polish: chips and cards keep off what is on screen", () => {
+  test("every side blocked next to the element: the chip moves out and gets a leader line, covering no words", () => {
+    // The 'Subject' case: a name with its subscriber count under it, a title above, a marked
+    // button to the right and the screen edge to the left.
+    const name = { x: 70, y: 560, w: 80, h: 18 };
+    const busy = [{ x: 70, y: 582, w: 110, h: 14 }, { x: 24, y: 520, w: 640, h: 26 }, { x: 24, y: 556, w: 40, h: 40 }];
+    const taken = [{ x: 160, y: 548, w: 110, h: 50 }];
+    const at = chipSpot(name, 70, 22, busy, taken, VIEW);
+    for (const b of busy) expect(area(at, b)).toBe(0);
+    for (const t of taken) expect(area(at, t)).toBe(0);
+    expect(at.leader).toBe(true);
+  });
+
+  test("controls count like words: a chip never sits on window buttons or bookmark items", () => {
+    const reload = { x: 78, y: 79, w: 34, h: 34 };
+    const controls = [
+      { x: 12, y: 45, w: 16, h: 16 }, { x: 35, y: 45, w: 16, h: 16 }, { x: 58, y: 45, w: 16, h: 16 }, // traffic lights
+      { x: 82, y: 33, w: 200, h: 41 }, // first tab
+      { x: 0, y: 79, w: 40, h: 34 }, { x: 42, y: 79, w: 34, h: 34 }, { x: 114, y: 79, w: 34, h: 34 }, { x: 150, y: 79, w: 500, h: 34 }, // nav, address
+      ...Array.from({ length: 8 }, (_, i) => ({ x: 10 + i * 70, y: 119, w: 60, h: 28 })), // bookmarks
+    ];
+    const at = chipSpot(reload, 62, 22, controls, [], { width: 1728, height: 1117 });
+    for (const c of controls) expect(area(at, c)).toBe(0);
+  });
+
+  test("a full-screen app: new cards take its emptiest free spot", () => {
+    // Words all over the left two thirds; the right third is empty.
+    const busy = Array.from({ length: 30 }, (_, i) => ({ x: 20 + (i % 3) * 300, y: 30 + Math.floor(i / 3) * 80, w: 260, h: 18 }));
+    const card: SceneMark = { mark: { kind: "list", id: "p1", title: "steps", items: [{ label: "one" }, { label: "two" }] } as Mark, say: "l", beatKey: "d1:0" };
+    const out = layoutScene({ marks: [card], view: VIEW, busy, from: "left" });
+    expect(busy.reduce((n, b) => n + area(out.cards[0]!.rect, b), 0)).toBe(0);
+    // Without busy boxes the first free column is used, as before.
+    expect(layoutScene({ marks: [card], view: VIEW, from: "left" }).cards[0]!.rect.x).toBeLessThan(40);
+  });
+});
+

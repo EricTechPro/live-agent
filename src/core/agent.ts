@@ -278,6 +278,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     ? createLocator({
         eyes: options.eyes,
         ground: options.ground,
+        onBoxes: (boxes, front) => emit({ type: "screen.boxes", boxes, front }),
         onAxOff: () =>
           emit({
             type: "screen.permission",

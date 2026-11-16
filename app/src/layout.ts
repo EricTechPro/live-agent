@@ -116,6 +116,11 @@ export interface LayoutInput {
   diagrams?: ReadonlyMap<string, { w: number; h: number }>;
   /** This window's top-left in global points: screen marks (`spot`) come in global points. */
   origin?: Pt;
+  /**
+   * Soft obstacles: words and controls on the app under the cards (px). New cards take the
+   * free spot that covers the least of them (used when the front window fills the screen).
+   */
+  busy?: Rect[];
 }
 
 // ---- geometry --------------------------------------------------------------------
@@ -794,12 +799,14 @@ export function placeCards(
   prev: ReadonlyMap<string, Rect & { scale?: number }> = new Map(),
   from: "left" | "right" = "left",
   max = MAX_CARDS,
+  busy: Rect[] = [],
 ): { rects: Map<string, { rect: Rect; scale: number }>; evicted: string[] } {
   const evicted = sizes.slice(0, Math.max(0, sizes.length - max)).map((s) => s.id);
   let live = sizes.slice(Math.max(0, sizes.length - max));
   // Work left to right; mirror for the right side.
   const mirror = (r: Rect): Rect => (from === "left" ? r : { ...r, x: view.width - r.x - r.w });
   const obs = obstacles.map(mirror);
+  const soft = busy.map(mirror);
   const rects = new Map<string, { rect: Rect; scale: number }>();
   const freeOf = (r: Rect, others: Rect[]) =>
     inside(r, view) && !obs.some((o) => overlaps(r, o, 10)) && !others.some((o) => overlaps(r, o, GAP));
@@ -821,7 +828,7 @@ export function placeCards(
     let scale = Math.min(1, (view.width - MARGIN * 2) / card.w, (view.height - MARGIN - BOTTOM_FREE) / card.h);
     let spot: Rect | undefined;
     for (;;) {
-      spot = findSpot(card.w * scale, card.h * scale, taken(), obs, view);
+      spot = findSpot(card.w * scale, card.h * scale, taken(), obs, view, soft);
       if (spot) break;
       // No room: close the oldest card on screen, else shrink this one.
       const oldest = live.slice(0, i).find((c) => rects.has(c.id));
@@ -847,19 +854,25 @@ export function placeCards(
 
 const STEP = 12;
 
-function findSpot(w: number, h: number, taken: Rect[], obstacles: Rect[], view: Size): Rect | undefined {
+function findSpot(w: number, h: number, taken: Rect[], obstacles: Rect[], view: Size, busy: Rect[] = []): Rect | undefined {
   const bottom = view.height - BOTTOM_FREE;
   const xs = [...new Set([MARGIN, ...taken.map((r) => r.x + r.w + GAP), ...obstacles.map((o) => o.x + o.w + 10)])]
     .filter((x) => x >= MARGIN && x + w <= view.width - MARGIN)
     .sort((a, b) => a - b);
+  // With busy boxes, also try spots across the screen, and keep the emptiest free one.
+  if (busy.length) for (let x = MARGIN; x + w <= view.width - MARGIN; x += 48) xs.push(x);
+  let best: { r: Rect; cost: number } | undefined;
   for (const x of xs) {
     for (let y = MARGIN; y + h <= bottom + 0.01; y += STEP) {
       const r = { x, y, w, h };
       if (taken.some((t) => overlaps(r, t, GAP)) || obstacles.some((o) => overlaps(r, o, 10))) continue;
-      return r;
+      if (!busy.length) return r;
+      // Covered words and controls; a little for distance from the start corner breaks ties.
+      const cost = busy.reduce((n, b) => n + overlapArea(r, b), 0) + (x + y) * 0.01;
+      if (!best || cost < best.cost) best = { r, cost };
     }
   }
-  return undefined;
+  return best?.r;
 }
 
 // ---- the whole scene ------------------------------------------------------------------------
@@ -913,6 +926,7 @@ export function layoutScene(input: LayoutInput): Layout {
     input.prev,
     input.from,
     input.max,
+    input.busy,
   );
   const cards: PlacedCard[] = all.flatMap((c) => {
     const at = rects.get(c.id);
@@ -1048,7 +1062,7 @@ export interface SpotIn {
   /** The element, in this window's px. */
   rect: Rect;
   label?: string;
-  /** Word boxes around it on screen, px. */
+  /** What is around it on screen (words, controls), px: its chip keeps off them. */
   texts?: Rect[];
 }
 
@@ -1064,32 +1078,43 @@ const overlapArea = (a: Rect, b: Rect) => {
 const boxOfPts = (pts: Pt[]): Rect => union(pts.map((p) => ({ x: p.x, y: p.y, w: 0, h: 0 })))!;
 
 /**
- * Where a chip of size `w` x `h` goes beside `around`: the candidate (above, below, right,
- * left, then the above corners) that covers the least word area, never off screen; other
- * marks and cards in `taken` count four times as much as words. Pure (tested).
+ * Where a chip of size `w` x `h` goes beside `around`. Candidates: all four sides, each slid
+ * along that side, first touching it and then further out. `busy` are things on screen it
+ * should not cover (words from OCR, Accessibility controls and texts); `taken` (other marks,
+ * cards) counts four times as much; going further out costs a little. A chip that ends up away
+ * from the element gets `leader: true`: the caller draws a short line back to it. Pure (tested).
  */
-export function chipSpot(around: Rect, w: number, h: number, texts: readonly Rect[], taken: readonly Rect[], view: Size): Rect {
+export function chipSpot(around: Rect, w: number, h: number, busy: readonly Rect[], taken: readonly Rect[], view: Size): Rect & { leader?: boolean } {
   const g = CHIP.gap;
-  const cx = around.x + around.w / 2 - w / 2;
-  const cy = around.y + around.h / 2 - h / 2;
-  const options: Rect[] = [
-    { x: cx, y: around.y - g - h, w, h },
-    { x: cx, y: around.y + around.h + g, w, h },
-    { x: around.x + around.w + g, y: cy, w, h },
-    { x: around.x - g - w, y: cy, w, h },
-    { x: around.x, y: around.y - g - h, w, h },
-    { x: around.x + around.w - w, y: around.y - g - h, w, h },
-  ];
-  let best: { r: Rect; cost: number } | undefined;
-  options.forEach((r, i) => {
-    const off = r.x < MARGIN || r.y < MARGIN || r.x + r.w > view.width - MARGIN || r.y + r.h > view.height - MARGIN;
-    const cost =
-      (off ? 1e9 : 0) +
-      texts.reduce((n, t) => n + overlapArea(r, t), 0) +
-      4 * taken.reduce((n, t) => n + overlapArea(r, t), 0) +
-      i * 0.5; // ties: the order above
-    if (!best || cost < best.cost) best = { r, cost };
-  });
+  const cx = around.x + around.w / 2;
+  const cy = around.y + around.h / 2;
+  let best: { r: Rect; cost: number; d: number } | undefined;
+  let order = 0;
+  for (const d of [g, g + 26, g + 52, g + 84]) {
+    // above, below, right, left; each slid along its side.
+    const slides = [0, -0.5, 0.5, -1, 1];
+    const sides: ((k: number) => Rect)[] = [
+      (k) => ({ x: cx - w / 2 + k * (around.w / 2 + w / 2), y: around.y - d - h, w, h }),
+      (k) => ({ x: cx - w / 2 + k * (around.w / 2 + w / 2), y: around.y + around.h + d, w, h }),
+      (k) => ({ x: around.x + around.w + d, y: cy - h / 2 + k * (around.h / 2 + h), w, h }),
+      (k) => ({ x: around.x - d - w, y: cy - h / 2 + k * (around.h / 2 + h), w, h }),
+    ];
+    for (const side of sides)
+      for (const k of slides) {
+        const r = side(k);
+        const off = r.x < MARGIN || r.y < MARGIN || r.x + r.w > view.width - MARGIN || r.y + r.h > view.height - MARGIN;
+        const cost =
+          (off ? 1e9 : 0) +
+          busy.reduce((n, t) => n + overlapArea(grow(r, 2), t), 0) +
+          4 * taken.reduce((n, t) => n + overlapArea(grow(r, 2), t), 0) +
+          (d - g) * 3 +
+          Math.abs(k) * 6 +
+          // A chip away from the element draws a leader back to it: that line must not cross words either.
+          (d > g ? leaderCost(r, around, busy) : 0) +
+          order++ * 0.01; // ties: the order above
+        if (!best || cost < best.cost) best = { r, cost, d };
+      }
+  }
   const r = best!.r;
   // Off screen everywhere (a huge element): slide the first option back inside.
   return {
@@ -1097,7 +1122,15 @@ export function chipSpot(around: Rect, w: number, h: number, texts: readonly Rec
     y: Math.min(Math.max(r.y, MARGIN), view.height - MARGIN - h),
     w,
     h,
+    ...(best!.d > g ? { leader: true } : {}),
   };
+}
+
+/** A leader from a chip to its element: each busy box it crosses costs like moving 20 px further out. */
+function leaderCost(chip: Rect, el: Rect, busy: readonly Rect[]): number {
+  const a = edgeToward(chip, centre(el));
+  const b = edgeToward(el, centre(chip));
+  return busy.filter((t) => inkHits(t, [[a, b]], 2)).length * 60;
 }
 
 /** The side an arrow comes from: the one with room and the fewest words in its way. */
@@ -1175,10 +1208,11 @@ export function layoutSpots(spots: readonly SpotIn[], view: Size, charW = CHAR_W
       const at = chipSpot(around, w, h, texts, taken, view);
       t.box = { x: at.x + CHIP.padX, y: at.y + CHIP.padY, w: t.box.w, h: t.box.h };
       t.chip = true;
-      if (s.style === "label") {
+      if (s.style === "label" || at.leader) {
         // A chip alone points with a short tick from its edge to the element.
-        const a = edgeToward(at, centre(r));
-        const b = edgeToward(r, centre(at));
+        const to = s.style === "label" ? r : around;
+        const a = edgeToward(at, centre(to));
+        const b = edgeToward(to, centre(at));
         if (Math.hypot(a.x - b.x, a.y - b.y) > 6) out.push(stroke(roughLine(a, b, rand, 0.3), 2.5));
       }
       out.push(t);
@@ -1189,4 +1223,20 @@ export function layoutSpots(spots: readonly SpotIn[], view: Size, charW = CHAR_W
     boxes.push(grow(around, 4));
   }
   return { prims, boxes };
+}
+
+// ---- the real front window as an obstacle ------------------------------------------------
+
+/** Browser tabs, address and bookmarks bars: cards keep off this band of a full-screen window. */
+export const CHROME_BAND = 120;
+
+/**
+ * The cards' hard and soft obstacles for the front window: one with room beside it is avoided
+ * whole; one that fills (about 80% of) the screen keeps only its top band hard, and `busy`
+ * (its words and controls, from the last read) soft, so cards go where the page is emptiest.
+ */
+export function frontWindowObstacles(win: Rect | undefined, view: Size, busy: Rect[] = []): { hard: Rect[]; soft: Rect[] } {
+  if (!win) return { hard: [], soft: [] };
+  if (win.w * win.h < 0.8 * view.width * view.height) return { hard: [win], soft: [] };
+  return { hard: [{ x: win.x, y: win.y, w: win.w, h: CHROME_BAND }], soft: busy };
 }

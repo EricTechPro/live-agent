@@ -198,3 +198,18 @@ describe("coordinates", () => {
     expect(pick([exact, { ...exact, frame: { x: 51, y: 0, w: 10, h: 10 } }])).toBe(exact);
   });
 });
+
+describe("what is around the target", () => {
+  test("controls count as busy (the chip keeps off them), big containers do not; the window's boxes go out", async () => {
+    const back: AxHit = { role: "AXButton", label: "Back", frame: { x: 860, y: 600, w: 34, h: 34 } };
+    const group: AxHit = { role: "AXRow", frame: { x: 100, y: 40, w: 1200, h: 700 } };
+    const { eyes } = fake({ ax: [subscribe], controls: [subscribe, back, group], ocr: [{ text: "182K", frame: { x: 900, y: 640, w: 40, h: 12 } }] });
+    let sent: unknown[] = [];
+    const found = await createLocator({ eyes, onBoxes: (b) => (sent = b) })({ text: "Subscribe" });
+    expect(found.texts).toContainEqual(back.frame);
+    expect(found.texts).toContainEqual({ x: 900, y: 640, w: 40, h: 12 });
+    expect(found.texts).not.toContainEqual(group.frame);
+    expect(found.texts).not.toContainEqual(subscribe.frame);
+    expect(sent).toContainEqual(back.frame);
+  });
+});

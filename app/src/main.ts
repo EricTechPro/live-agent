@@ -18,7 +18,7 @@ import { waveFor, QUIET } from "./orb-wave.ts";
 import { isNewChatKey, SHORTCUTS, SHORTCUTS_TITLE } from "./shortcuts.ts";
 import { addWork, cuesFor, noWork, type Work } from "./cues.ts";
 import { mountSketch, type SketchApi } from "./sketch-view.ts";
-import { fillsScreen, followFrontWindow, frontWindow, onFrontWindowMoved } from "./front-window.ts";
+import { followFrontWindow, frontWindow, frontWindowAvoid, onFrontWindowMoved } from "./front-window.ts";
 import { mountTooltips, paintIcons, setIcon } from "./tooltip.ts";
 import { nextPanel, startPanel, tabForKey, TABS, type Panel, type PanelAction, type Tab } from "./panel.ts";
 import { nextLayer, startLayer, type Layer, type LayerAction } from "./layers.ts";
@@ -334,8 +334,9 @@ function placeFloaters() {
   };
   // The front app's window too (the core reports it while a drawing is up: front-window.ts).
   const win = frontWindow();
-  const avoid = [{ x: orbRect.x, y: orbRect.y, w: orbRect.width, h: orbRect.height }, box(cuesEl), box(popover), box(approvalsEl), win && !fillsScreen(win, view()) ? win : undefined];
-  sketch?.setObstacles(avoid.filter((r) => !!r), left ? "left" : "right");
+  const front = frontWindowAvoid(win, view());
+  const avoid = [{ x: orbRect.x, y: orbRect.y, w: orbRect.width, h: orbRect.height }, box(cuesEl), box(popover), box(approvalsEl), ...front.hard];
+  sketch?.setObstacles(avoid.filter((r) => !!r), left ? "left" : "right", front.soft);
 }
 new MutationObserver(() => {
   // A question for you brings Jett back from the dot: approvals sit beside the orb.

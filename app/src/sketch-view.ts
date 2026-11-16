@@ -58,7 +58,8 @@ interface Leaving {
 export interface SketchApi {
   clearAll(): void;
   openCount(): number;
-  setObstacles(rects: Rect[], from?: "left" | "right"): void;
+  /** `busy`: words and controls on the app under the cards (soft: cards take the emptiest spot). */
+  setObstacles(rects: Rect[], from?: "left" | "right", busy?: Rect[]): void;
   captionActive(): boolean;
 }
 
@@ -92,6 +93,7 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
   let pen: Pen = emptyPen;
   let beats: { key: string; say: string; ids: string[] }[] = [];
   let obstacles: Rect[] = [];
+  let busy: Rect[] = [];
   let from: "left" | "right" = "left";
   let charW: number | undefined;
   let displayW: number | undefined;
@@ -140,7 +142,7 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
     const live = new Set(scene.marks.filter((m) => due(m.mark.id)).map(group));
     const shown = scene.marks.filter((m) => due(m.mark.id) || live.has(group(m)));
     for (const m of shown) waiting.delete(m.mark.id);
-    layout = layoutScene({ marks: shown, view, obstacles: [...obstacles, bottomBand], prev, closed, from, charW, displayW, diagrams, origin: overlayOrigin() });
+    layout = layoutScene({ marks: shown, view, obstacles: [...obstacles, bottomBand], prev, closed, from, charW, displayW, diagrams, origin: overlayOrigin(), busy });
     prev = new Map(layout.cards.map((c) => [c.id, { ...c.rect, scale: c.scale }]));
     // Cards that went (closed, evicted, erased) fade out.
     const now = performance.now();
@@ -696,13 +698,14 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
       relayout();
     },
     openCount: () => layout.cards.length,
-    setObstacles(rects, side = "left") {
-      const same = side === from && rects.length === obstacles.length && rects.every((r, i) => {
-        const o = obstacles[i]!;
+    setObstacles(rects, side = "left", soft = []) {
+      const sameList = (a: Rect[], b: Rect[]) => a.length === b.length && a.every((r, i) => {
+        const o = b[i]!;
         return o.x === r.x && o.y === r.y && o.w === r.w && o.h === r.h;
       });
-      if (same) return;
+      if (side === from && sameList(rects, obstacles) && sameList(soft, busy)) return;
       obstacles = rects;
+      busy = soft;
       from = side;
       relayout();
     },

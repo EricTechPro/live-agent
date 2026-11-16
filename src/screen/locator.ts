@@ -55,6 +55,8 @@ export interface LocatorDeps {
   ground?: Ground;
   /** Accessibility is off: say so once (the window shows how to turn it on). */
   onAxOff?(): void;
+  /** Everything read on the window (words, controls), global points: where it is busy. */
+  onBoxes?(boxes: Rect[], front: FrontWindow | null): void;
   now?: () => number;
 }
 
@@ -183,6 +185,22 @@ export function textsAround(rect: Rect, boxes: readonly Rect[], reach = 220): Re
   return boxes.filter((b) => intersection(b, zone) > 0 && iou(b, rect) < 0.5 && !(contains(rect, centre(b)))).slice(0, 100);
 }
 
+/**
+ * The window's busy boxes: words and controls, without the big containers (groups, rows,
+ * scroll areas: anything over a quarter of the window) and capped.
+ */
+export function busyBoxes(scope: Rect, boxes: readonly Rect[], max = 600): Rect[] {
+  const big = area(scope) / 4;
+  const out: Rect[] = [];
+  for (const b of boxes) {
+    if (b.w < 2 || b.h < 2 || area(b) > big || intersection(b, scope) <= 0) continue;
+    if (out.some((o) => iou(o, b) > 0.8)) continue;
+    out.push(b);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
 // ---- the locator --------------------------------------------------------------------
 
 const quote = (t: Target) => `"${t.text ?? t.describe}"`;
@@ -213,13 +231,15 @@ export function createLocator(deps: LocatorDeps): (target: Target) => Promise<Fo
     let axTexts: Rect[] = [];
 
     const finish = async (rect: Rect, via: Found["via"], label?: string, role?: string): Promise<Found> => {
-      // Words around it for the chip: the OCR already read, else a quick read round it.
+      // What is on the window, for the chip (keep off words and controls) and for cards (go
+      // where it is empty): the OCR already read, else one fast read of the window, plus the
+      // Accessibility controls and texts.
       let boxes = ocrLines?.map((l) => l.frame);
-      if (!boxes && eyes.ocr) {
-        const pad = { x: rect.x - 240, y: rect.y - 120, w: rect.w + 480, h: rect.h + 240 };
-        boxes = (await eyes.ocr({ rect: pad }).catch(() => ({ lines: [] as OcrLine[] }))).lines.map((l) => l.frame);
-      }
-      return { rect, via, label, role, front, texts: textsAround(rect, [...(boxes ?? []), ...axTexts]) };
+      if (!boxes && eyes.ocr) boxes = (await eyes.ocr({ rect: scope }).catch(() => ({ lines: [] as OcrLine[] }))).lines.map((l) => l.frame);
+      controls ??= eyes.ax ? await eyes.ax.controls().then((c) => ((axTexts = c.texts), c.controls)).catch(() => []) : [];
+      const busy = busyBoxes(scope, [...(boxes ?? []), ...axTexts, ...controls.map((c) => c.frame)]);
+      deps.onBoxes?.(busy, front);
+      return { rect, via, label, role, front, texts: textsAround(rect, busy) };
     };
 
     // 1. Accessibility.
