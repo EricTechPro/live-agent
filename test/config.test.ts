@@ -24,6 +24,7 @@ describe("config file", () => {
       worktrees: false,
       voice: "Puck",
       voiceStyle: "",
+      liveModel: "gemini-3.8-live",
       tone: "short",
       brainFolders: { raw: "raw", wiki: "wiki", projects: "projects" },
     });
@@ -45,6 +46,7 @@ describe("config file", () => {
       worktrees: false,
       voice: "Puck",
       voiceStyle: "",
+      liveModel: "gemini-3.8-live",
       tone: "short",
       brainFolders: { raw: "raw", wiki: "wiki", projects: "projects" },
     });

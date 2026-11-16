@@ -36,6 +36,13 @@ import type { Model, ModelEvent } from "../core/model.ts";
 
 export const DEFAULT_LIVE_MODEL = "gemini-3.8-live";
 
+/**
+ * The Live models Jett can talk with: the window's model picker lists exactly these, and the
+ * core refuses any other. Add one here only once the adapter has been checked against it
+ * (audio out, transcriptions, NON_BLOCKING tools, session resumption).
+ */
+export const LIVE_MODELS: { id: string; label: string }[] = [{ id: DEFAULT_LIVE_MODEL, label: "Gemini 3.8 Live" }];
+
 const NETWORK_CODES = /\b(ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH|EHOSTUNREACH|ENETDOWN|EPIPE|ECONNABORTED)\b/;
 
 /** A failure that is the network's fault (DNS, refused, reset, timeout), not the key's or the model's. */
@@ -83,8 +90,8 @@ export type GeminiLiveOptions = {
       token?: never;
     }
   | {
-      /** Mints a fresh single-use ephemeral token for each connection. */
-      token: () => Promise<string>;
+      /** Mints a fresh single-use ephemeral token for each connection, locked to `model`. */
+      token: (model: string) => Promise<string>;
       apiKey?: never;
     }
 );
@@ -99,7 +106,7 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
     options.connect ??
     (async (params) => {
       const ai = options.token
-        ? new GoogleGenAI({ apiKey: await options.token(), httpOptions: { apiVersion: "v1alpha" } })
+        ? new GoogleGenAI({ apiKey: await options.token(params.model), httpOptions: { apiVersion: "v1alpha" } })
         : new GoogleGenAI({ apiKey: options.apiKey, httpOptions: { apiVersion: "v1beta" } });
       return ai.live.connect(params);
     });
@@ -167,7 +174,7 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
       async function dial(): Promise<Link> {
         const link: Link = { open: true, retired: false };
         const socket = await open({
-          model: options.model ?? DEFAULT_LIVE_MODEL,
+          model: connectOptions?.model ?? options.model ?? DEFAULT_LIVE_MODEL,
           config: { ...config, sessionResumption: handle ? { handle } : {} },
           callbacks: {
             onmessage: (message) => {

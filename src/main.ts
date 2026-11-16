@@ -78,7 +78,7 @@ const startOnce = () => startApp({
     save: (key) => saveGeminiKey(home ?? process.cwd(), key),
   },
   // The Live session connects with a fresh single-use token, never the key itself.
-  model: (tokens) => geminiLiveModel({ token: () => tokens.geminiToken() }),
+  model: (tokens) => geminiLiveModel({ token: (model) => tokens.geminiToken(model) }),
   // After each chat, a background job tidies new raw notes into wiki pages (ticket 07).
   // It reads the key when it runs, so a key pasted in the window works too.
   tidy: (args) => geminiTidyModel({ apiKey: geminiApiKey() ?? "" })(args),

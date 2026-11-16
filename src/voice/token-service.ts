@@ -30,8 +30,8 @@ export interface TokenServiceOptions {
 export interface TokenService {
   /** A room token for one participant. Short-lived: reconnecting means asking again. */
   livekitToken(identity: string): Promise<{ token: string; expiresAt: string }>;
-  /** A single-use Gemini Live token. Must start a session within a minute. */
-  geminiToken(): Promise<string>;
+  /** A single-use Gemini Live token for `model` (default: the configured one). Must start a session within a minute. */
+  geminiToken(model?: string): Promise<string>;
 }
 
 const LIVEKIT_TTL_S = 10 * 60;
@@ -51,7 +51,7 @@ export function createTokenService(options: TokenServiceOptions): TokenService {
       const exp = JSON.parse(Buffer.from(token.split(".")[1]!, "base64url").toString()).exp as number;
       return { token, expiresAt: new Date(exp * 1000).toISOString() };
     },
-    async geminiToken() {
+    async geminiToken(model) {
       const gemini = options.gemini;
       if (!gemini) throw new Error("no Gemini key: set GEMINI_API_KEY (or GOOGLE_API_KEY) in .env");
       const now = Date.now();
@@ -63,7 +63,7 @@ export function createTokenService(options: TokenServiceOptions): TokenService {
         expireTime: new Date(now + 30 * 60_000).toISOString(),
         // Lock the token to our model. The session config (tools, voice) is left
         // open because tools come from the tools folder at connect time.
-        liveConnectConstraints: { model: gemini.model ?? DEFAULT_LIVE_MODEL },
+        liveConnectConstraints: { model: model ?? gemini.model ?? DEFAULT_LIVE_MODEL },
         // Why the empty list: leaving lockAdditionalFields out means "lock ALL
         // fields" in @google/genai, so the server uses only the token's setup and
         // silently drops the tools we send at connect time (the model then says

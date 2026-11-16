@@ -2,12 +2,13 @@
 // newest first, each with a short title and its time. Read only.
 //
 //   await pastChats(root, folders)   // [{ path: "raw/2026-11-15-chat-2.md", title, date }]
+//   await deleteChat(root, "raw/2026-11-15-chat-2.md", folders)   // the panel's delete
 //
 // A chat-end note is `<raw>/YYYY-MM-DD-chat[-n].md` (saveChatNote via saveRawNote).
 // Order comes from the name (day, then n), not file times, which copies and
 // syncs change. Symlinks are skipped, so the list never reads outside the brain;
 // reading one note goes through readBrainFile (src/brain/tree.ts) like the tree.
-import { open, readdir, stat } from "node:fs/promises";
+import { lstat, open, readdir, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { DEFAULT_FOLDERS, type BrainFolders } from "./index.ts";
 
@@ -68,4 +69,29 @@ function titleOf(text: string): string {
   const title = (line ?? "").replace(/^[-*•]\s+/, "").replace(/^(You|Agent):\s*/, "").replace(/\*\*/g, "").trim();
   if (!title) return "Chat";
   return title.length > TITLE_MAX ? `${title.slice(0, TITLE_MAX - 1).trimEnd()}…` : title;
+}
+
+/** A delete the core refuses: not a chat-end note straight in raw, or not a plain file. */
+export class ChatPathError extends Error {}
+
+/**
+ * Delete one past chat (the panel's per-row delete). Only a chat-end note straight inside
+ * the raw folder (`<raw>/YYYY-MM-DD-chat[-n].md`, the shape pastChats lists) and only a
+ * plain file, never a symlink, so nothing outside those notes can go. Wiki pages the tidy
+ * job already made from it stay. Resolves false when the note was already gone.
+ */
+export async function deleteChat(root: string, path: string, folders: BrainFolders = DEFAULT_FOLDERS): Promise<boolean> {
+  const prefix = `${folders.raw}/`;
+  const name = path.startsWith(prefix) ? path.slice(prefix.length) : "";
+  if (!CHAT_NOTE.test(name)) throw new ChatPathError(`${path} is not a past chat`);
+  const file = join(root, folders.raw, name);
+  let info;
+  try {
+    info = await lstat(file);
+  } catch {
+    return false;
+  }
+  if (!info.isFile()) throw new ChatPathError(`${path} is not a plain note`);
+  await unlink(file);
+  return true;
 }
