@@ -104,6 +104,8 @@ export interface LayoutInput {
   /** Fill columns from this side (the side away from the orb). */
   from?: "left" | "right";
   charW?: number;
+  /** Cards kept at once (default MAX_CARDS). */
+  max?: number;
 }
 
 // ---- geometry --------------------------------------------------------------------
@@ -246,7 +248,7 @@ export function layoutCard(m: CardMark, charW = CHAR_W): CardContent {
           if (b.note) b.note.box.y = axisY + 14 + b.label.box.h + 2;
         }
         prims.push(dot, b.label, ...(b.note ? [b.note] : []));
-        items.push(union([{ x: x - 6, y: axisY - 6, w: 12, h: 12 }, b.label.box, ...(b.note ? [b.note.box] : [])])!);
+        items.push(union([b.label.box, ...(b.note ? [b.note.box] : [])])!);
       });
       return { ...base, w, h, prims: own(m.id, prims), items };
     }
@@ -272,7 +274,8 @@ export function layoutCard(m: CardMark, charW = CHAR_W): CardContent {
           rowH += note.box.h + 2;
         }
         prims.push(...parts);
-        items.push({ x: PAD, y, w: w - PAD * 2, h: rowH });
+        // The item is where its words are, so a ring hugs them instead of the whole row.
+        items.push(union(parts.map((p) => (p as Prim & { t: "text" }).box))!);
         y += rowH + 8;
       });
       return { ...base, w, h: y - 8 + PAD, prims: own(m.id, prims), items };
@@ -337,7 +340,7 @@ export function layoutCard(m: CardMark, charW = CHAR_W): CardContent {
         const value = textAt(fmt(values[i]!), x0 + len + 8, cy - 11 * LINE / 2, valueW, charW, { size: 11, tone: "dim", maxLines: 1 });
         label.box.y = cy - label.box.h / 2;
         prims.push(label, bar, value);
-        items.push({ x: PAD, y, w: w - PAD * 2, h: rowH });
+        items.push(union([label.box, value.box, { x: x0, y: cy - 5, w: len, h: 10 }])!);
         y += rowH + 10;
       });
       return { ...base, w, h: y - 10 + PAD, prims: own(m.id, prims), items };
@@ -362,7 +365,7 @@ export function layoutCard(m: CardMark, charW = CHAR_W): CardContent {
         const cells = r.map((c, j) => textAt(c || "–", xs[j]!, y, widths[j]! - 10, charW, { size: 13, maxLines: 3, tone: j === 0 ? "text" : "text" }));
         prims.push(...cells);
         const rowH = Math.max(...cells.map((c) => c.box.h));
-        items.push({ x: PAD, y, w: innerW, h: rowH });
+        items.push(union(cells.map((c) => c.box))!);
         y += rowH + 8;
       });
       return { ...base, w, h: y - 8 + PAD, prims: own(m.id, prims), items };
@@ -505,7 +508,7 @@ function inkOnCard(card: CardContent, mark: Mark, charW: number): void {
 
 /** Loose marks with board hints: one "sketch" card, the hints fitted inside it, words pushed apart. */
 function sketchCard(id: string, marks: Mark[], charW: number): CardContent {
-  const resolved = marks.flatMap((m) => resolveLoose(m));
+  const resolved = separateLoose(marks.flatMap((m) => resolveLoose(m)));
   const prims: Owned[] = [];
   const pts = resolved.flatMap(bboxPoints);
   const box = union(pts.map((p) => ({ x: p.x, y: p.y, w: 0, h: 0 })))!;
@@ -524,6 +527,61 @@ function sketchCard(id: string, marks: Mark[], charW: number): CardContent {
   const all = prims.flatMap((o) => (o.prim.t === "text" ? [o.prim.box] : o.prim.t === "stroke" ? [union(o.prim.pts.map((p) => ({ x: p.x, y: p.y, w: 0, h: 0 })))!] : []));
   const h = Math.max(BAR + PAD + bh * s + PAD + 12, ...all.map((r) => r.y + r.h + PAD));
   return { id, kind: "sketch", title: "sketch", w, h, prims, items: [], owners: marks.map((m) => m.id) };
+}
+
+/** Shapes that must not sit on each other in a loose sketch (lines and arrows may cross them). */
+const SOLID = new Set(["box", "circle", "step", "text", "check", "cross"]);
+
+const boxOf = (m: InkMark): Rect => union(bboxPoints(m).map((p) => ({ x: p.x, y: p.y, w: 0, h: 0 })))!;
+
+function moved(m: InkMark, dx: number, dy: number): InkMark {
+  if (m.kind === "arrow" || m.kind === "line") return { ...m, from: { x: m.from.x + dx, y: m.from.y + dy }, to: { x: m.to.x + dx, y: m.to.y + dy } };
+  return { ...m, x: m.x + dx, y: m.y + dy } as InkMark;
+}
+
+/**
+ * The model's loose shapes, pushed apart: each solid shape (box, ring, words ...) that lands
+ * on an earlier one moves to the nearest free spot (right, below, then further out).
+ * Arrow and line ends that touched a moved shape move with it.
+ */
+export function separateLoose(marks: InkMark[]): InkMark[] {
+  const out: InkMark[] = [];
+  const placed: Rect[] = [];
+  const shifts: { from: Rect; dx: number; dy: number }[] = [];
+  for (const m of marks) {
+    if (!SOLID.has(m.kind)) {
+      out.push(m);
+      continue;
+    }
+    const box = boxOf(m);
+    let best = { dx: 0, dy: 0 };
+    if (placed.some((p) => overlaps(box, p, 16))) {
+      let found = false;
+      for (let ring = 1; ring <= 40 && !found; ring++) {
+        const d = ring * 24;
+        // Right, below, left, above, then the diagonals, at growing distance.
+        for (const [dx, dy] of [[d, 0], [0, d], [-d, 0], [0, -d], [d, d], [-d, d], [d, -d], [-d, -d]] as const) {
+          const r = { ...box, x: box.x + dx, y: box.y + dy };
+          if (r.x < -200 || r.y < -200) continue;
+          if (!placed.some((p) => overlaps(r, p, 16))) {
+            best = { dx, dy };
+            found = true;
+            break;
+          }
+        }
+      }
+    }
+    const next = best.dx || best.dy ? moved(m, best.dx, best.dy) : m;
+    if (best.dx || best.dy) shifts.push({ from: box, ...best });
+    placed.push(boxOf(next));
+    out.push(next);
+  }
+  // Ends of arrows and lines follow the shape they were drawn from or to.
+  const follow = (p: Pt): Pt => {
+    const s = shifts.find((sh) => p.x >= sh.from.x - 24 && p.x <= sh.from.x + sh.from.w + 24 && p.y >= sh.from.y - 24 && p.y <= sh.from.y + sh.from.h + 24);
+    return s ? { x: p.x + s.dx, y: p.y + s.dy } : p;
+  };
+  return out.map((m) => (m.kind === "arrow" || m.kind === "line" ? { ...m, from: follow(m.from), to: follow(m.to) } : m));
 }
 
 function bboxPoints(m: InkMark): Pt[] {
@@ -700,6 +758,7 @@ export function layoutScene(input: LayoutInput): Layout {
     input.obstacles,
     input.prev,
     input.from,
+    input.max,
   );
   const cards: PlacedCard[] = all.flatMap((c) => {
     const at = rects.get(c.id);
@@ -715,10 +774,15 @@ export function layoutScene(input: LayoutInput): Layout {
     const a = placedById.get(m.on);
     const b = placedById.get(m.to_card);
     if (!a || !b || a === b) continue;
-    const from = edgeToward(a.rect, centre(b.rect));
-    const to = edgeToward(b.rect, centre(a.rect));
+    const others = cards.filter((c) => c !== a && c !== b).map((c) => c.rect);
+    const path = routeBetween(a.rect, b.rect, others, input.view);
+    if (!path) continue; // no clear way round: better no arrow than one through a card
     const rand = seededRandom(m.id);
-    const prims: Prim[] = m.kind === "arrow" ? arrowPrims(from, to, rand, 4) : [stroke(roughLine(from, to, rand), 4)];
+    const from = path[0]!;
+    const to = path.at(-1)!;
+    const shaft = path.length === 2 ? roughLine(from, to, rand) : path;
+    const prims: Prim[] = [stroke(shaft, 4)];
+    if (m.kind === "arrow") prims.push(...headAt(path.at(-2)!, to, rand, 4));
     if (m.label) {
       const t = textAt(m.label, 0, 0, 200, charW, { size: 12, tone: "ink", weight: 500, maxLines: 2 });
       const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
@@ -736,6 +800,61 @@ export function layoutScene(input: LayoutInput): Layout {
 }
 
 const centre = (r: Rect): Pt => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+
+function headAt(prev: Pt, to: Pt, rand: Rand, width: number): Prim[] {
+  const angle = Math.atan2(to.y - prev.y, to.x - prev.x);
+  return [-1, 1].map((side) => {
+    const a = angle + Math.PI + side * (0.5 + (rand() - 0.5) * 0.1);
+    return stroke(roughLine(to, { x: to.x + Math.cos(a) * 13, y: to.y + Math.sin(a) * 13 }, rand, 0.2), width);
+  });
+}
+
+const hits = (pts: Pt[], rects: Rect[]) =>
+  pts.some((p) => rects.some((r) => p.x > r.x - 4 && p.x < r.x + r.w + 4 && p.y > r.y - 4 && p.y < r.y + r.h + 4));
+
+/** Sample a path every few px (for hit tests). */
+function sample(pts: Pt[]): Pt[] {
+  const out: Pt[] = [];
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]!;
+    const b = pts[i]!;
+    const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 6));
+    for (let k = 0; k <= n; k++) out.push({ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n });
+  }
+  return out;
+}
+
+/**
+ * A way from card a to card b that crosses no other card and stays on screen:
+ * straight edge to edge if that is clear, else a curve round the right or left
+ * of both cards. Undefined when neither is clear.
+ */
+export function routeBetween(a: Rect, b: Rect, others: Rect[], view: Size): Pt[] | undefined {
+  const straight = [edgeToward(a, centre(b)), edgeToward(b, centre(a))];
+  if (!hits(sample(straight), others)) return straight;
+  for (const side of [1, -1]) {
+    const x0 = side > 0 ? a.x + a.w + 6 : a.x - 6;
+    const x1 = side > 0 ? b.x + b.w + 6 : b.x - 6;
+    const out = side > 0 ? Math.max(a.x + a.w, b.x + b.w) + 34 : Math.min(a.x, b.x) - 34;
+    if (out < MARGIN || out > view.width - MARGIN) continue;
+    const p0 = { x: x0, y: a.y + a.h / 2 };
+    const p3 = { x: x1, y: b.y + b.h / 2 };
+    const curve: Pt[] = [];
+    for (let i = 0; i <= 24; i++) {
+      const t = i / 24;
+      const u = 1 - t;
+      // Cubic Bezier: out sideways from a, along, back in to b.
+      curve.push({
+        x: u * u * u * p0.x + 3 * u * u * t * out + 3 * u * t * t * out + t * t * t * p3.x,
+        y: u * u * u * p0.y + 3 * u * u * t * p0.y + 3 * u * t * t * p3.y + t * t * t * p3.y,
+      });
+    }
+    // A little hand wobble across the curve.
+    const wobbly = curve.map((p, i) => (i === 0 || i === curve.length - 1 ? p : { x: p.x + Math.sin(i * 1.7) * 1.2, y: p.y + Math.cos(i * 1.3) * 1.2 }));
+    if (!hits(sample(wobbly), others)) return wobbly;
+  }
+  return undefined;
+}
 
 /** Where the line from a rect's centre toward `p` leaves the rect (plus a few px). */
 export function edgeToward(r: Rect, p: Pt): Pt {

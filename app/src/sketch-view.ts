@@ -83,6 +83,8 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
   let prev = new Map<string, Rect>();
   let units = new Map<string, Unit>();
   let leaving: Leaving[] = [];
+  /** Marks that arrived but whose pen time has not come: not on screen yet, so they take no room. */
+  let waiting = new Set<string>();
   let pen: Pen = emptyPen;
   let beats: { key: string; say: string; ids: string[] }[] = [];
   let obstacles: Rect[] = [];
@@ -115,7 +117,10 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
     // The caption bar and the clear chip sit bottom centre: cards keep off them too.
     const bottomBand = { x: view.width / 2 - 320, y: view.height - 104, w: 640, h: 104 };
     const before = new Map(layout.cards.map((c) => [c.id, c]));
-    layout = layoutScene({ marks: scene.marks, view, obstacles: [...obstacles, bottomBand], prev, closed, from, charW });
+    const now0 = performance.now();
+    const shown = scene.marks.filter((m) => !waiting.has(m.mark.id) || slot(m.mark.id).start <= now0);
+    for (const m of shown) waiting.delete(m.mark.id);
+    layout = layoutScene({ marks: shown, view, obstacles: [...obstacles, bottomBand], prev, closed, from, charW });
     prev = new Map(layout.cards.map((c) => [c.id, c.rect]));
     // Cards that went (closed, evicted, erased) fade out.
     const now = performance.now();
@@ -169,6 +174,7 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
       pen = emptyPen;
       beats = [];
       closed = new Set();
+      waiting = new Set();
       relayout();
       return;
     }
@@ -177,6 +183,7 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
       kick();
       return;
     }
+    if (event.type === "canvas.beat") for (const m of event.marks) waiting.add(m.id);
     relayout();
     if (event.type === "canvas.edit") {
       // The changed mark redraws at once.
@@ -187,7 +194,10 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
     if (event.type !== "canvas.beat") return;
     const key = `${event.id}:${event.beat}`;
     const ids = event.marks.map((m) => m.id);
-    pen = penAddBeat(pen, { key, say: event.say, ids, durations: ids.map((id) => units.get(id)?.plan.total ?? 0) }, now, reduced);
+    // How long each new mark takes, from a layout with everything in it (only sizes matter here).
+    const all = buildUnits(layoutScene({ marks: scene.marks, view: { width: innerWidth, height: innerHeight }, closed, charW, max: Infinity }));
+    pen = penAddBeat(pen, { key, say: event.say, ids, durations: ids.map((id) => all.get(id)?.plan.total ?? 0) }, now, reduced);
+    relayout();
     beats = [...beats.filter((b) => b.key !== key), { key, say: event.say, ids }];
     canvas.setAttribute("aria-label", `Drawing: ${beats.map((b) => b.say).join(" ")}`);
     kick();
@@ -254,6 +264,9 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
   // ---- painting ----
   function paint(now: number) {
     frame = 0;
+    // A waiting mark's time has come: it joins the layout (and takes its room) now.
+    if ([...waiting].some((id) => slot(id).start <= now)) relayout();
+    if (waiting.size) kick();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, innerWidth, innerHeight);
     let busy = false;

@@ -4,7 +4,7 @@
 // boxes, the caption strip at the bottom, and the obstacles (the orb, marks on real UI).
 import { expect, test } from "bun:test";
 import type { Mark } from "../src/core/canvas.ts";
-import { BOTTOM_FREE, GAP, layoutCard, layoutScene, MARGIN, overlaps, placeCards, screenTextBoxes, toScreen, wrap, type Layout, type Rect } from "../app/src/layout.ts";
+import { BOTTOM_FREE, GAP, separateLoose, layoutCard, layoutScene, MARGIN, overlaps, placeCards, screenTextBoxes, toScreen, wrap, type Layout, type Rect } from "../app/src/layout.ts";
 import type { SceneMark } from "../app/src/sketch.ts";
 
 const VIEW = { width: 1440, height: 900 };
@@ -144,6 +144,19 @@ test("deliberately overlapping, off-board loose marks: one sketch card, words pu
   expect(problems(out)).toEqual([]);
 });
 
+test("loose shapes the model stacked on each other are pushed apart; an arrow from a moved box moves with it", () => {
+  const out = separateLoose([
+    { kind: "box", id: "p1", x: 100, y: 100, w: 200, h: 100, label: "A" },
+    { kind: "box", id: "p2", x: 110, y: 110, w: 200, h: 100, label: "B" },
+    { kind: "circle", id: "p3", x: 200, y: 150, r: 40 },
+    { kind: "arrow", id: "p4", from: { x: 310, y: 160 }, to: { x: 600, y: 160 } },
+  ]);
+  const boxes = out.filter((m) => m.kind !== "arrow").map((m) => (m.kind === "box" ? { x: m.x, y: m.y, w: m.w, h: m.h } : m.kind === "circle" ? { x: m.x - m.r, y: m.y - m.r, w: m.r * 2, h: m.r * 2 } : { x: 0, y: 0, w: 0, h: 0 }));
+  for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) expect(overlaps(boxes[i]!, boxes[j]!)).toBe(false);
+  const arrow = out.find((m) => m.kind === "arrow")!;
+  expect(arrow.kind === "arrow" && [arrow.from.x, arrow.from.y]).not.toEqual([310, 160]);
+});
+
 test("ink on cards: rings, underlines, checks and labels stay inside their card; labels never cover words", () => {
   const marks = [
     sm(list("p1")),
@@ -170,6 +183,17 @@ test("an arrow between two cards runs edge to edge, its label clear of every car
   const label = arrow.find((o) => o.prim.t === "text");
   if (label && label.prim.t === "text") for (const c of out.cards) expect(overlaps(label.prim.box, c.rect)).toBe(false);
   expect(problems(out)).toEqual([]);
+});
+
+test("an arrow between two cards never runs through a third card (it curves round, or is left out)", () => {
+  const marks = [sm(timeline("p1")), sm(list("p2")), sm(bars("p3")), sm(flow("p4", 3)), sm({ kind: "arrow", id: "p5", on: "p2", to_card: "p4" })];
+  const out = layoutScene({ marks, view: VIEW });
+  const others = out.cards.filter((c) => c.id !== "p2" && c.id !== "p4").map((c) => c.rect);
+  for (const o of out.screen) {
+    if (o.prim.t !== "stroke") continue;
+    for (const p of o.prim.pts) for (const r of others) expect(p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h).toBe(false);
+  }
+  expect(out.screen.length).toBeGreaterThan(0);
 });
 
 test("closed cards free their room and their ink goes with them", () => {
