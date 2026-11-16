@@ -24,7 +24,8 @@
 // The seam for screen awareness (a later slice): marks aimed at real on-screen UI live
 // in `screen` (full-screen px), and their boxes come in as `obstacles`, which cards avoid.
 // Idea from Roamies (AGPL): idea only, our own code.
-import { MAX_CARDS, isCard, type Mark } from "../../src/core/canvas.ts";
+import { MAX_CARDS, isCard } from "../../src/core/card-kinds.ts";
+import type { Mark } from "../../src/core/canvas.ts";
 import { inkFor, roughLine, roughRing, seededRandom, type InkMark, type Pt, type Rand, type SceneMark } from "./sketch.ts";
 
 export interface Rect {
@@ -98,7 +99,7 @@ export interface LayoutInput {
   /** Screen rects cards must avoid: the orb, open popovers, the caption bar, marks on real UI. */
   obstacles?: Rect[];
   /** Where cards already are (by card id); they stay put while they still fit. */
-  prev?: ReadonlyMap<string, Rect>;
+  prev?: ReadonlyMap<string, Rect & { scale?: number }>;
   /** Card ids the user closed. */
   closed?: ReadonlySet<string>;
   /** Fill columns from this side (the side away from the orb). */
@@ -645,7 +646,7 @@ export function placeCards(
   sizes: { id: string; w: number; h: number }[],
   view: Size,
   obstacles: Rect[] = [],
-  prev: ReadonlyMap<string, Rect> = new Map(),
+  prev: ReadonlyMap<string, Rect & { scale?: number }> = new Map(),
   from: "left" | "right" = "left",
   max = MAX_CARDS,
 ): { rects: Map<string, { rect: Rect; scale: number }>; evicted: string[] } {
@@ -664,8 +665,9 @@ export function placeCards(
     const old = prev.get(card.id);
     if (old) {
       const at = mirror(old);
-      const scale = Math.min(1, old.w / card.w);
-      const rect = { ...at, w: card.w * scale, h: card.h * scale };
+      // It keeps its spot and its scale; only its size follows its content.
+      const scale = old.scale ?? 1;
+      const rect = { x: at.x, y: at.y, w: card.w * scale, h: card.h * scale };
       if (freeOf(rect, taken())) {
         rects.set(card.id, { rect, scale });
         continue;

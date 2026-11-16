@@ -14,6 +14,9 @@
 // 1000 x 600 board as rough hints. Hints are clamped onto the board, never
 // refused: the layout pass moves things anyway.
 import { z } from "zod";
+import { CARD_KINDS, isCard } from "./card-kinds.ts";
+
+export { CARD_KINDS, isCard, MAX_CARDS, type CardKind } from "./card-kinds.ts";
 
 export const BOARD = { width: 1000, height: 600 } as const;
 
@@ -100,16 +103,11 @@ const mark = z
     if (missing.length) ctx.addIssue({ code: "custom", message: `${m.id}: give on (a card id) or ${missing.join(", ")}` });
   });
 
-export const CARD_KINDS = ["timeline", "list", "flow", "bars", "table", "diagram"] as const;
 export const INK_KINDS = ["box", "text", "arrow", "line", "circle", "underline", "check", "cross", "step"] as const;
 export const MARK_KINDS = [...CARD_KINDS, ...INK_KINDS] as const;
 export const MAX_BEATS = 8;
 export const MAX_MARKS_PER_BEAT = 12;
-/** Cards on screen at once; the window closes the oldest to make room. */
-export const MAX_CARDS = 4;
 
-export type CardKind = (typeof CARD_KINDS)[number];
-export const isCard = (m: { kind: string }): boolean => (CARD_KINDS as readonly string[]).includes(m.kind);
 
 const beat = z.object({ say: z.string().trim().min(1, "say is empty"), marks: z.array(mark).min(1).max(MAX_MARKS_PER_BEAT) });
 const beats = z

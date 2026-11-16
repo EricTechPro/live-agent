@@ -16,6 +16,7 @@ import type { CoreClient } from "./core-client.ts";
 import { layoutScene, toScreen, type Layout, type Owned, type PlacedCard, type Prim, type Rect, type Tone } from "./layout.ts";
 import { easeInOut, stepAt, typed, unitPlan, type UnitPlan } from "./motion.ts";
 import { emptyPen, penAddBeat, penInterrupt, penSpeak, slotOf, VOICE, type Pen } from "./pen.ts";
+import { isCard } from "../../src/core/card-kinds.ts";
 import { addCanvasEvent, emptyScene, INK_COLORS, partialPoints, type Pt, type Scene } from "./sketch.ts";
 import type { Slot } from "./sketch.ts";
 
@@ -80,7 +81,7 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
   let scene: Scene = emptyScene;
   let closed = new Set<string>();
   let layout: Layout = { cards: [], screen: [], evicted: [] };
-  let prev = new Map<string, Rect>();
+  let prev = new Map<string, Rect & { scale: number }>();
   let units = new Map<string, Unit>();
   let leaving: Leaving[] = [];
   /** Marks that arrived but whose pen time has not come: not on screen yet, so they take no room. */
@@ -118,10 +119,21 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
     const bottomBand = { x: view.width / 2 - 320, y: view.height - 104, w: 640, h: 104 };
     const before = new Map(layout.cards.map((c) => [c.id, c]));
     const now0 = performance.now();
-    const shown = scene.marks.filter((m) => !waiting.has(m.mark.id) || slot(m.mark.id).start <= now0);
+    // A waiting mark joins the layout once the pen has a time for it and that time has come.
+    // Ink on a card, and the loose marks of one sketch, join with their card, so a card's
+    // size is settled when it opens (each mark still draws at its own time).
+    const due = (id: string) => !waiting.has(id) || (slotOf(pen, id)?.start ?? Infinity) <= now0;
+    const group = (m: (typeof scene.marks)[number]) => {
+      const r = m.mark as { on?: string; to_card?: string };
+      if (r.to_card) return m.mark.id;
+      if (r.on) return r.on;
+      return isCard(m.mark) ? m.mark.id : `sketch:${m.beatKey.split(":")[0]}`;
+    };
+    const live = new Set(scene.marks.filter((m) => due(m.mark.id)).map(group));
+    const shown = scene.marks.filter((m) => due(m.mark.id) || live.has(group(m)));
     for (const m of shown) waiting.delete(m.mark.id);
     layout = layoutScene({ marks: shown, view, obstacles: [...obstacles, bottomBand], prev, closed, from, charW });
-    prev = new Map(layout.cards.map((c) => [c.id, c.rect]));
+    prev = new Map(layout.cards.map((c) => [c.id, { ...c.rect, scale: c.scale }]));
     // Cards that went (closed, evicted, erased) fade out.
     const now = performance.now();
     for (const [id, card] of before) if (!prev.has(id) && cardStarted(card, now)) leaving.push({ card, at: now });
@@ -165,6 +177,7 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
       // The user talked over Jett: the pen stops; beats not yet spoken stay undrawn.
       const stopped = penInterrupt(pen, now);
       pen = stopped.pen;
+      for (const id of stopped.dropped) waiting.delete(id);
       if (stopped.dropped.length) scene = addCanvasEvent(scene, { type: "canvas.erase", id: "", ids: stopped.dropped, all: false });
       relayout();
       return;
@@ -265,7 +278,7 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
   function paint(now: number) {
     frame = 0;
     // A waiting mark's time has come: it joins the layout (and takes its room) now.
-    if ([...waiting].some((id) => slot(id).start <= now)) relayout();
+    if ([...waiting].some((id) => (slotOf(pen, id)?.start ?? Infinity) <= now)) relayout();
     if (waiting.size) kick();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, innerWidth, innerHeight);
