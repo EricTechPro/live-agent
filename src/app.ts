@@ -48,6 +48,8 @@
 //                     held): the circled crop goes to the model now, before the question ends
 //   GET  /screen/permission -> { granted }: is Screen Recording on for Jett?
 //   POST /screen/permission -> { granted }: ask macOS for it and open the Settings pane
+//   GET  /screen/accessibility -> { granted }: is Accessibility on (finding controls by their words)?
+//   POST /screen/accessibility -> { granted }: ask macOS for it and open the Settings pane
 //
 // Why HTTP + SSE (not a WebSocket): the window only reads the stream, and
 // fetch/EventSource exist in every webview with no library.
@@ -323,6 +325,16 @@ export async function startApp(options: AppOptions): Promise<App> {
       async "POST /screen/permission"({ session }) {
         if (!session.screen) return json({ error: "no screen helper" }, 404);
         return json({ granted: await session.screen.requestPermission().catch(() => false) });
+      },
+
+      async "GET /screen/accessibility"({ session }) {
+        if (!session.screen) return json({ error: "no screen helper" }, 404);
+        return json({ granted: (await session.screen.accessibility().catch(() => undefined)) ?? true });
+      },
+
+      async "POST /screen/accessibility"({ session }) {
+        if (!session.screen) return json({ error: "no screen helper" }, 404);
+        return json({ granted: (await session.screen.requestAccessibility().catch(() => undefined)) ?? true });
       },
 
       "GET /events"({ session }) {

@@ -1,5 +1,5 @@
 // Screen awareness in the window (slice 2): the user's ink while Ctrl+Option is held, and
-// the "Screen Recording is off" notice. Its own layer and module, apart from the sketch
+// the "Screen Recording is off" and "Accessibility is off" (slice 3) notices. Its own layer and module, apart from the sketch
 // renderer, so the drawing work can change freely.
 //
 // While talking (Ctrl+Option held), the pointer path is drawn in teal on a see-through layer,
@@ -110,10 +110,13 @@ export function createScreenInk(info: CoreInfo): ScreenInk {
 
   // ---- Screen Recording off: say so plainly, with the button that fixes it ----
   let notice: HTMLElement | undefined;
-  function showNotice(message: string) {
+  function showNotice(message: string, kind: "screen" | "accessibility" = "screen") {
+    // Screen Recording off matters more (Jett is blind): it is never replaced by the Accessibility one.
+    if (notice?.isConnected && notice.dataset.kind === "screen" && kind === "accessibility") return;
     notice?.remove();
     const box = document.createElement("div");
     box.dataset.hit = "";
+    box.dataset.kind = kind;
     box.setAttribute("role", "alert");
     Object.assign(box.style, {
       position: "fixed", top: "16px", left: "50%", transform: "translateX(-50%)", zIndex: "2147483001",
@@ -137,8 +140,9 @@ export function createScreenInk(info: CoreInfo): ScreenInk {
     }
     open.onclick = () => {
       // Ask macOS (its prompt shows once), then open the pane either way.
-      void fetch(`${info.url}/screen/permission`, { method: "POST", headers: auth }).catch(() => {});
-      void invoke("open_screen_settings").catch(() => {});
+      const path = kind === "screen" ? "permission" : "accessibility";
+      void fetch(`${info.url}/screen/${path}`, { method: "POST", headers: auth }).catch(() => {});
+      void invoke(kind === "screen" ? "open_screen_settings" : "open_accessibility_settings").catch(() => {});
     };
     close.onclick = () => box.remove();
     box.append(text, open, close);
@@ -146,6 +150,9 @@ export function createScreenInk(info: CoreInfo): ScreenInk {
     notice = box;
   }
 
+  const AX_OFF =
+    "Jett can't find buttons by name: Accessibility is off. Turn on Jett in System Settings > Privacy & Security > " +
+    "Accessibility so it can point at the exact control (it still reads the screen without it).";
   const OFF =
     "Jett can't see your screen: Screen Recording is off. Turn on Jett in System Settings > Privacy & Security > " +
     "Screen Recording, then quit and reopen Jett.";
@@ -154,12 +161,19 @@ export function createScreenInk(info: CoreInfo): ScreenInk {
     .then((r) => (r.ok ? r.json() : { granted: true }))
     .then((r: { granted?: boolean }) => r.granted === false && showNotice(OFF))
     .catch(() => {});
+  void fetch(`${info.url}/screen/accessibility`, { headers: auth })
+    .then((r) => (r.ok ? r.json() : { granted: true }))
+    .then((r: { granted?: boolean }) => r.granted === false && showNotice(AX_OFF, "accessibility"))
+    .catch(() => {});
 
   return {
     start,
     finish,
     onEvent(event) {
-      if (event.type === "screen.permission" && !event.granted) showNotice(OFF);
+      if (event.type === "screen.permission" && !event.granted) {
+        if (event.kind === "accessibility") showNotice(AX_OFF, "accessibility");
+        else showNotice(OFF);
+      }
     },
   };
 }

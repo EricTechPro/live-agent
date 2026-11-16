@@ -151,7 +151,12 @@ export interface AgentSession {
    * Screen awareness. `release`: Ctrl+Option was let go; a closed loop in `stroke` sends the
    * circled crop, and the turn gets the front app and cursor as text. Undefined without eyes.
    */
-  screen?: Pick<Screen, "circle" | "release" | "permission" | "requestPermission">;
+  screen?: Pick<Screen, "circle" | "release" | "permission" | "requestPermission"> & {
+    /** Accessibility (finding controls by their words): granted? Undefined when the helper can't tell. */
+    accessibility(): Promise<boolean | undefined>;
+    /** Ask macOS for Accessibility (its prompt shows once) and open the Settings pane. */
+    requestAccessibility(): Promise<boolean | undefined>;
+  };
   /** Shift+Tab: Ask me -> Auto edits -> Bypass -> Ask me. Returns the new mode. */
   cycleMode(): SafetyMode;
   /** The setup wizard (the window's click-through setup). */
@@ -575,6 +580,8 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       circle: (stroke: Pt[]) => screen.circle(stroke),
       release: (input: ReleaseInput) => screen.release(input),
       permission: () => screen.permission(),
+      accessibility: async () => options.eyes?.ax?.trusted(),
+      requestAccessibility: async () => options.eyes?.ax?.request(),
       requestPermission: () => screen.requestPermission(),
     },
     stopReply() {

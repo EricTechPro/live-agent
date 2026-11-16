@@ -118,6 +118,21 @@ describe("mark_screen through the event stream", () => {
     await s.close();
   });
 
+  test("Accessibility off: the window is told how to fix it (once), and OCR still finds the words", async () => {
+    const { eyes } = eyesWith([]);
+    eyes.ax = { ...eyes.ax!, trusted: async () => false, find: async () => ({ trusted: false, matches: [] }) };
+    eyes.ocr = async ({ text }) => ({ lines: [{ text: "Subscribe", frame: { x: 600, y: 500, w: 80, h: 18 }, ...(text ? { match: { x: 600, y: 500, w: 80, h: 18 } } : {}) }], area: front.bounds! });
+    const model = scriptedModel([call("f1", "find_on_screen", { text: "Subscribe" }), [{ type: "text", text: "ok" }]]);
+    const s = await startSession({ model, tools, eyes, chatEndNote: false });
+    const events = await s.sendText("find it");
+    expect(events.filter((e) => e.type === "screen.permission")).toEqual([
+      expect.objectContaining({ type: "screen.permission", kind: "accessibility", granted: false }),
+    ]);
+    expect(result(events, "find_on_screen").output).toMatchObject({ via: "ocr" });
+    expect(await s.screen!.accessibility()).toBe(false);
+    await s.close();
+  });
+
   test("draw refuses spot marks: only mark_screen puts things on the real screen", async () => {
     const model = scriptedModel([
       call("d1", "draw", { beats: [{ say: "x", marks: [{ kind: "spot", id: "p1", style: "ring", rect: { x: 1, y: 1, w: 9, h: 9 } }] }] }),
