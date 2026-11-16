@@ -4,11 +4,16 @@
 // boxes, the caption strip at the bottom, and the obstacles (the orb, marks on real UI).
 import { expect, test } from "bun:test";
 import type { Mark } from "../src/core/canvas.ts";
-import { BOTTOM_FREE, GAP, separateLoose, layoutCard, layoutScene, MARGIN, overlaps, placeCards, screenTextBoxes, toScreen, wrap, type Layout, type Rect } from "../app/src/layout.ts";
+import { BOTTOM_FREE, GAP, inkHits, separateLoose, layoutCard, layoutScene, MARGIN, overlaps, placeCards, screenTextBoxes, toScreen, wrap, type Layout, type Rect } from "../app/src/layout.ts";
 import type { SceneMark } from "../app/src/sketch.ts";
 
 const VIEW = { width: 1440, height: 900 };
-const sm = (mark: Record<string, unknown>, beatKey = "d1:0"): SceneMark => ({ mark: mark as Mark, say: "line", beatKey });
+/** Mark kinds by id, so the checks know which strokes are crosses (meant to strike words through). */
+const ownerKind = new Map<string, string>();
+const sm = (mark: Record<string, unknown>, beatKey = "d1:0"): SceneMark => {
+  ownerKind.set(String(mark.id), String(mark.kind));
+  return { mark: mark as Mark, say: "line", beatKey };
+};
 
 const timeline = (id: string, n = 5) => ({
   kind: "timeline", id, title: "Timeline",
@@ -40,6 +45,14 @@ function problems(layout: Layout, view = VIEW, obstacles: Rect[] = []): string[]
   }
   for (let i = 0; i < cards.length; i++)
     for (let j = i + 1; j < cards.length; j++) if (overlaps(cards[i]!.rect, cards[j]!.rect, GAP - 0.01)) out.push(`${cards[i]!.id} overlaps ${cards[j]!.id}`);
+  // No word sits on ink (a cross is the one mark meant to strike words through).
+  for (const c of cards) {
+    const crosses = new Set(c.owners.filter((o) => /cross/.test(ownerKind.get(o) ?? "")));
+    const strokes = c.prims.flatMap((o) => (o.prim.t === "stroke" && !crosses.has(o.owner) ? [o.prim.pts] : []));
+    c.prims.forEach((o, i) => {
+      if (o.prim.t === "text" && inkHits(o.prim.box, strokes, 0)) out.push(`${c.id}: text ${i} "${o.prim.lines[0]}" crosses a stroke`);
+    });
+  }
   const texts = screenTextBoxes(layout);
   for (let i = 0; i < texts.length; i++)
     for (let j = i + 1; j < texts.length; j++) if (overlaps(texts[i]!, texts[j]!)) out.push(`text ${i} overlaps text ${j}`);
@@ -149,12 +162,66 @@ test("loose shapes the model stacked on each other are pushed apart; an arrow fr
     { kind: "box", id: "p1", x: 100, y: 100, w: 200, h: 100, label: "A" },
     { kind: "box", id: "p2", x: 110, y: 110, w: 200, h: 100, label: "B" },
     { kind: "circle", id: "p3", x: 200, y: 150, r: 40 },
-    { kind: "arrow", id: "p4", from: { x: 310, y: 160 }, to: { x: 600, y: 160 } },
+    { kind: "arrow", id: "p4", from: { x: 330, y: 230 }, to: { x: 600, y: 230 } }, // touches only the moved box
   ]);
   const boxes = out.filter((m) => m.kind !== "arrow").map((m) => (m.kind === "box" ? { x: m.x, y: m.y, w: m.w, h: m.h } : m.kind === "circle" ? { x: m.x - m.r, y: m.y - m.r, w: m.r * 2, h: m.r * 2 } : { x: 0, y: 0, w: 0, h: 0 }));
   for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) expect(overlaps(boxes[i]!, boxes[j]!)).toBe(false);
   const arrow = out.find((m) => m.kind === "arrow")!;
-  expect(arrow.kind === "arrow" && [arrow.from.x, arrow.from.y]).not.toEqual([310, 160]);
+  expect(arrow.kind === "arrow" && [arrow.from.x, arrow.from.y]).not.toEqual([330, 230]);
+});
+
+test("the shot-08 sketch: stacked boxes end up apart, the arrow label is off the arrow, notes keep off the boxes", () => {
+  const marks = [
+    { kind: "box", id: "p3", x: 100, y: 100, w: 260, h: 120, label: "Your voice" },
+    { kind: "box", id: "p4", x: 120, y: 120, w: 260, h: 120, label: "Jett's core" },
+    { kind: "text", id: "p5", x: 130, y: 160, text: "words on words" },
+    { kind: "arrow", id: "p6", from: { x: 360, y: 160 }, to: { x: 700, y: 160 }, label: "streams" },
+    { kind: "circle", id: "p7", x: 820, y: 170, r: 90 },
+    { kind: "text", id: "p8", x: 1200, y: 700, text: "off the board" },
+  ].map((m) => sm(m, "demo1:2"));
+  const out = layoutScene({ marks, view: VIEW });
+  expect(problems(out)).toEqual([]); // includes: no word crosses any stroke, no words overlap
+  const [card] = out.cards;
+  // The two boxes' drawn outlines, wobble and overshoot included, are clearly apart.
+  const outline = (owner: string) => bbox(card!.prims.filter((o) => o.owner === owner && o.prim.t === "stroke").flatMap((o) => (o.prim as { pts: { x: number; y: number }[] }).pts));
+  expect(overlaps(outline("p3"), outline("p4"), 6)).toBe(false);
+  // Every word keeps at least a few px from all ink.
+  const strokes = card!.prims.flatMap((o) => (o.prim.t === "stroke" ? [o.prim.pts] : []));
+  for (const o of card!.prims) if (o.prim.t === "text") expect(inkHits(o.prim.box, strokes, 2)).toBe(false);
+  // With a wider font (the browser measures Martian Mono wider than the default), each box still holds its label.
+  for (const charW of [0.62, 0.75]) {
+    const c = layoutScene({ marks, view: VIEW, charW }).cards[0]!;
+    expect(problems({ cards: [c], screen: [], evicted: [] })).toEqual([]);
+    for (const id of ["p3", "p4"]) {
+      const frame = bbox(c.prims.filter((o) => o.owner === id && o.prim.t === "stroke").flatMap((o) => (o.prim as { pts: { x: number; y: number }[] }).pts));
+      const label = c.prims.find((o) => o.owner === id && o.prim.t === "text")!.prim as { box: Rect };
+      expect(label.box.x).toBeGreaterThan(frame.x);
+      expect(label.box.y).toBeGreaterThan(frame.y);
+      expect(label.box.x + label.box.w).toBeLessThan(frame.x + frame.w);
+      expect(label.box.y + label.box.h).toBeLessThan(frame.y + frame.h);
+    }
+  }
+});
+
+test("a ring encloses its item's whole box with padding and never crosses its words", () => {
+  const out = layoutScene({ marks: [sm(list("p1")), sm({ kind: "circle", id: "p2", on: "p1", item: 1 }), sm({ kind: "circle", id: "p3", on: "p1", item: 3 })], view: VIEW });
+  const [card] = out.cards;
+  for (const [owner, item] of [["p2", 0], ["p3", 2]] as const) {
+    const loop = (card!.prims.find((o) => o.owner === owner)!.prim as { pts: { x: number; y: number }[] }).pts;
+    const box = card!.items[item]!;
+    expect(inkHits(box, [loop], 0)).toBe(false);
+    // Each corner of the item is inside the loop (ray casting).
+    const inside = (p: { x: number; y: number }) => {
+      let c = false;
+      for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
+        const a = loop[i]!, b = loop[j]!;
+        if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) c = !c;
+      }
+      return c;
+    };
+    for (const p of [{ x: box.x, y: box.y }, { x: box.x + box.w, y: box.y }, { x: box.x, y: box.y + box.h }, { x: box.x + box.w, y: box.y + box.h }]) expect(inside(p)).toBe(true);
+  }
+  expect(problems(out)).toEqual([]);
 });
 
 test("ink on cards: rings, underlines, checks and labels stay inside their card; labels never cover words", () => {

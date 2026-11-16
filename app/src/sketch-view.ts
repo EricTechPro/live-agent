@@ -32,6 +32,8 @@ export const LOOK = {
   edge: "rgba(3,39,34,0.6)",
 } as const;
 const FONT = '"Martian Mono", ui-monospace, monospace';
+/** Doto, the dot-matrix display face, for headings. */
+const DISPLAY = '"Doto", "Martian Mono", ui-monospace, monospace';
 const LEAVE_MS = 250;
 /** The caption stays this long after the beat's last mark. */
 const CAPTION_HOLD_MS = 1800;
@@ -91,6 +93,9 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
   let obstacles: Rect[] = [];
   let from: "left" | "right" = "left";
   let charW: number | undefined;
+  let displayW: number | undefined;
+  /** Rendered Mermaid sizes by card id: diagram cards fit their content. */
+  const diagrams = new Map<string, { w: number; h: number }>();
   let dpr = 1;
   let frame = 0;
   let captionOn = false;
@@ -106,9 +111,11 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
   addEventListener("resize", resize);
   resize();
   // Measure the real monospace advance once the font is in, so layout's text boxes are exact.
-  void document.fonts?.load(`400 13px ${FONT}`).then(() => {
+  void Promise.all([document.fonts?.load(`400 13px ${FONT}`), document.fonts?.load(`800 19px ${DISPLAY}`)]).then(() => {
     ctx.font = `400 100px ${FONT}`;
     charW = ctx.measureText("0123456789").width / 1000;
+    ctx.font = `800 100px ${DISPLAY}`;
+    displayW = ctx.measureText("Inside a black hole").width / 1900;
     relayout();
   });
 
@@ -132,7 +139,7 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
     const live = new Set(scene.marks.filter((m) => due(m.mark.id)).map(group));
     const shown = scene.marks.filter((m) => due(m.mark.id) || live.has(group(m)));
     for (const m of shown) waiting.delete(m.mark.id);
-    layout = layoutScene({ marks: shown, view, obstacles: [...obstacles, bottomBand], prev, closed, from, charW });
+    layout = layoutScene({ marks: shown, view, obstacles: [...obstacles, bottomBand], prev, closed, from, charW, displayW, diagrams });
     prev = new Map(layout.cards.map((c) => [c.id, { ...c.rect, scale: c.scale }]));
     // Cards that went (closed, evicted, erased) fade out.
     const now = performance.now();
@@ -197,6 +204,15 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
       return;
     }
     if (event.type === "canvas.beat") for (const m of event.marks) waiting.add(m.id);
+    // Diagram cards: measure the rendered Mermaid, then lay the card out to fit it.
+    const drawnMarks = event.type === "canvas.beat" ? event.marks : event.type === "canvas.edit" ? [event.mark] : [];
+    for (const m of drawnMarks)
+      if (m.kind === "diagram")
+        void cardsLayer.sizeOf(m.source).then((size) => {
+          if (!size) return;
+          diagrams.set(m.id, size);
+          relayout();
+        });
     relayout();
     if (event.type === "canvas.edit") {
       // The changed mark redraws at once.
@@ -208,7 +224,7 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
     const key = `${event.id}:${event.beat}`;
     const ids = event.marks.map((m) => m.id);
     // How long each new mark takes, from a layout with everything in it (only sizes matter here).
-    const all = buildUnits(layoutScene({ marks: scene.marks, view: { width: innerWidth, height: innerHeight }, closed, charW, max: Infinity }));
+    const all = buildUnits(layoutScene({ marks: scene.marks, view: { width: innerWidth, height: innerHeight }, closed, charW, displayW, diagrams, max: Infinity }));
     pen = penAddBeat(pen, { key, say: event.say, ids, durations: ids.map((id) => all.get(id)?.plan.total ?? 0) }, now, reduced);
     relayout();
     beats = [...beats.filter((b) => b.key !== key), { key, say: event.say, ids }];
@@ -459,7 +475,7 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
     if (!shown.lines.length) return;
     const lineH = p.size * 1.38;
     ctx.save();
-    ctx.font = `${p.weight} ${p.size}px ${FONT}`;
+    ctx.font = `${p.weight} ${p.size}px ${p.font === "display" ? DISPLAY : FONT}`;
     ctx.textBaseline = "middle";
     const color = toneColor(p.tone, ink);
     const total = shown.lines.reduce((n, l) => n + l.length, 0);

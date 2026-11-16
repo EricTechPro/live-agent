@@ -18,6 +18,7 @@ import { waveFor, QUIET } from "./orb-wave.ts";
 import { isNewChatKey, SHORTCUTS, SHORTCUTS_TITLE } from "./shortcuts.ts";
 import { addWork, cuesFor, noWork, type Work } from "./cues.ts";
 import { mountSketch, type SketchApi } from "./sketch-view.ts";
+import { fillsScreen, frontWindow, onFrontWindowMoved } from "./front-window.ts";
 import { mountTooltips, paintIcons, setIcon } from "./tooltip.ts";
 import { nextPanel, startPanel, tabForKey, TABS, type Panel, type PanelAction, type Tab } from "./panel.ts";
 import { nextLayer, startLayer, type Layer, type LayerAction } from "./layers.ts";
@@ -330,7 +331,9 @@ function placeFloaters() {
     const r = el.getBoundingClientRect();
     return { x: r.left, y: r.top, w: r.width, h: r.height };
   };
-  const avoid = [{ x: orbRect.x, y: orbRect.y, w: orbRect.width, h: orbRect.height }, box(cuesEl), box(popover), box(approvalsEl)];
+  // The front app's window too (a seam: front-window.ts is a stub until the screen-aware slice).
+  const win = frontWindow();
+  const avoid = [{ x: orbRect.x, y: orbRect.y, w: orbRect.width, h: orbRect.height }, box(cuesEl), box(popover), box(approvalsEl), win && !fillsScreen(win, view()) ? win : undefined];
   sketch?.setObstacles(avoid.filter((r) => !!r), left ? "left" : "right");
 }
 new MutationObserver(() => {
@@ -1177,6 +1180,7 @@ async function boot() {
   });
   mountChatView(core, reader, { list: $<HTMLUListElement>("chat-list"), empty: $("chats-empty") });
   sketch = mountSketch(core, stage, { onCaption: () => renderCaptions() });
+  onFrontWindowMoved(placeFloaters);
   placeFloaters();
   say(WORDS[lang].hi);
   feedOrb({ type: "core.ready" });

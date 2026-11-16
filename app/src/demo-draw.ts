@@ -101,6 +101,14 @@ const core = { onEvent: (fn: Listener) => void listeners.push(fn) };
 
 const stage = document.getElementById("stage")!;
 const sketch = mountSketch(core as never, stage);
+// The fake browser window stands in for the front app: cards keep off it.
+const front = () => {
+  const r = document.querySelector<HTMLElement>(".win")!.getBoundingClientRect();
+  return { x: r.left, y: r.top, w: r.width, h: r.height };
+};
+const avoidFront = () => sketch.setObstacles([front()], "left");
+avoidFront();
+window.addEventListener("resize", avoidFront);
 window.addEventListener("keydown", (e: KeyboardEvent) => {
   if (e.key === "Escape" && sketch.openCount()) sketch.clearAll();
 });

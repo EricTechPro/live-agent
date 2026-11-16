@@ -49,6 +49,8 @@ export const BOTTOM_FREE = 64;
 export const CHROME = { bar: 26, pad: 14 } as const;
 /** Default monospace advance (em) for Martian Mono; the window measures the real one. */
 export const CHAR_W = 0.62;
+/** Default advance (em) for Doto, the dot-matrix display face used for headings. */
+export const DISPLAY_W = 0.6;
 export const LINE = 1.38;
 
 export type Tone = "ink" | "text" | "dim" | "hot" | "deep";
@@ -56,7 +58,7 @@ export type Tone = "ink" | "text" | "dim" | "hot" | "deep";
 export type Prim =
   | { t: "stroke"; pts: Pt[]; width: number; tone: Tone }
   | { t: "dot"; x: number; y: number; r: number; tone: Tone }
-  | { t: "text"; box: Rect; lines: string[]; size: number; weight: number; align: "left" | "center" | "right"; tone: Tone };
+  | { t: "text"; box: Rect; lines: string[]; size: number; weight: number; align: "left" | "center" | "right"; tone: Tone; font?: "display" };
 
 /** A primitive plus the mark it belongs to (its pen timing comes from that mark). */
 export interface Owned {
@@ -107,6 +109,10 @@ export interface LayoutInput {
   charW?: number;
   /** Cards kept at once (default MAX_CARDS). */
   max?: number;
+  /** Doto's advance (em), measured by the window. */
+  displayW?: number;
+  /** Rendered Mermaid sizes by card id (card-view measures them). */
+  diagrams?: ReadonlyMap<string, { w: number; h: number }>;
 }
 
 // ---- geometry --------------------------------------------------------------------
@@ -163,6 +169,7 @@ interface TextOpts {
   align?: "left" | "center" | "right";
   tone?: Tone;
   maxLines?: number;
+  font?: "display";
 }
 
 /**
@@ -176,7 +183,7 @@ function textAt(text: string, x: number, y: number, maxW: number, charW: number,
   const h = lines.length * size * LINE;
   const align = o.align ?? "left";
   const left = align === "left" ? x : align === "center" ? x - w / 2 : x - w;
-  return { t: "text", box: { x: left, y, w, h }, lines, size, weight: o.weight ?? 400, align, tone: o.tone ?? "text" };
+  return { t: "text", box: { x: left, y, w, h }, lines, size, weight: o.weight ?? 400, align, tone: o.tone ?? "text", ...(o.font ? { font: o.font } : {}) };
 }
 
 // ---- hand-drawn helpers -----------------------------------------------------------
@@ -205,7 +212,7 @@ type CardMark = Extract<Mark, { kind: "timeline" | "list" | "flow" | "bars" | "t
 const { bar: BAR, pad: PAD } = CHROME;
 
 /** One card's content, laid out from its data. Card-local px. */
-export function layoutCard(m: CardMark, charW = CHAR_W): CardContent {
+export function layoutCard(m: CardMark, charW = CHAR_W, displayW = DISPLAY_W, diagram?: { w: number; h: number }): CardContent {
   const rand = seededRandom(m.id);
   const prims: Prim[] = [];
   const items: Rect[] = [];
@@ -260,7 +267,7 @@ export function layoutCard(m: CardMark, charW = CHAR_W): CardContent {
       const textW = w - PAD * 2 - gutter;
       let y = top;
       if (m.heading) {
-        const head = textAt(m.heading, PAD, y, textW, charW, { size: 16, weight: 500, maxLines: 2 });
+        const head = textAt(m.heading, PAD, y, textW, displayW, { size: 19, weight: 800, maxLines: 2, font: "display" });
         prims.push(head);
         y += head.box.h + 10;
       }
@@ -373,12 +380,25 @@ export function layoutCard(m: CardMark, charW = CHAR_W): CardContent {
     }
 
     case "diagram": {
-      const w = Math.round(Math.min(520, Math.max(320, (m.w ?? 600) * 0.7)));
-      const h = Math.round(Math.min(380, Math.max(220, (m.h ?? 380) * 0.7)));
-      const body = { x: PAD, y: top - 4, w: w - PAD * 2, h: h - top + 4 - PAD };
+      // Sized to the rendered diagram (card-view measures it), scaled down to fit at most
+      // 500 x 360; a guess from the source until the first render lands.
+      const natural = diagram ?? guessDiagram(m.source);
+      const k = Math.min(1, 500 / natural.w, 360 / natural.h);
+      const bw = Math.max(180, Math.round(natural.w * k));
+      const bh = Math.max(60, Math.round(natural.h * k));
+      const w = bw + PAD * 2;
+      const h = top + bh + PAD;
+      const body = { x: PAD, y: top, w: bw, h: bh };
       return { ...base, w, h, prims: [], items: [body], body };
     }
   }
+}
+
+/** A first guess at a Mermaid diagram's size from its source: nodes in a row or a column. */
+export function guessDiagram(source: string): { w: number; h: number } {
+  const nodes = new Set(source.match(/\b[A-Za-z_][\w]*(?=\s*[[({>]|\s*-->|\s*---|\s*$)/gm) ?? []).size || 4;
+  const across = /^\s*(flowchart|graph)\s+(LR|RL)/m.test(source);
+  return across ? { w: Math.min(520, 90 * nodes), h: 150 } : { w: 260, h: Math.min(380, 70 * nodes) };
 }
 
 /** Centre a text primitive's box on x, top at y. */
@@ -443,7 +463,8 @@ const color = (m: Mark) => (m as { color?: InkMark["color"] }).color;
 /** Ink aimed at a card (and an item of it): drawn around that item, inside the card. Mutates the card (it may grow). */
 function inkOnCard(card: CardContent, mark: Mark, charW: number): void {
   const r = mark as Mark & { item?: number; label?: string; text?: string; n?: number };
-  const target = (r.item && card.items[r.item - 1]) || union(card.items) || { x: PAD, y: BAR + PAD, w: card.w - PAD * 2, h: card.h - BAR - PAD * 2 };
+  // No item (or one past the end): the mark is about the whole card, every word in it.
+  const target = (r.item && card.items[r.item - 1]) || union([...card.items, ...textBoxes(card.prims)]) || { x: PAD, y: BAR + PAD, w: card.w - PAD * 2, h: card.h - BAR - PAD * 2 };
   const bounds = { x: 4, y: BAR + 4, w: card.w - 8, h: card.h - BAR - 8 };
   const rand = seededRandom(mark.id);
   const c = color(mark);
@@ -452,17 +473,22 @@ function inkOnCard(card: CardContent, mark: Mark, charW: number): void {
   const clampY = (y: number) => Math.max(bounds.y, Math.min(bounds.y + bounds.h, y));
   switch (mark.kind) {
     case "circle": {
-      // A loose loop round the item, kept inside the card.
-      const cx = target.x + target.w / 2;
-      const cy = target.y + target.h / 2;
-      const rx = Math.min(target.w / 2 + 10, cx - bounds.x - 2, bounds.x + bounds.w - cx - 2);
-      const ry = Math.min(target.h / 2 + 8, cy - bounds.y - 2, bounds.y + bounds.h - cy - 2);
-      out.push(...inkPrims({ kind: "circle", id: mark.id, x: cx, y: cy, r: Math.max(8, rx), ry: Math.max(6, ry), color: c }, 1, 0, 0, charW));
+      // A loose loop that encloses the item's whole box and never runs through any words:
+      // its padding shrinks until it clears the neighbouring lines too.
+      const others = textBoxes(card.prims).filter((b) => !(b.x >= target.x - 1 && b.y >= target.y - 1 && b.x + b.w <= target.x + target.w + 1 && b.y + b.h <= target.y + target.h + 1));
+      let loop: Pt[] = [];
+      for (const [px, py] of [[9, 7], [7, 5], [5, 3.5], [3.5, 2.5], [2.5, 1.5]] as const) {
+        loop = roughLoop(target, seededRandom(mark.id), bounds, px, py);
+        if (!others.some((b) => inkHits(b, [loop], 0))) break;
+      }
+      out.push(stroke(loop, 4.5));
       break;
     }
     case "underline": {
-      const y = clampY(target.y + target.h + 3);
-      out.push(...inkPrims({ kind: "underline", id: mark.id, x: target.x, y, w: target.w, color: c }, 1, 0, 0, charW));
+      // Close under the words, with only a gentle waver, so it never reaches the next line.
+      const y = clampY(target.y + target.h + 2.5);
+      const pts = roughLine({ x: target.x, y }, { x: target.x + target.w, y }, rand, 0.4).map((q) => ({ x: q.x, y: y + Math.max(-1.2, Math.min(1.2, q.y - y)) }));
+      out.push(stroke(pts, 4));
       break;
     }
     case "box": {
@@ -497,6 +523,8 @@ function inkOnCard(card: CardContent, mark: Mark, charW: number): void {
   if (words) {
     const t = textAt(words, 0, 0, Math.min(240, card.w - PAD * 2), charW, { size: 12, tone: "ink", weight: 500, maxLines: 2 });
     spotFor(t, target, textBoxes(card.prims), { x: PAD, y: BAR + 4, w: card.w - PAD * 2, h: card.h - BAR - 8 });
+    const strokes = [...card.prims.map((o) => o.prim), ...out].flatMap((q) => (q.t === "stroke" ? [q.pts] : []));
+    clearOfInk(t, textBoxes(card.prims), strokes, { x: PAD, y: BAR + 4, w: card.w - PAD * 2, h: 1e5 });
     out.push(t);
     card.h = Math.max(card.h, t.box.y + t.box.h + PAD);
   }
@@ -507,15 +535,120 @@ function inkOnCard(card: CardContent, mark: Mark, charW: number): void {
   card.owners.push(mark.id);
 }
 
+/** Does the segment a-b cross (or touch, within pad) the rect? */
+function segHits(a: Pt, b: Pt, r: Rect, pad = 0): boolean {
+  const x0 = r.x - pad, y0 = r.y - pad, x1 = r.x + r.w + pad, y1 = r.y + r.h + pad;
+  const inside = (p: Pt) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1;
+  if (inside(a) || inside(b)) return true;
+  // Liang-Barsky clip.
+  let t0 = 0, t1 = 1;
+  const dx = b.x - a.x, dy = b.y - a.y;
+  for (const [pp, q] of [[-dx, a.x - x0], [dx, x1 - a.x], [-dy, a.y - y0], [dy, y1 - a.y]] as const) {
+    if (pp === 0) {
+      if (q < 0) return false;
+      continue;
+    }
+    const t = q / pp;
+    if (pp < 0) t0 = Math.max(t0, t);
+    else t1 = Math.min(t1, t);
+    if (t0 > t1) return false;
+  }
+  return true;
+}
+
+/** Does any stroke (as polylines) cross the rect? Strokes are about 5px wide: `pad` keeps words clear of the ink. */
+export function inkHits(r: Rect, strokes: Pt[][], pad = 4): boolean {
+  for (const pts of strokes) for (let i = 1; i < pts.length; i++) if (segHits(pts[i - 1]!, pts[i]!, r, pad)) return true;
+  return false;
+}
+
+/**
+ * Move a word box to the nearest spot (up, down, right, left, growing) inside `bounds`
+ * where it crosses no stroke and no other word box. Last resort: below everything.
+ */
+function clearOfInk(t: Prim & { t: "text" }, texts: Rect[], strokes: Pt[][], bounds: Rect): void {
+  const free = (b: Rect) => !inkHits(b, strokes) && !texts.some((o) => o !== t.box && overlaps(b, o, 2));
+  if (free(t.box)) return;
+  const fits = (b: Rect) => b.x >= bounds.x && b.y >= bounds.y && b.x + b.w <= bounds.x + bounds.w && b.y + b.h <= bounds.y + bounds.h;
+  for (let r = 4; r <= 400; r += 4)
+    for (const [dx, dy] of [[0, -r], [0, r], [r, 0], [-r, 0], [r, -r], [-r, -r], [r, r], [-r, r]] as const) {
+      const b = { ...t.box, x: t.box.x + dx, y: t.box.y + dy };
+      if (fits(b) && free(b)) {
+        t.box = b;
+        return;
+      }
+    }
+  const bottom = Math.max(...strokes.flat().map((p) => p.y), ...texts.map((o) => o.y + o.h), bounds.y);
+  t.box = { ...t.box, x: bounds.x, y: bottom + 10 };
+}
+
+/**
+ * A hand-drawn loop round a rect that never cuts into it: a rounded "squircle" just
+ * big enough to hold the rect's corners, a little more than a full turn so the ends
+ * overlap, wobbling only outwards. Clamped into `bounds` (the card).
+ */
+export function roughLoop(r: Rect, rand: Rand, bounds?: Rect, padX = 9, padY = 7): Pt[] {
+  const a = r.w / 2 + padX;
+  const b = r.h / 2 + padY;
+  // The roundest loop whose outline still clears the rect's corners.
+  let n = 2.2;
+  while (n < 12 && Math.pow(r.w / 2 / a, n) + Math.pow(r.h / 2 / b, n) > 0.8) n += 0.4;
+  const cx = r.x + r.w / 2;
+  const cy = r.y + r.h / 2;
+  const from = -Math.PI * 0.75 + (rand() - 0.5) * 0.6;
+  const sweep = Math.PI * 2 + 0.45 + rand() * 0.25;
+  const phase = rand() * Math.PI * 2;
+  const pts: Pt[] = [];
+  const steps = Math.max(48, Math.ceil((a + b) / 3));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const th = from + sweep * t;
+    const c = Math.cos(th);
+    const sn = Math.sin(th);
+    // Outward-only wobble, and the tail drifts out a little so the ends cross.
+    const k = 1 + 0.015 * (1 + Math.sin(3 * th + phase)) + 0.03 * t;
+    pts.push({
+      x: cx + a * k * Math.sign(c) * Math.pow(Math.abs(c), 2 / n),
+      y: cy + b * k * Math.sign(sn) * Math.pow(Math.abs(sn), 2 / n),
+    });
+  }
+  if (!bounds) return pts;
+  return pts.map((q) => ({ x: Math.max(bounds.x, Math.min(bounds.x + bounds.w, q.x)), y: Math.max(bounds.y, Math.min(bounds.y + bounds.h, q.y)) }));
+}
+
 /** Loose marks with board hints: one "sketch" card, the hints fitted inside it, words pushed apart. */
 function sketchCard(id: string, marks: Mark[], charW: number): CardContent {
-  const resolved = separateLoose(marks.flatMap((m) => resolveLoose(m)));
+  // The scale depends on the sketch's extent and a box must hold its label at that scale,
+  // so settle both together: grow boxes to fit their words, push shapes apart, rescale.
+  const raw = marks.flatMap((m) => resolveLoose(m));
+  let resolved = raw;
+  let box: Rect = { x: 0, y: 0, w: 0, h: 0 };
+  let s = 1;
+  for (let pass = 0; pass < 4; pass++) {
+    const grown: { from: Rect; dw: number; dh: number }[] = [];
+    const sized = raw.map((m) => {
+      if (m.kind !== "box" || !m.label) return m;
+      const size = Math.max(11, Math.round(18 * s));
+      const w = Math.max(m.w, (textWidth(m.label, size, charW) + 24) / s);
+      const h = Math.max(m.h, (size * LINE + 20) / s);
+      if (w > m.w || h > m.h) grown.push({ from: { x: m.x, y: m.y, w: m.w, h: m.h }, dw: w - m.w, dh: h - m.h });
+      return { ...m, w, h };
+    });
+    // Arrow and line ends on a grown box's right or bottom side move out with that side.
+    const edge = (p: Pt): Pt => {
+      const g = grown.find((b) => p.x >= b.from.x - 24 && p.x <= b.from.x + b.from.w + 24 && p.y >= b.from.y - 24 && p.y <= b.from.y + b.from.h + 24);
+      if (!g) return p;
+      return { x: p.x + (p.x > g.from.x + g.from.w / 2 ? g.dw : 0), y: p.y + (p.y > g.from.y + g.from.h / 2 ? g.dh : 0) };
+    };
+    resolved = separateLoose(sized.map((m) => (m.kind === "arrow" || m.kind === "line" ? { ...m, from: edge(m.from), to: edge(m.to) } : m)));
+    box = union(resolved.flatMap(bboxPoints).map((p) => ({ x: p.x, y: p.y, w: 0, h: 0 })))!;
+    const next = Math.min(1, 440 / Math.max(box.w, 120), 280 / Math.max(box.h, 60));
+    if (Math.abs(next - s) < 0.005) break;
+    s = next;
+  }
   const prims: Owned[] = [];
-  const pts = resolved.flatMap(bboxPoints);
-  const box = union(pts.map((p) => ({ x: p.x, y: p.y, w: 0, h: 0 })))!;
   const bw = Math.max(box.w, 120);
   const bh = Math.max(box.h, 60);
-  const s = Math.min(1, 440 / bw, 280 / bh);
   const ox = PAD + 6 - box.x * s;
   const oy = BAR + PAD + 6 - box.y * s;
   for (const m of resolved) prims.push(...own(m.id, inkPrims(m, s, ox, oy, charW, 4)));
@@ -524,6 +657,9 @@ function sketchCard(id: string, marks: Mark[], charW: number): CardContent {
   const maxW = Math.max(bw * s, ...textBoxes(prims).map((b) => b.w)) + PAD * 2 + 12;
   for (const b of textBoxes(prims)) b.x = Math.max(PAD, Math.min(b.x, maxW - PAD - b.w));
   separateTexts(prims);
+  // No word sits on ink: each one moves to the nearest clear spot (labels off arrows, notes off boxes).
+  const strokes = prims.flatMap((o) => (o.prim.t === "stroke" ? [o.prim.pts] : []));
+  for (const o of prims) if (o.prim.t === "text") clearOfInk(o.prim, textBoxes(prims), strokes, { x: PAD, y: BAR + 6, w: maxW - PAD * 2, h: 1e5 });
   const w = Math.max(200, maxW);
   const all = prims.flatMap((o) => (o.prim.t === "text" ? [o.prim.box] : o.prim.t === "stroke" ? [union(o.prim.pts.map((p) => ({ x: p.x, y: p.y, w: 0, h: 0 })))!] : []));
   const h = Math.max(BAR + PAD + bh * s + PAD + 12, ...all.map((r) => r.y + r.h + PAD));
@@ -532,6 +668,8 @@ function sketchCard(id: string, marks: Mark[], charW: number): CardContent {
 
 /** Shapes that must not sit on each other in a loose sketch (lines and arrows may cross them). */
 const SOLID = new Set(["box", "circle", "step", "text", "check", "cross"]);
+/** Board units between loose shapes: room for the pen's overshoot and wobble even scaled down. */
+const LOOSE_GAP = 44;
 
 const boxOf = (m: InkMark): Rect => union(bboxPoints(m).map((p) => ({ x: p.x, y: p.y, w: 0, h: 0 })))!;
 
@@ -556,15 +694,15 @@ export function separateLoose(marks: InkMark[]): InkMark[] {
     }
     const box = boxOf(m);
     let best = { dx: 0, dy: 0 };
-    if (placed.some((p) => overlaps(box, p, 16))) {
+    if (placed.some((p) => overlaps(box, p, LOOSE_GAP))) {
       let found = false;
       for (let ring = 1; ring <= 40 && !found; ring++) {
-        const d = ring * 24;
+        const d = ring * 28;
         // Right, below, left, above, then the diagonals, at growing distance.
         for (const [dx, dy] of [[d, 0], [0, d], [-d, 0], [0, -d], [d, d], [-d, d], [d, -d], [-d, -d]] as const) {
           const r = { ...box, x: box.x + dx, y: box.y + dy };
           if (r.x < -200 || r.y < -200) continue;
-          if (!placed.some((p) => overlaps(r, p, 16))) {
+          if (!placed.some((p) => overlaps(r, p, LOOSE_GAP))) {
             best = { dx, dy };
             found = true;
             break;
@@ -573,14 +711,18 @@ export function separateLoose(marks: InkMark[]): InkMark[] {
       }
     }
     const next = best.dx || best.dy ? moved(m, best.dx, best.dy) : m;
-    if (best.dx || best.dy) shifts.push({ from: box, ...best });
+    shifts.push({ from: box, ...best });
     placed.push(boxOf(next));
     out.push(next);
   }
   // Ends of arrows and lines follow the shape they were drawn from or to.
+  // An end touching a shape that stayed put stays put; else it goes with the nearest shape that moved.
+  const near = (p: Pt, r: Rect) => p.x >= r.x - 24 && p.x <= r.x + r.w + 24 && p.y >= r.y - 24 && p.y <= r.y + r.h + 24;
   const follow = (p: Pt): Pt => {
-    const s = shifts.find((sh) => p.x >= sh.from.x - 24 && p.x <= sh.from.x + sh.from.w + 24 && p.y >= sh.from.y - 24 && p.y <= sh.from.y + sh.from.h + 24);
-    return s ? { x: p.x + s.dx, y: p.y + s.dy } : p;
+    const touching = shifts.filter((sh) => near(p, sh.from));
+    if (!touching.length || touching.some((sh) => !sh.dx && !sh.dy)) return p;
+    const s = touching[0]!;
+    return { x: p.x + s.dx, y: p.y + s.dy };
   };
   return out.map((m) => (m.kind === "arrow" || m.kind === "line" ? { ...m, from: follow(m.from), to: follow(m.to) } : m));
 }
@@ -733,7 +875,7 @@ export function layoutScene(input: LayoutInput): Layout {
     const r = m as { on?: string; to_card?: string };
     if (isCard(m)) {
       if (closed.has(m.id)) continue;
-      const c = layoutCard(m as CardMark, charW);
+      const c = layoutCard(m as CardMark, charW, input.displayW ?? DISPLAY_W, input.diagrams?.get(m.id));
       contents.push(c);
       byId.set(m.id, c);
     } else if (r.to_card && r.on) {
@@ -791,7 +933,8 @@ export function layoutScene(input: LayoutInput): Layout {
       spotFor(t, { x: mid.x - t.box.w / 2, y: mid.y - 6, w: t.box.w, h: 12 }, taken, {
         x: MARGIN, y: MARGIN, w: input.view.width - MARGIN * 2, h: input.view.height - BOTTOM_FREE - MARGIN,
       });
-      if (!taken.some((r) => overlaps(t.box, r, 2)) && inside(t.box, input.view)) {
+      clearOfInk(t, taken, [shaft], { x: MARGIN, y: MARGIN, w: input.view.width - MARGIN * 2, h: input.view.height - BOTTOM_FREE - MARGIN });
+      if (!taken.some((r) => overlaps(t.box, r, 2)) && !inkHits(t.box, [shaft]) && inside(t.box, input.view)) {
         prims.push(t);
         taken.push(t.box);
       }

@@ -76,7 +76,26 @@ export function mountCards(board: HTMLElement) {
     }
   }
 
+  const sizes = new Map<string, Promise<{ w: number; h: number } | undefined>>();
   return {
+    /**
+     * The diagram's natural size in px (from its SVG viewBox), so its card can be sized
+     * to its content. Rendered once per source, off screen; undefined if it does not parse.
+     */
+    sizeOf(source: string): Promise<{ w: number; h: number } | undefined> {
+      let size = sizes.get(source);
+      if (!size) {
+        size = loadMermaid()
+          .then((m) => m.render(`jett-size-${++renders}`, source))
+          .then(({ svg }) => {
+            const box = svg.match(/viewBox="([-\d.e]+)[ ,]+([-\d.e]+)[ ,]+([\d.e]+)[ ,]+([\d.e]+)"/);
+            return box ? { w: Number(box[3]), h: Number(box[4]) } : undefined;
+          })
+          .catch(() => undefined);
+        sizes.set(source, size);
+      }
+      return size;
+    },
     /** Match the layer to the diagram cards on screen: new ones render, changed sources re-render, gone ones go. */
     sync(items: DiagramBody[]) {
       const live = new Set<string>();
