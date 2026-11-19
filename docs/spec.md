@@ -173,7 +173,7 @@ Prior art: live-dj `adk_tools/smoke_live.py` (text-turn live smoke) and `adk_too
 - More than one helper at once by default (allowed in config, not tuned).
 - Syncing the brain across devices.
 - Windows and Linux polish (macOS first for the talk).
-- Nightly tidy schedules (tidy runs after each chat only).
+- Scheduled runs while Jett is closed, and catching up missed runs (see the workflows addendum: scheduling itself is in scope now).
 
 ## Further Notes
 
@@ -310,3 +310,31 @@ A new `act` risk class: ask first in Ask first and Auto, run in Full access. One
 ### Testing
 
 Through the event stream with fake hands and fake eyes (`test/computer-control.test.ts`): the verdicts per mode, the risky rule, launch then focus then steps, a failed step, Accessibility off, the `open` input checks. The Swift helper is checked by building it and by hand on a real Mac.
+
+## Addendum: workflows and scheduler (2026-11-19)
+
+Eric's call, 2026-11-19 (plan: orchestrator + helpers). Gemini stays the orchestrator; saved and scheduled work runs as helper jobs. This moves scheduling out of Out of Scope.
+
+### Files in Jett's home
+
+Jett's home is the folder the config is read from: `LIVE_AGENT_HOME` when installed (the core `chdir`s there), the repo when run from source.
+
+- Workflows: `.agents/workflows/<name>.md`. Frontmatter `name`, `description` (one line), `trigger` (`manual` or a 5-field cron in local time, numbers only, e.g. `"0 8 * * 1-5"`), `helper` (optional; left out = the default helper). The body is the helper's task.
+- Skills: `.agents/skills/<name>/SKILL.md`, the standard Claude / Codex format. Every helper task (start_helper, workflows) ends with the skills folder and each skill's one line, because helpers work in the brain or a worktree, where neither Codex (`.agents/skills` from its cwd up to the git root) nor Claude Code (`.claude/skills`) would find them.
+
+### Tools
+
+- `list_workflows` (read), `run_workflow` (helper: submits a job like `start_helper`, in the brain folder), `create_workflow` and `delete_workflow` (edit; the schedule is checked before anything is written).
+- `write_file` (edit): a quick text file inside the brain; any path that leaves it, also through a symlink, is refused. Bigger file work goes to a helper.
+
+### Scheduler
+
+In the core process (`src/workflows/scheduler.ts`): runs only while Jett is open, reads the files on every tick (twice a minute, at most one run per workflow per matching minute), and skips missed runs. Scheduled jobs go straight to the jobs runner with no approval card, in every mode (Eric's call); they show on the job board like any job. A helper that is off shows as a failed job with the fix.
+
+### Teaching Gemini
+
+Each connection's system instruction lists the workflows and skills (name and one line) and the rules: `create_workflow` for "every X, do Y", `run_workflow` by name, `write_file` for quick notes, `start_helper` for big work. A new chat picks up new files.
+
+### Testing
+
+`test/workflows.test.ts` (cron, files, skills, scheduler with a fake clock) and `test/workflow-tools.test.ts` (the tools, the session's scheduler and the system prompt, through the event stream with a fake helper CLI).

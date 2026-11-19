@@ -94,6 +94,8 @@ const startOnce = () => startApp({
   hands,
   // Finding things on screen, last tier: one Gemini Flash call on a fresh screenshot (key read when it runs).
   ground: (shot, describe) => geminiGround({ apiKey: geminiApiKey() ?? "" })(shot, describe),
+  // Scheduled workflows in <home>/.agents/workflows run while the app is open (src/workflows).
+  schedule: {},
 });
 async function startWithRetry() {
   for (let attempt = 0; ; attempt++) {

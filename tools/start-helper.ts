@@ -10,6 +10,7 @@ import { defineTool } from "../src/core/tool.ts";
 import { shortTitle } from "../src/helpers/cli-job.ts";
 import { HELPER_IDS, pickHelper } from "../src/helpers/index.ts";
 import { createWorktree, inWorktree } from "../src/helpers/worktree.ts";
+import { helperTask } from "../src/workflows/index.ts";
 
 export default defineTool<{ task: string; title?: string; folder?: string; helper?: string }>({
   name: "start_helper",
@@ -45,7 +46,7 @@ export default defineTool<{ task: string; title?: string; folder?: string; helpe
     },
     required: ["task"],
   },
-  async run({ task, title, folder, helper: asked }, { brainPath, jobs, helpers }) {
+  async run({ task, title, folder, helper: asked }, { workDir, brainPath, jobs, helpers }) {
     if (!jobs || !helpers) throw new Error("helper jobs are not available in this session");
     const { geminiCli, codex = false, claudeCode = false, worktrees, ...paths } = helpers;
     // Off, or none on: a plain fix for the voice, and no job starts.
@@ -65,7 +66,8 @@ export default defineTool<{ task: string; title?: string; folder?: string; helpe
     // Not a git project: createWorktree throws a plain fix, and no job starts.
     const worktree = worktrees ? createWorktree({ folder: project, task, root: paths.worktreesRoot }) : undefined;
     const spec = {
-      ...helper.job({ task, cwd: worktree?.cwd ?? project, ...paths }),
+      // The task names the skills in Jett's home, if any (src/workflows helperTask).
+      ...helper.job({ task: helperTask(task, workDir), cwd: worktree?.cwd ?? project, ...paths }),
       folder: project,
       // Ticket 29: the model's short title for the card; else the adapter's, made from the task.
       ...(title?.trim() ? { title: shortTitle(title) } : {}),
