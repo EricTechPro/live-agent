@@ -20,6 +20,7 @@ import readFile from "../../tools/read-file.ts";
 import remember from "../../tools/remember.ts";
 import runCommand from "../../tools/run-command.ts";
 import searchBrain from "../../tools/search-brain.ts";
+import setVoice from "../../tools/set-voice.ts";
 import startHelper from "../../tools/start-helper.ts";
 // Workflows and quick files (src/workflows).
 import createWorkflow from "../../tools/create-workflow.ts";
@@ -30,6 +31,6 @@ import writeFile from "../../tools/write-file.ts";
 
 export const bundledTools: Tool[] = [
   actInApp, cancelJob, draw, editCanvas, findOnScreen, listWindows, look, markScreen, open, readFile, remember, runCommand,
-  searchBrain, startHelper,
+  searchBrain, setVoice, startHelper,
   addConnection, createWorkflow, deleteWorkflow, listWorkflows, runWorkflow, writeFile,
 ];

@@ -68,6 +68,8 @@ export type AgentEvent =
   | { type: "paused"; paused: boolean }
   /** The setup wizard wrote the config file. Its settings are in use at once (a `mode.changed` comes first if the mode changed). */
   | { type: "setup.saved"; configPath: string; config: Config }
+  /** Jett's voice or speaking style changed (the set_voice tool) and was saved to the config. The window's setting follows it. */
+  | { type: "voice.changed"; voice: string; style: string }
   /**
    * A new chat began (New chat, or a quiet spell): the last one left its note
    * and tidy job, and the model starts fresh. The window clears the transcript.

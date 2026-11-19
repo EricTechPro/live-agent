@@ -13,7 +13,7 @@ import { mountBrainView } from "./brain-view.ts";
 import { mountChatView } from "./chat-view.ts";
 import {
   connectCore, getSetup, inTauri, onCoreDown, onCoreReady, onCoreRestarting, onNewChat, onOpenPanel, onQuickType, onShowShortcuts, onToggleMini, overlayPoll, quickTypeFocus, restartCore,
-  revealLog, setClickThrough, setTrayShown, waitForCore, type CoreClient,
+  revealLog, setClickThrough, setTrayShown, waitForCore, type CoreClient, type CoreInfo,
 } from "./core-client.ts";
 import { waveFor, QUIET } from "./orb-wave.ts";
 import { isNewChatKey, SHORTCUTS, SHORTCUTS_TITLE } from "./shortcuts.ts";
@@ -26,8 +26,8 @@ import { nextLayer, startLayer, type Layer, type LayerAction } from "./layers.ts
 import { mountLedOrb, type Mood } from "./led-orb.ts";
 import { nextOrb, orbStart, type Orb, type OrbInput } from "./orb-state.ts";
 import { addToTranscript, emptyTranscript, type Transcript } from "./transcript.ts";
-import { callView, retryHint, showCallButtons, spaceAction, talkHint, type CallLook, type CallPhase, type CallView } from "./call-state.ts";
-import { addCaption, noCaptions, shownCaptions, type Captions } from "./captions.ts";
+import { callButton, callView, retryHint, showCallButtons, showsWords, spaceAction, type CallLook, type CallPhase, type CallView } from "./call-state.ts";
+import { addCaption, barLine, noCaptions, shownCaptions, type Captions } from "./captions.ts";
 import { spokenLang, WORDS, type Lang } from "./lang.ts";
 import { followMic } from "./mic-follow.ts";
 import {
@@ -49,10 +49,10 @@ const dock = $("dock");
 const orbEl = $<HTMLButtonElement>("orb");
 const orbLabel = $("orb-label");
 const retryBtn = $<HTMLButtonElement>("orb-retry");
+const finishSetupBtn = $<HTMLButtonElement>("orb-setup");
 const orbHint = $("orb-hint");
+/** The one call button: Start call, or Hang up while a call is joining or live. */
 const talkBtn = $<HTMLButtonElement>("talk");
-const muteBtn = $<HTMLButtonElement>("mute");
-const hangupBtn = $<HTMLButtonElement>("hangup");
 const transcriptEl = $<HTMLOListElement>("transcript");
 const typeForm = $<HTMLFormElement>("type");
 const typeInput = $<HTMLInputElement>("type-input");
@@ -68,7 +68,7 @@ const wizardEl = $("wizard");
 /** The UI language: the one you last spoke (lang.ts); every label and tooltip follows it. */
 let lang: Lang = "en";
 
-// ---- the orb's spot: drag it by the grip; it stays where you leave it ----------
+// ---- the orb's spot: drag the orb (or arrow keys on it); it stays where you leave it ----
 const ORB_KEY = "jett.orb";
 const view = () => ({ width: innerWidth, height: innerHeight });
 const dockSize = () => ({ width: dock.offsetWidth, height: dock.offsetHeight });
@@ -206,9 +206,8 @@ async function setMini(on: boolean, save = true, animate = true) {
 }
 $<HTMLButtonElement>("hide").onclick = () => void setMini(true);
 
-// ---- dragging (tickets 38, 39): press and move drags the whole orb, the grip or the pill; a
-// press without movement is still a click (overlay.ts `isDrag`). ----
-const grip = $<HTMLButtonElement>("grip");
+// ---- dragging (tickets 38, 39): press and move drags the orb or the pill; a press
+// without movement is still a click (overlay.ts `isDrag`). ----
 let drag: { what: "orb" | "pill"; el: HTMLElement; start: Point; from: Point; moved: boolean; startedAt: number; lastMoveAt: number; pointerId: number } | undefined;
 /** A drag just ended on this press: the click that follows it is swallowed. */
 let swallowClick = false;
@@ -258,7 +257,7 @@ function endDrag() {
   if (d.what === "orb") moveOrb(orbAt, true);
   else movePill(dockPill({ x: pillEl.offsetLeft, y: pillEl.offsetTop }, view()), true);
 }
-for (const [el, what, now] of [[grip, "orb", true], [orbEl, "orb", false], [pillEl, "pill", false]] as const) {
+for (const [el, what, now] of [[orbEl, "orb", false], [pillEl, "pill", false]] as const) {
   el.addEventListener("pointerdown", (e) => pressDrag(el, what, e, now));
   el.addEventListener("pointermove", moveDrag);
   el.addEventListener("pointerup", endDrag);
@@ -292,8 +291,8 @@ pillHangupBtn.onclick = () => void endCall();
 if (!inTauri()) window.addEventListener("pointermove", (e: PointerEvent) => updatePillHover({ x: e.clientX, y: e.clientY }));
 dock.addEventListener("focusin", () => updateControls());
 dock.addEventListener("focusout", () => setTimeout(updateControls));
-// The grip moves by keyboard too: arrow keys, Shift for bigger steps.
-grip.addEventListener("keydown", (e) => {
+// The orb moves by keyboard too: arrow keys, Shift for bigger steps.
+orbEl.addEventListener("keydown", (e) => {
   const step = e.shiftKey ? 80 : 20;
   const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
   if (!d) return;
@@ -442,8 +441,7 @@ function startOverlayPoll() {
   }, 50);
 }
 
-// ---- the popover (ticket 36): opened from the menu button, closed with X or Escape ----
-const openCenterBtn = $<HTMLButtonElement>("open-center");
+// ---- the popover (ticket 36): opened from the orb's menu, closed with X or Escape ----
 const closeCenterBtn = $<HTMLButtonElement>("close-center");
 let layer: Layer = startLayer;
 function setLayer(action: LayerAction) {
@@ -453,12 +451,10 @@ function setLayer(action: LayerAction) {
   layer = next;
   overlay.dataset.layer = layer;
   popover.hidden = layer !== "center";
-  openCenterBtn.setAttribute("aria-expanded", String(layer === "center"));
   placeFloaters();
   if (layer === "center") (action === "show" ? tabBtns[panel.tab] : closeCenterBtn).focus();
-  else openCenterBtn.focus();
+  else orbEl.focus();
 }
-openCenterBtn.onclick = () => setLayer(layer === "center" ? "close" : "open");
 closeCenterBtn.onclick = () => setLayer("close");
 
 const tabBtns: Record<Tab, HTMLButtonElement> = { chat: $("tab-chat"), jobs: $("tab-jobs"), brain: $("tab-brain") };
@@ -530,13 +526,20 @@ let mic: ReturnType<typeof followMic> | undefined;
 /** Jett's voice, followed the same way as the mic (ticket 38): the wave moves with it while speaking. */
 let voice: ReturnType<typeof followMic> | undefined;
 let voiceHeard = false;
+/**
+ * Mute while typing: the quick box open silences Jett's voice in this window. The reply
+ * still comes as text (Gemini Live's output transcription, in the bubble); the model keeps
+ * answering in audio, since switching it to text would need a new connection. Outside a
+ * call no audio reaches the window at all, so only a live call has something to mute.
+ */
+const voiceEls = new Set<HTMLMediaElement>();
+function muteVoice(on: boolean) {
+  for (const el of voiceEls) el.muted = on;
+}
 /** Jett's output level, last read by the orb's wave (the pill's bars use it too). */
 let voiceOut = 0;
 let micLevel = 0;
-// Push to talk (ticket 38): how often it has been used (the hint goes after two), and
-// whether letting go must mute once the call connects.
-const PTT_USES_KEY = "jett.pttUses";
-let pttUses = Number(load(PTT_USES_KEY)) || 0;
+// Push to talk (ticket 38): whether letting go must mute once the call connects.
 let pttCall: PttCall = pttCallIdle;
 
 // Each look has its own colour and motion, so you can tell without reading.
@@ -563,7 +566,11 @@ function render() {
   shown = v;
   dock.dataset.look = v.look;
   orbEl.dataset.state = orb.state;
-  orbLabel.textContent = v.label;
+  // Words only when you must act (call-state.ts `showsWords`): the wizard closed with no
+  // key, or Gemini out of reach. Idle, listening, speaking: the orb says it.
+  const noKey = !finishSetupBtn.hidden;
+  orbLabel.textContent = noKey ? "No key yet" : v.label;
+  orbLabel.parentElement!.hidden = !noKey && !showsWords(v.look);
   retryBtn.hidden = !v.retry;
   if (v.retry) retryBtn.textContent = v.retry;
   pillEl.dataset.look = v.look;
@@ -587,37 +594,33 @@ function render() {
   renderHint();
   $("muted-badge").hidden = !v.mutedBadge;
   const tipsFor = BUTTON_TIPS[lang];
-  talkBtn.hidden = !v.buttons.includes("start");
-  talkBtn.dataset.tip = tipsFor.start;
-  talkBtn.setAttribute("aria-label", tipsFor.start);
-  const muteAction = v.buttons.find((b) => b === "mute" || b === "unmute");
-  muteBtn.hidden = !muteAction;
-  if (muteAction) {
-    setIcon(muteBtn, muteAction === "unmute" ? "micOff" : "mic");
-    muteBtn.setAttribute("aria-pressed", String(muted));
-    muteBtn.setAttribute("aria-label", tipsFor.mute);
-    muteBtn.dataset.tip = tipsFor[muteAction];
-    tips.refresh(muteBtn);
+  // One call button: Start call, or a red Hang up in the same spot while joining or live.
+  const act = callButton(v.buttons);
+  talkBtn.hidden = !act;
+  if (act && talkBtn.dataset.act !== act) {
+    talkBtn.dataset.act = act;
+    setIcon(talkBtn, act === "hangup" ? "hangup" : "mic");
+    talkBtn.classList.toggle("talk", act === "start");
+    talkBtn.classList.toggle("hangup", act === "hangup");
   }
-  hangupBtn.hidden = !v.buttons.includes("hangup");
-  hangupBtn.dataset.tip = tipsFor.hangup;
-  hangupBtn.setAttribute("aria-label", tipsFor.hangup);
-  // Esc hangs up only when nothing else is open; Cmd+. always does.
-  hangupBtn.dataset.key = layer === "center" ? "⌘." : "Esc · ⌘.";
-  // The orb does what the first call button does: start, or mute / unmute.
-  const first = v.buttons[0];
-  orbEl.setAttribute("aria-label", first ? tipsFor[first === "hangup" ? "hangup" : first] : v.label);
-  orbEl.disabled = !first || talkBtn.disabled;
-  // The orb's tip names what a click does, its key, and the double-click.
-  orbEl.dataset.tip = `${first ? tipsFor[first] : v.label} · ${UI[lang].minimiseTip}`;
-  orbEl.dataset.key = first === "hangup" ? "⌘." : "Space";
+  if (act) {
+    talkBtn.dataset.tip = tipsFor[act];
+    talkBtn.setAttribute("aria-label", tipsFor[act]);
+    // Esc hangs up only when nothing else is open; Cmd+. always does.
+    talkBtn.dataset.key = act === "start" ? "Space" : layer === "center" ? "⌘." : "Esc · ⌘.";
+    tips.refresh(talkBtn);
+  }
+  // The orb opens the typing box; its name says the state too, since no words are printed.
+  orbEl.setAttribute("aria-label", `${quick.open ? UI[lang].closeTyping : UI[lang].typeHere.replace("…", "")} · ${v.label}`);
+  orbEl.disabled = talkBtn.disabled;
+  orbEl.dataset.tip = `${quick.open ? UI[lang].closeTyping : UI[lang].quickType} · ${UI[lang].moreTip}`;
   tips.refresh(orbEl);
   applyLang();
   updateControls();
 }
-/** The faint line under the label: "or hold ⌃⌥" until push to talk is learned, or when the next retry is (ticket 40). */
+/** The faint line under "Can't reach Gemini": when the next retry is (ticket 40). */
 function renderHint() {
-  const hint = retryHint(orb, performance.now(), lang) ?? talkHint(shown?.look ?? "starting", lang, pttUses);
+  const hint = shown?.look === "offline" ? retryHint(orb, performance.now(), lang) : undefined;
   if (orbHint.hidden !== !hint) orbHint.hidden = !hint;
   if (orbHint.textContent !== (hint ?? "")) orbHint.textContent = hint ?? "";
 }
@@ -640,7 +643,7 @@ retryBtn.onclick = async () => {
 };
 // One UI language (ticket 39): every static tooltip and label follows the language you last spoke.
 const UI_IDS: [string, UiKey][] = [
-  ["hide", "hide"], ["grip", "move"], ["open-center", "menu"], ["quick-btn", "quickType"], ["orb-new-chat", "newChat"], ["new-chat", "newChat"], ["jobs-toggle", "jobs"],
+  ["hide", "hide"], ["new-chat", "newChat"], ["jobs-toggle", "jobs"],
   ["pill", "showJett"], ["pill-expand", "expand"], ["tab-chat", "chat"], ["tab-jobs", "jobs"], ["tab-brain", "brain"], ["setup", "setup"],
   ["show-log", "showLog"], ["open-shortcuts", "shortcuts"], ["close-center", "close"], ["close-shortcuts", "close"], ["clear-canvas", "hideDrawing"],
   ["send", "send"], ["close-reader", "back"],
@@ -663,6 +666,8 @@ function applyLang() {
   quickInput.setAttribute("aria-label", words.typeHere);
   $("chats-title").textContent = words.pastChats;
   $("brain-title").textContent = words.notes;
+  $("menu-new-chat").querySelector(".orb-menu-text")!.textContent = words.newChat;
+  $("menu-center").querySelector(".orb-menu-text")!.textContent = words.menu;
   bubbleMore.dataset.tip = words[bubble.dataset.open === "true" ? "less" : "more"];
   showFollow();
   if (!shortcutsEl.hidden) showShortcuts(true);
@@ -726,8 +731,6 @@ function renderTranscript() {
 
 // ---- live captions (ticket 37) ----------------------------------------------------
 let captions: Captions = noCaptions;
-const capUser = $("cap-user");
-const capModel = $("cap-model");
 // The cues beside the orb (ticket 37): equaliser / working pill and the speech bubble.
 let work: Work = noWork;
 const cuePill = $("cue-pill");
@@ -753,14 +756,9 @@ function renderCaptions() {
     caption: shownCaptions(captions, now, Infinity),
     drawing,
   });
-  // The bottom caption bar: only while a drawing is on screen.
-  const bar = shownCaptions(captions, now);
-  // While a drawing's own caption bar shows the line being drawn, this one steps aside.
-  $("captions").hidden = !cues.bar || !!sketch?.captionActive();
-  for (const [el, text] of [[capUser, bar.user], [capModel, bar.model]] as const) {
-    if (text && el.textContent !== text) el.textContent = text;
-    el.hidden = !text;
-  }
+  // The drawing's one caption bar (sketch-view.ts): what is being said now, from the
+  // voice's transcription, one sentence at a time; it clears once Jett's voice stops.
+  sketch?.setCaption(drawing ? barLine(captions, now, !!orb.audio) : undefined);
   cuePill.hidden = !cues.pill;
   if (cues.pill) {
     cuePill.dataset.kind = cues.pill.kind;
@@ -837,12 +835,63 @@ async function startNewChat() {
     newChatBtn.disabled = false;
   }
 }
-$<HTMLButtonElement>("orb-new-chat").onclick = () => void startNewChat();
+
+// ---- the orb's menu: right-click (or the context-menu key / Shift+F10) on the orb ----
+const orbMenu = $("orb-menu");
+const menuItems = [...orbMenu.querySelectorAll<HTMLButtonElement>("[role=menuitem]")];
+function showOrbMenu(at: Point | undefined) {
+  tips.hide();
+  orbMenu.hidden = false;
+  const r = orbEl.getBoundingClientRect();
+  const p = at ?? { x: r.right - 8, y: r.top + r.height / 2 };
+  const spot = keepOn({ x: p.x + 2, y: p.y + 2 }, { width: orbMenu.offsetWidth, height: orbMenu.offsetHeight }, view());
+  orbMenu.style.left = `${spot.x}px`;
+  orbMenu.style.top = `${spot.y}px`;
+  menuItems[0]?.focus();
+}
+function hideOrbMenu(focusOrb = false) {
+  if (orbMenu.hidden) return;
+  orbMenu.hidden = true;
+  if (focusOrb) orbEl.focus();
+}
+orbEl.addEventListener("contextmenu", (e) => {
+  e.preventDefault(); // no WebKit Reload / Inspect menu
+  if (mini || !coreRef) return;
+  // A keyboard-opened menu (no pointer position) sits beside the orb.
+  showOrbMenu(e.button === 2 || e.clientX || e.clientY ? { x: e.clientX, y: e.clientY } : undefined);
+});
+// Anywhere else: no WebKit menu over Jett's own bits either.
+dock.addEventListener("contextmenu", (e) => e.preventDefault());
+orbMenu.addEventListener("contextmenu", (e) => e.preventDefault());
+$<HTMLButtonElement>("menu-new-chat").onclick = () => {
+  hideOrbMenu();
+  void startNewChat();
+};
+$<HTMLButtonElement>("menu-center").onclick = () => {
+  hideOrbMenu();
+  setLayer(layer === "center" ? "close" : "open");
+};
+orbMenu.addEventListener("keydown", (e) => {
+  const i = menuItems.indexOf(document.activeElement as HTMLButtonElement);
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    const n = menuItems.length;
+    menuItems[(i + (e.key === "ArrowDown" ? 1 : n - 1)) % n]?.focus();
+  } else if (e.key === "Escape" || e.key === "Tab") {
+    e.preventDefault();
+    e.stopPropagation();
+    hideOrbMenu(true);
+  }
+});
+// A press outside the menu, or the window losing focus, closes it.
+window.addEventListener("pointerdown", (e) => {
+  if (!orbMenu.hidden && !orbMenu.contains(e.target as Node)) hideOrbMenu();
+}, true);
+window.addEventListener("blur", () => hideOrbMenu());
 
 // ---- quick typing (ticket 40): type to Jett without the popover --------------------
 const quickEl = $<HTMLFormElement>("quick");
 const quickInput = $<HTMLTextAreaElement>("quick-input");
-const quickBtn = $<HTMLButtonElement>("quick-btn");
 let quick: Quick = quickClosed;
 function placeQuick() {
   if (quickEl.hidden) return;
@@ -856,7 +905,11 @@ function feedQuick(action: QuickAction) {
   const wasOpen = quick.open;
   quick = step.quick;
   quickEl.hidden = !quick.open;
-  quickBtn.setAttribute("aria-expanded", String(quick.open));
+  orbEl.setAttribute("aria-expanded", String(quick.open));
+  if (quick.open !== wasOpen) {
+    muteVoice(quick.open);
+    render();
+  }
   if (quickInput.value !== quick.text) quickInput.value = quick.text;
   if (quick.open && !wasOpen) {
     placeQuick();
@@ -867,7 +920,7 @@ function feedQuick(action: QuickAction) {
   if (step.focus && inTauri()) void quickTypeFocus(step.focus === "take").catch(() => {});
   if (step.send) void sendTyped(step.send);
 }
-/** A typed turn from the quick field: the reply shows in the bubble, and is spoken only in a call. */
+/** A typed turn from the quick field: the reply shows in the bubble; the box stays open, so it is not spoken. */
 async function sendTyped(text: string) {
   if (!coreRef) return showError(UI[lang].typeHere);
   feedOrb({ type: "turn.sent" });
@@ -878,7 +931,6 @@ async function sendTyped(text: string) {
     feedOrb({ type: "turn.done", reply: "" });
   }
 }
-quickBtn.onclick = () => feedQuick(quick.open ? { type: "close" } : { type: "open" });
 quickInput.addEventListener("input", () => {
   feedQuick({ type: "input", text: quickInput.value });
   // Grow with the text, up to a few lines.
@@ -899,7 +951,9 @@ window.addEventListener("blur", () => {
   if (!quick.open) return;
   quick = quickClosed;
   quickEl.hidden = true;
-  quickBtn.setAttribute("aria-expanded", "false");
+  orbEl.setAttribute("aria-expanded", "false");
+  muteVoice(false);
+  render();
 });
 void onQuickType(() => feedQuick({ type: "open" })).catch(() => {});
 // Starting to type while Jett has focus opens the field with that first letter.
@@ -944,10 +998,14 @@ async function startCall(core: CoreClient) {
   render();
   try {
     const s = await core.session();
+    if (call !== "joining") return; // hung up while connecting
     room = new Room();
     room.on(RoomEvent.TrackSubscribed, (track, _pub, who) => {
       if (track.kind !== Track.Kind.Audio || who.identity !== "agent") return;
-      document.body.appendChild(track.attach());
+      const el = track.attach();
+      el.muted = quick.open; // typing: you read the reply, nothing plays
+      voiceEls.add(el);
+      document.body.appendChild(el);
       // Follow Jett's voice for the wave (ticket 38). If Web Audio can't read the remote
       // track, the level stays 0 and the orb falls back to the gentle speaking motion.
       try {
@@ -965,6 +1023,7 @@ async function startCall(core: CoreClient) {
     });
     room.on(RoomEvent.Disconnected, () => void endCall(false));
     await room.connect(s.livekitUrl, s.token);
+    if (call !== "joining") return void (await room.disconnect()); // hung up while connecting
     await room.startAudio(); // inside the click: WebKit's autoplay rule
     // First call asks macOS for the mic (Info.plist NSMicrophoneUsageDescription).
     await room.localParticipant.setMicrophoneEnabled(true);
@@ -994,6 +1053,8 @@ async function endCall(disconnect = true) {
   mic = undefined;
   voice?.stop();
   voice = undefined;
+  for (const el of voiceEls) el.remove();
+  voiceEls.clear();
   pttCall = pttCallIdle;
   muted = false;
   call = "ended";
@@ -1026,7 +1087,6 @@ function pushToTalk(on: boolean) {
     pttCall = step.state;
     if (step.act === "start") void startCall(coreRef);
     else if (step.act === "unmute") void setMuted(false);
-    if (pttUses < 99) store(PTT_USES_KEY, String(++pttUses));
     render();
   } else {
     const step = pttRelease(pttCall, call);
@@ -1045,7 +1105,7 @@ function primary() {
   if (act === "start") void startCall(coreRef);
   else if (act) void setMuted(act === "mute");
 }
-// The orb: a click (not the end of a drag) does the first call button's job, a little
+// The orb: a click (not the end of a drag) opens the typing box, or closes it; a little
 // later so a double-click can minimise instead (overlay.ts `isDoubleClick`).
 let lastClickAt: number | undefined;
 let clickTimer: ReturnType<typeof setTimeout> | undefined;
@@ -1060,10 +1120,8 @@ orbEl.onclick = () => {
   }
   lastClickAt = now;
   clearTimeout(clickTimer);
-  clickTimer = setTimeout(primary, DOUBLE_MS);
+  clickTimer = setTimeout(() => feedQuick(quick.open ? { type: "close" } : { type: "open" }), DOUBLE_MS);
 };
-muteBtn.onclick = () => void setMuted(!muted);
-hangupBtn.onclick = () => void endCall();
 window.addEventListener("keydown", (e) => {
   if (!wizardEl.hidden) return;
   if ((e.metaKey || e.ctrlKey) && e.key === ".") {
@@ -1103,6 +1161,25 @@ window.addEventListener("keydown", (e) => {
 
 // ---- boot -----------------------------------------------------------------
 
+/** The wizard was closed with no Gemini key: wait for "Finish setup", then run it again. */
+function finishSetupLater(info: CoreInfo): Promise<CoreClient | undefined> {
+  say("Setup isn't finished. I need a Gemini key to talk.");
+  finishSetupBtn.hidden = false;
+  render();
+  return new Promise((resolve) => {
+    finishSetupBtn.onclick = async () => {
+      finishSetupBtn.hidden = true;
+      render();
+      try {
+        resolve(await runWizard(info, await getSetup(info)));
+      } catch (err) {
+        showError(`setup: ${errorText(err)}`);
+        resolve(undefined);
+      }
+    };
+  });
+}
+
 async function boot() {
   moveOrb(placeOrb(storedSpot(), dockSize(), view()));
   // Minimised last time: come back as the pill (tickets 38, 39).
@@ -1126,7 +1203,10 @@ async function boot() {
     booted = true;
     // First launch (no config file) or no Gemini key yet: the setup wizard first.
     const status = await getSetup(info);
-    core = status.needed || status.keyNeeded ? await runWizard(info, status) : connectCore(info);
+    let first = status.needed || status.keyNeeded ? await runWizard(info, status) : connectCore(info);
+    // Closed before a key: no chat yet, so "Finish setup" under the orb opens it again.
+    while (!first) first = await finishSetupLater(info);
+    core = first;
   } catch (err) {
     booted = true; // a Retry that brings the core up reloads the page
     feedOrb({ type: "core.down" });
@@ -1190,7 +1270,7 @@ async function boot() {
     readerPath: $("reader-path"), readerText: $("reader-text"), closeReader: $<HTMLButtonElement>("close-reader"), transcript: $("brain-lists"),
   });
   mountChatView(core, reader, { list: $<HTMLUListElement>("chat-list"), empty: $("chats-empty") });
-  sketch = mountSketch(core, stage, { onCaption: () => renderCaptions() });
+  sketch = mountSketch(core, stage);
   onFrontWindowMoved(placeFloaters);
   followFrontWindow(core);
   placeFloaters();
@@ -1198,7 +1278,7 @@ async function boot() {
   feedOrb({ type: "core.ready" });
 
   talkBtn.disabled = false;
-  talkBtn.onclick = () => void startCall(core);
+  talkBtn.onclick = () => void (talkBtn.dataset.act === "hangup" ? endCall() : startCall(core));
   typeInput.disabled = false;
   sendBtn.disabled = false;
   render();

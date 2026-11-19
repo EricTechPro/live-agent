@@ -23,6 +23,8 @@ describe("config file", () => {
       helpers: { geminiCli: true, codex: true, claudeCode: false, maxAtOnce: 1 },
       worktrees: false,
       voice: "Puck",
+      voiceStyle: "",
+      liveModel: "gemini-3.8-live",
       tone: "short",
       brainFolders: { raw: "raw", wiki: "wiki", projects: "projects" },
       defaultHelper: "codex",
@@ -46,6 +48,8 @@ describe("config file", () => {
       helpers: { geminiCli: true, codex: true, claudeCode: false, maxAtOnce: 1 },
       worktrees: false,
       voice: "Puck",
+      voiceStyle: "",
+      liveModel: "gemini-3.8-live",
       tone: "short",
       brainFolders: { raw: "raw", wiki: "wiki", projects: "projects" },
       defaultHelper: "codex",
@@ -113,4 +117,9 @@ describe("config file", () => {
     const path = writeConfig("{ brainPath: ");
     expect(() => loadConfig(path)).toThrow(`${path} is not valid JSON`);
   });
+});
+
+test("a config saved by the panel's model picker (liveModel) loads", () => {
+  const path = writeConfig({ voiceStyle: "slower", liveModel: "gemini-3.8-live" });
+  expect(loadConfig(path)).toMatchObject({ voiceStyle: "slower", liveModel: "gemini-3.8-live" });
 });

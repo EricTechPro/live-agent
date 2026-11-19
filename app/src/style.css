@@ -51,35 +51,30 @@ body {
 }
 .tip kbd { font: 700 10px/1 var(--mono); color: var(--ink-3); padding: 2px 4px; border-radius: 4px; border: 1px solid var(--glass-edge); }
 
-/* ---- the orb dock: grip + menu, orb, state words, call buttons ---- */
+/* ---- the orb dock: minimise, orb, words only when you must act, the call button ---- */
 .dock { position: absolute; left: 0; top: 0; width: 148px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 0 6px; }
 .dock-top { position: relative; width: 100%; height: 26px; display: flex; justify-content: center; align-items: center; }
-/* The grip: a pill you grab to move Jett. Shows on hover, always there for the keyboard. */
-.grip {
-  appearance: none; border: 0; padding: 0; width: 28px; height: 20px; border-radius: 10px; cursor: grab; margin-left: 0;
-  background: transparent; display: grid; place-items: center; touch-action: none;
+/* Minimise: the only button above the orb, and only under the cursor or with keyboard focus.
+   .hover comes from the overlay poll's cursor (main.ts), so it works while another app is
+   in front; :hover stays for the browser preview. In the app (html[data-polled]) only the
+   poll's .hover counts: WebKit keeps :hover stuck after the cursor leaves for another app. */
+.hide-btn { width: 26px; height: 26px; border-radius: 8px; opacity: 0; transition: opacity .15s var(--ease), background-color .15s var(--ease); }
+html:not([data-polled]) .dock:hover .hide-btn, .dock.hover .hide-btn, .hide-btn:focus-visible { opacity: 1; }
+/* The orb's right-click menu: New chat, and the chats / jobs / brain popover. */
+.orb-menu {
+  position: absolute; left: 0; top: 0; z-index: 40; min-width: 196px; padding: 4px; border-radius: 10px; display: flex; flex-direction: column; gap: 1px;
+  background: var(--glass); border: 1px solid var(--glass-edge); box-shadow: 0 10px 28px rgba(0, 0, 0, .45), 0 0 0 1px rgba(0, 0, 0, .4);
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
 }
-/* Ticket 40: the grip shows only under the cursor, while dragging or with keyboard focus;
-   at rest it was a stray white capsule floating above the orb. */
-.grip span { width: 26px; height: 5px; border-radius: 3px; background: rgba(200, 255, 244, .38); box-shadow: 0 0 0 1px rgba(0,0,0,.25); opacity: 0; transition: background-color .15s var(--ease), width .15s var(--ease), opacity .15s var(--ease); }
-html:not([data-polled]) .dock:hover .grip span, .dock.hover .grip span, .dock.dragging .grip span, .grip:focus-visible span { opacity: 1; }
-.grip:hover span, .dock.dragging .grip span { background: var(--led); width: 28px; }
-.dock.dragging .grip { cursor: grabbing; }
-.grip:focus-visible { outline: 2px solid var(--ink); }
-.menu-btn { position: absolute; right: 6px; top: 0; width: 26px; height: 26px; border-radius: 8px; opacity: .0; }
-/* Hover reveal (ticket 38): .hover comes from the overlay poll's cursor (main.ts), so it
-   works while another app is in front; :hover stays for the browser preview. */
-.hide-btn, .newchat-btn { position: absolute; left: 4px; top: 0; width: 26px; height: 26px; border-radius: 8px; opacity: 0; transition: opacity .15s var(--ease), background-color .15s var(--ease); }
-/* New chat (ticket 39) sits next to the minus; Type (ticket 40) next to the menu; the grip narrows to make room. */
-.newchat-btn { left: 32px; }
-.quick-btn { position: absolute; right: 34px; top: 0; width: 26px; height: 26px; border-radius: 8px; opacity: 0; transition: opacity .15s var(--ease), background-color .15s var(--ease); }
-.menu-btn { transition: opacity .15s var(--ease), background-color .15s var(--ease); }
-/* Ticket 39: in the app (html[data-polled]) only the poll's .hover counts. WebKit keeps
-   :hover stuck after the cursor leaves for another app, which left these up for seconds. */
-html:not([data-polled]) .dock:hover .menu-btn, .dock.hover .menu-btn, .menu-btn:focus-visible, .menu-btn[aria-expanded="true"], .overlay[data-layer="center"] .menu-btn,
-html:not([data-polled]) .dock:hover .hide-btn, .dock.hover .hide-btn, .hide-btn:focus-visible,
-html:not([data-polled]) .dock:hover .newchat-btn, .dock.hover .newchat-btn, .newchat-btn:focus-visible,
-html:not([data-polled]) .dock:hover .quick-btn, .dock.hover .quick-btn, .quick-btn:focus-visible, .quick-btn[aria-expanded="true"] { opacity: 1; }
+.orb-menu[hidden] { display: none; }
+.orb-menu-item {
+  appearance: none; border: 0; margin: 0; padding: 7px 8px; border-radius: 7px; background: none; cursor: pointer; text-align: left;
+  display: flex; align-items: center; gap: 9px; color: var(--ink); font: 600 12px/1.2 var(--mono); white-space: nowrap;
+}
+.orb-menu-item:hover, .orb-menu-item:focus-visible { background: rgba(120, 255, 226, .12); outline: none; }
+.orb-menu-item:focus-visible { box-shadow: inset 0 0 0 1px var(--led); }
+.orb-menu-text { flex: 1; }
+.orb-menu kbd { font: 700 10px/1 var(--mono); color: var(--ink-3); padding: 2px 4px; border-radius: 4px; border: 1px solid var(--glass-edge); }
 /* Quick typing (ticket 40): a small glass field under the orb. */
 .quick {
   position: absolute; left: 0; top: 0; width: 260px; margin: 0; padding: 6px 10px; border-radius: 14px;
@@ -91,7 +86,6 @@ html:not([data-polled]) .dock:hover .quick-btn, .dock.hover .quick-btn, .quick-b
   color: var(--ink); font: 500 13px/1.45 var(--mono); caret-color: var(--led);
 }
 .quick textarea::placeholder { color: rgba(200, 255, 244, .45); }
-.dock.hover .grip span { background: rgba(200, 255, 244, .6); }
 .dock.dragging .orb { cursor: grabbing; transform: scale(1.04); }
 
 .orb-wrap { position: relative; }
@@ -142,6 +136,7 @@ html:not([data-polled]) .dock:hover .quick-btn, .dock.hover .quick-btn, .quick-b
 .jobs-badge:focus-visible { outline: 2px solid var(--ink); }
 
 /* The state in plain words: a small glass pill, so it reads over any background. */
+.orb-label[hidden] { display: none; }
 .orb-label {
   margin: 0; padding: 3px 10px 4px; border-radius: 11px; background: rgba(4, 16, 18, .66);
   color: rgb(var(--look)); font: 600 12px/1.25 var(--mono); font-stretch: 87.5%; white-space: nowrap;
@@ -155,7 +150,7 @@ html:not([data-polled]) .dock:hover .quick-btn, .dock.hover .quick-btn, .quick-b
 .retry-link::before { content: "·"; color: rgba(var(--look), .7); padding-right: 6px; text-decoration: none; display: inline-block; }
 .retry-link:hover { color: rgb(var(--look)); }
 .retry-link:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 3px; }
-/* The faint second line under "Tap to talk" (ticket 38), until push to talk is learned. */
+/* The faint second line under "Can't reach Gemini": when the next retry is (ticket 40). */
 .orb-hint {
   margin: -2px 0 0; padding: 1px 8px 2px; border-radius: 9px; background: rgba(4, 16, 18, .42);
   color: rgba(200, 255, 244, .62); font: 500 10.5px/1.25 var(--mono); font-stretch: 87.5%; white-space: nowrap;
@@ -245,24 +240,10 @@ html:not([data-polled]) .dock:hover .quick-btn, .dock.hover .quick-btn, .quick-b
 .talk { background: var(--led); border-color: var(--led); color: var(--led-ink); }
 .talk:hover { background: var(--led-hi); color: var(--led-ink); }
 .talk:disabled { background: #1c3634; border-color: #1c3634; color: #6f8f8a; }
-.mute[aria-pressed="true"] { background: #f3f6f5; border-color: #f3f6f5; color: #18302d; }
 .hangup { background: #e5483a; border-color: #e5483a; color: #fff; }
 .hangup:hover { background: #f05a4c; color: #fff; }
 
-/* ---- live captions (ticket 37): bottom centre, yours above Jett's ---- */
-.captions {
-  position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); width: min(720px, calc(100vw - 48px));
-  display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none;
-}
-.cap {
-  margin: 0; max-width: 100%; padding: 7px 14px 8px; border-radius: 14px;
-  background: rgba(4, 14, 16, .72); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  font: 500 16px/1.4 var(--mono); font-stretch: 87.5%; text-align: center; overflow-wrap: anywhere;
-  box-shadow: 0 6px 22px rgba(0,0,0,.3); animation: cap-in .25s var(--ease);
-}
-.cap.user { color: #f1f5f4; border: 1px solid rgba(255, 255, 255, .16); font-size: 14px; }
-.cap.user::before { content: "You  "; color: rgba(241, 245, 244, .55); font-size: 11px; letter-spacing: .06em; white-space: pre; }
-.cap.model { color: var(--led); border: 1px solid var(--glass-edge); text-shadow: 0 0 10px rgba(120, 255, 226, .25); }
+/* The cues fade in (the drawing's caption bar lives in sketch.css). */
 @keyframes cap-in { from { opacity: 0; transform: translateY(4px); } }
 
 /* ---- the drawing, straight on the screen (tickets 32 to 36, drawing v2) ---- */

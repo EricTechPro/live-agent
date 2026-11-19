@@ -4,7 +4,8 @@
 //
 // Why per connection: Gemini Live takes its system instruction once, when the
 // connection opens. A new tone (picked in the setup wizard) applies from the
-// next connection; the wizard starts one right after it saves.
+// next connection; the wizard starts one right after it saves, and set_voice
+// moves to a resumed connection so the chat carries on.
 //
 // `short` is the default and the strictest: Eric's "phone mode". Answer first,
 // small plain words, one idea per line, nothing before the answer.
@@ -89,6 +90,9 @@ function workRules(brainPath?: string): string {
       "official MCP server for that app and reply with its exact command, args and env variable names, or its url. " +
       "When it reports back, call add_connection with that, keys written as ${NAME}, and tell the user which keys to " +
       "add to their .env file.",
+    "- You can change your own voice and speaking style. When the user asks for another voice (calmer, brighter, " +
+      '"switch to Bright") or a way of speaking (slower, more excited, like a radio host), call set_voice. ' +
+      "Never say you cannot change your voice.",
     "- The safety mode decides if the user is asked first; if the call is declined or blocked, say so in one line.",
   ].join("\n");
 }
@@ -115,10 +119,12 @@ const WORKFLOW_RULES = [
  * The whole system instruction for a Live connection with this tone.
  * `catalog`: the user's workflows and skills, one line each (src/workflows `catalog`), read at connect.
  */
-export function systemInstruction(tone: Tone, where: { brainPath?: string; catalog?: string } = {}): string {
+export function systemInstruction(tone: Tone, where: { brainPath?: string; catalog?: string; voiceStyle?: string } = {}): string {
   return [
     WHO,
     TONE_RULES[tone] ?? TONE_RULES.short,
+    // The set_voice tool's style note (config `voiceStyle`): how the voice sounds, on top of the tone.
+    ...(where.voiceStyle ? [`Speaking style: ${where.voiceStyle}. Keep to it in every reply until told otherwise.`] : []),
     workRules(where.brainPath),
     WORKFLOW_RULES,
     ...(where.catalog ? [where.catalog] : []),

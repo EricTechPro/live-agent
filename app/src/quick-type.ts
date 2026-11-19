@@ -2,9 +2,11 @@
 // without opening the popover. Pure: what is open and typed, plus an action, in; the new
 // state, the text to send and what to do with keyboard focus out. main.ts does the DOM.
 //
-// - Opens from the keyboard button on the orb's hover row, ⌃⌥T (global), or starting to
-//   type while Jett has focus (the first letter is kept).
-// - Enter sends the text as a typed turn and closes; Shift+Enter is a new line; Esc closes.
+// - Opens from a click on the orb (a second click closes it), ⌃⌥T (global), or starting
+//   to type while Jett has focus (the first letter is kept).
+// - Enter sends the text as a typed turn and stays open, empty, so you read the reply in
+//   the bubble; Shift+Enter is a new line; Esc closes.
+// - While it is open Jett's voice is muted (main.ts): you type, you read.
 // - While it is open the window holds keyboard focus ("take"); closing gives it back to
 //   the app you were in ("give").
 import type { Point, Rect, Size } from "./overlay.ts";
@@ -44,7 +46,7 @@ export function nextQuick(q: Quick, action: QuickAction): QuickStep {
       if (action.key === "Escape") return { quick: quickClosed, focus: "give" };
       if (action.key !== "Enter" || action.shift) return { quick: q };
       const text = q.text.trim();
-      return text ? { quick: quickClosed, send: text, focus: "give" } : { quick: q };
+      return text ? { quick: { open: true, text: "" }, send: text } : { quick: q };
     }
   }
 }

@@ -25,7 +25,7 @@ export interface CallInputs {
 export interface CallView {
   /** The orb's look (colour and motion), and `data-look` for CSS. */
   look: CallLook;
-  /** Plain words under the orb: "Tap to talk", "Listening…". */
+  /** The state in plain words: the orb's accessible name and tooltip ("Listening…"); printed only when `showsWords`. */
   label: string;
   /** The call buttons to show, left to right. */
   buttons: CallButton[];
@@ -39,7 +39,7 @@ export interface CallView {
 export const LABELS: Record<Lang, Record<CallLook, string>> = {
   en: {
     starting: "Starting…",
-    idle: "Tap to talk",
+    idle: "Ready",
     joining: "Connecting…",
     listening: "Listening…",
     thinking: "Thinking…",
@@ -51,7 +51,7 @@ export const LABELS: Record<Lang, Record<CallLook, string>> = {
   },
   zh: {
     starting: "启动中…",
-    idle: "点我说话",
+    idle: "就绪",
     joining: "连接中…",
     listening: "在听…",
     thinking: "思考中…",
@@ -96,13 +96,21 @@ export function retryHint(orb: { state: string; retryAt?: number }, now: number,
   return lang === "zh" ? `${secs} 秒后重试` : `retrying in ${secs}s`;
 }
 
-/** Push to talk counts as learned after this many uses; the hint goes away (ticket 38). */
-export const PTT_HINT_USES = 2;
-const PTT_HINT: Record<Lang, string> = { en: "or hold ⌃⌥", zh: "或按住 ⌃⌥" };
+/**
+ * The one call button under the orb: Start call, or, once a call is joining or live, a red
+ * Hang up in the same spot. Mute stays on Space, push to talk and the pill.
+ */
+export function callButton(buttons: CallButton[]): "start" | "hangup" | undefined {
+  if (buttons.includes("hangup")) return "hangup";
+  return buttons.includes("start") ? "start" : undefined;
+}
 
-/** The faint second line under "Tap to talk": only at rest, until push to talk has been used twice. */
-export function talkHint(look: CallLook, lang: Lang, pttUses: number): string | undefined {
-  return look === "idle" && pttUses < PTT_HINT_USES ? PTT_HINT[lang] : undefined;
+/**
+ * Words under the orb only when you have to act ("Can't reach Gemini · Retry"). Idle,
+ * listening, thinking, speaking: the orb's colour and motion say it, so no text.
+ */
+export function showsWords(look: CallLook): boolean {
+  return look === "offline";
 }
 
 /** Space: start a call, or in one, mute / unmute. */

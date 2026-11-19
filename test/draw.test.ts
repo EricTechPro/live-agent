@@ -131,6 +131,19 @@ test("cards carry content only, and ink can sit on a card drawn earlier in the s
   expect(events).toContainEqual(expect.objectContaining({ type: "tool.result", id: "d1", status: "ok" }));
 });
 
+test("a card may say how big it opens (card_size); a size that is not one of the four is refused", async () => {
+  const tool = tools.find((t) => t.name === "draw")!;
+  expect(JSON.stringify(tool.parameters)).toContain('"card_size"');
+  const timeline = { kind: "timeline", id: "p1", title: "life", items: [{ label: "1901" }, { label: "1948" }] };
+  const ok = await oneCall([{ say: "Big.", marks: [{ ...timeline, card_size: "large" }] }]);
+  expect(beats(ok)[0]!.marks[0]).toMatchObject({ kind: "timeline", card_size: "large" });
+  const full = await oneCall([{ say: "Full.", marks: [{ kind: "list", id: "p1", items: [{ label: "a" }], card_size: "full" }] }]);
+  expect(beats(full)[0]!.marks[0]).toMatchObject({ card_size: "full" });
+  const bad = await oneCall([{ say: "Huge.", marks: [{ ...timeline, card_size: "huge" }] }]);
+  expect(beats(bad)).toEqual([]);
+  expect(bad).toContainEqual(expect.objectContaining({ type: "tool.result", id: "d1", status: "error", error: expect.stringContaining("card_size") }));
+});
+
 test("the draw tool tells the model to pick card kinds, not coordinates", () => {
   const tool = tools.find((t) => t.name === "draw")!;
   expect(tool.description).toContain("pick a card kind");

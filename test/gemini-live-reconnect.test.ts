@@ -8,6 +8,10 @@ import { startSession } from "../src/core/agent.ts";
 import type { AgentEvent } from "../src/core/events.ts";
 import { TONE_RULES } from "../src/core/tone.ts";
 import { geminiLiveModel } from "../src/models/gemini-live.ts";
+import setVoice from "../tools/set-voice.ts";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 type FakeSocket = {
   params: LiveConnectParameters;
@@ -118,6 +122,36 @@ describe("Gemini Live connection", () => {
     expect(live.sockets[1]!.sent).toEqual([{ text: "still there?" }]);
     reply("Yes, still here.").forEach(live.sockets[1]!.say);
     expect((await turn).at(-1)).toEqual({ type: "turn.done", reply: "Yes, still here." });
+    await session.close();
+  });
+
+  test("set_voice: resumes the same chat on a new connection with the new voice and style, and answers there", async () => {
+    const live = fakeLive();
+    const configPath = join(mkdtempSync(join(tmpdir(), "live-agent-voice-")), "config.json");
+    const session = await startSession({
+      model: geminiLiveModel({ apiKey: "test", connect: live.connect }),
+      tools: [setVoice], configPath, chatEndNote: false,
+    });
+    const old = live.sockets[0]!;
+    old.say({ sessionResumptionUpdate: { resumable: true, newHandle: "handle-v" } });
+
+    const turn = session.sendText("switch to Bright and talk slower");
+    old.say({ toolCall: { functionCalls: [{ id: "v1", name: "set_voice", args: { voice: "Bright", style: "slower" } }] } });
+    await until(() => live.sockets.length === 2);
+    const fresh = live.sockets[1]!;
+    expect(fresh.params.config?.sessionResumption).toEqual({ handle: "handle-v" });
+    expect(fresh.params.config?.speechConfig).toEqual({ voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } } });
+    expect(String(fresh.params.config?.systemInstruction)).toContain("Speaking style: slower.");
+
+    // The tool's answer goes to the new connection, so the next line is in the new voice.
+    await until(() => fresh.sent.length === 1);
+    expect(fresh.sent[0]).toMatchObject({ functionResponses: [{ id: "v1", name: "set_voice" }] });
+    expect(old.sent).toEqual([{ text: "switch to Bright and talk slower" }]);
+    // The old connection finishes its turn, then hangs up.
+    old.say({ serverContent: { turnComplete: true } });
+    await until(() => live.sockets.length === 2 && fresh.sent.length === 1);
+    reply("How's this?").forEach(fresh.say);
+    expect((await turn).at(-1)).toEqual({ type: "turn.done", reply: "How's this?" });
     await session.close();
   });
 

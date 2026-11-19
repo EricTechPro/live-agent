@@ -1,6 +1,6 @@
 // Live captions on the orb (ticket 37): your words stream, then Jett's; two lines; they fade.
 import { expect, test } from "bun:test";
-import { addCaption, FADE_MS, MAX_CHARS, noCaptions, shownCaptions, type Captions } from "../app/src/captions.ts";
+import { addCaption, barLine, currentSentence, FADE_MS, HOLD_MS, MAX_CHARS, noCaptions, shownCaptions, type Captions } from "../app/src/captions.ts";
 import type { AgentEvent } from "../src/core/events.ts";
 
 const you = (text: string): AgentEvent => ({ type: "transcript", role: "user", text });
@@ -53,4 +53,49 @@ test("Chinese streams without stray spaces", () => {
 
 test("a new chat clears the captions", () => {
   expect(run([[you("Hi"), 0], [{ type: "chat.started" } as AgentEvent, 10]])).toEqual(noCaptions);
+});
+
+// The drawing's one caption bar: what Jett is saying now, from the voice's transcription.
+test("the bar shows the sentence being said, not the whole reply", () => {
+  expect(currentSentence("Sure, let me sketch it. A black hole starts")).toBe("A black hole starts");
+  expect(currentSentence("Sure. What is left has three parts. ")).toBe("What is left has three parts.");
+  expect(currentSentence("It is 3.5 times notes.md big")).toBe("It is 3.5 times notes.md big");
+  expect(currentSentence("“Done!” Next")).toBe("Next");
+  expect(currentSentence("先画出来。黑洞是")).toBe("黑洞是");
+  expect(currentSentence("")).toBe("");
+});
+
+test("the bar follows the transcription chunk by chunk, one sentence at a time", () => {
+  let c = run([[you("How does it form?"), 0]]);
+  expect(barLine(c, 100, false)).toEqual({ who: "user", text: "How does it form?" });
+  c = run([[jett("Sure, let me"), 900], [jett(" sketch it out."), 1500]], c);
+  expect(barLine(c, 1600, true)).toEqual({ who: "model", text: "Sure, let me sketch it out." });
+  c = run([[jett(" A black hole"), 2400]], c);
+  expect(barLine(c, 2500, true)).toEqual({ who: "model", text: "A black hole" });
+  c = run([[jett(" starts as a star."), 3000]], c);
+  expect(barLine(c, 3100, true)?.text).toBe("A black hole starts as a star.");
+});
+
+test("the bar clears when the voice stops, and holds while it still plays", () => {
+  const c = run([[jett("A black hole starts as a star."), 0], [done, 200]]);
+  expect(barLine(c, HOLD_MS - 1, false)?.text).toBe("A black hole starts as a star.");
+  expect(barLine(c, HOLD_MS + 1, false)).toBeUndefined();
+  // The text came ahead of the audio: the line stays while Jett is still saying it.
+  expect(barLine(c, HOLD_MS + 4000, true)?.text).toBe("A black hole starts as a star.");
+});
+
+test("talking over Jett clears the bar at once; your words take it", () => {
+  let c = run([[jett("The edge of no return is"), 0], [{ type: "interrupted" } as AgentEvent, 100]]);
+  expect(barLine(c, 150, true)).toBeUndefined();
+  c = run([[you("wait"), 200]], c);
+  expect(barLine(c, 300, false)).toEqual({ who: "user", text: "wait" });
+  expect(barLine(c, 200 + HOLD_MS + 1, false)).toBeUndefined();
+  // Jett answers again: the bar is his once more.
+  c = run([[jett("Sure."), 3000]], c);
+  expect(barLine(c, 3100, true)).toEqual({ who: "model", text: "Sure." });
+});
+
+test("a new chat clears the bar", () => {
+  const c = run([[jett("Hey."), 0], [{ type: "chat.started" } as AgentEvent, 10]]);
+  expect(barLine(c, 20, true)).toBeUndefined();
 });

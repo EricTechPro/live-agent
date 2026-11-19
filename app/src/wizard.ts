@@ -2,6 +2,10 @@
 //
 //   const core = await runWizard(info, await getSetup(info), existingCore);
 //
+// The × (or Esc) closes it at any step and keeps what was saved so far. It then
+// resolves with the client, or undefined when there is still no Gemini key: the
+// window offers "Finish setup" (main.ts), and a launch without a config shows it again.
+//
 // Shows on a first launch (no config file, or no Gemini key) and from the Setup
 // button. Steps: welcome (voice) -> key (only without one) -> mic -> notes ->
 // tone -> safety -> say hi (a real voice test, then a recap) -> done.
@@ -58,10 +62,11 @@ let orb: ReturnType<typeof mountLedOrb> | undefined;
 
 /**
  * Show the wizard and resolve with the core client once the user presses
- * "Open Jett". `core` is the running client when there is one (Setup button);
- * without one (no key yet) it is made once the key works.
+ * "Open Jett" or closes it. `core` is the running client when there is one (Setup
+ * button); without one (no key yet) it is made once the key works, and closing
+ * before that resolves undefined.
  */
-export function runWizard(info: CoreInfo, status: SetupStatus, core?: CoreClient): Promise<CoreClient> {
+export function runWizard(info: CoreInfo, status: SetupStatus, core?: CoreClient): Promise<CoreClient | undefined> {
   const root = $("wizard");
   orb ??= mountLedOrb($<HTMLCanvasElement>("w-orb"));
   const state: WizardState = initialState(status.current, status.keyNeeded);
@@ -73,8 +78,8 @@ export function runWizard(info: CoreInfo, status: SetupStatus, core?: CoreClient
   let advanceTimer: ReturnType<typeof setTimeout> | undefined;
   let saved = false;
   let pickToken = 0;
-  let done: (core: CoreClient) => void = () => {};
-  const finished = new Promise<CoreClient>((resolve) => (done = resolve));
+  let done: (core: CoreClient | undefined) => void = () => {};
+  const finished = new Promise<CoreClient | undefined>((resolve) => (done = resolve));
 
   // ---- the speech bubble: types out letter by letter --------------------------
   let typer: ReturnType<typeof setInterval> | undefined;
@@ -561,12 +566,25 @@ export function runWizard(info: CoreInfo, status: SetupStatus, core?: CoreClient
     say("All set!", "hype", 1);
     $("w-open").focus();
   }
-  $("w-open").onclick = () => {
+  // Leave: "Open Jett", the × or Esc. Whatever was saved stays saved; nothing more is.
+  function leave() {
+    clearTimeout(advanceTimer);
+    clearInterval(typer);
+    void hangUp();
     listening?.();
+    document.removeEventListener("keydown", onKey);
     root.hidden = true;
     root.querySelectorAll("audio").forEach((a) => a.remove());
-    done(client!);
-  };
+    done(client);
+  }
+  function onKey(e: KeyboardEvent) {
+    if (e.key !== "Escape" || root.hidden || e.defaultPrevented || e.isComposing) return;
+    e.preventDefault();
+    leave();
+  }
+  document.addEventListener("keydown", onKey);
+  $("w-open").onclick = leave;
+  $("w-close").onclick = leave;
 
   // ---- start ---------------------------------------------------------------------
   heard.replaceChildren();
