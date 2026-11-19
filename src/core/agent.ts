@@ -42,6 +42,7 @@ import { createToolCalls } from "./tool-calls.ts";
 import { systemInstruction } from "./tone.ts";
 import { newTurn, turnIsOver, type Turn } from "./turn.ts";
 import type { Eyes } from "../screen/eyes.ts";
+import type { Hands } from "../screen/hands.ts";
 import { createScreen, type ReleaseInput, type Screen } from "../screen/service.ts";
 import { createFollow, type Follow } from "../screen/follow.ts";
 import { createLocator, type Ground } from "../screen/locator.ts";
@@ -98,6 +99,11 @@ export interface SessionOptions {
    * element on a screenshot. Unset: only Accessibility and OCR find things.
    */
   ground?: Ground;
+  /**
+   * Jett's hands (src/screen/hands.ts): `open`, `act_in_app` and `list_windows` act in other
+   * apps through them. Unset: those tools say computer control is not available here.
+   */
+  hands?: Hands;
 }
 
 /** What `onAudio` hears: a chunk of the model's voice, or "drop what you queued" (interrupted). */
@@ -312,6 +318,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         find: (target) => locate!(target),
         pin: (ids, front) => follow?.pin(ids, front),
       },
+      hands: options.hands,
     }),
     closing: () => closed,
     canvas,

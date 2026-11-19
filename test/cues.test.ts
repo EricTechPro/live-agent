@@ -18,6 +18,15 @@ test("actions read as plain words, in English and Chinese", () => {
   expect(actionLabel("search_brain", {}, "zh")).toBe("在查你的笔记…");
 });
 
+test("computer control reads as plain words too", () => {
+  expect(actionLabel("open", { target: "Notes" })).toBe("Opening Notes…");
+  expect(actionLabel("act_in_app", { app: "Notes", steps: [] })).toBe("Working in Notes…");
+  expect(actionLabel("act_in_app", { steps: [] })).toBe("Working in the app…");
+  expect(actionLabel("list_windows", {})).toBe("Checking what's open…");
+  expect(actionLabel("run_command", { command: "ls" })).toBe("Running a command…");
+  expect(actionLabel("open", { target: "Notes" }, "zh")).toBe("在打开 Notes…");
+});
+
 test("the working pill names the latest running call and clears when it is done", () => {
   const w = run([call("a", "search_brain"), call("b", "start_helper", { helper: "codex" })]);
   expect(w.running.at(-1)?.label).toBe("Asking Codex…");

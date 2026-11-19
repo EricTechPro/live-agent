@@ -26,6 +26,7 @@ import { geminiApiKey, verifyGeminiKey } from "./gemini-key.ts";
 import { errorMessage } from "./errors.ts";
 import pkg from "../package.json" with { type: "json" };
 import { findEyesBin, helperEyes } from "./screen/eyes.ts";
+import { helperHands } from "./screen/hands.ts";
 import { geminiGround } from "./screen/grounding.ts";
 
 // The installed app sets LIVE_AGENT_HOME (~/Desktop/live-agent): work from there and
@@ -59,9 +60,10 @@ const config = loadConfig();
 // Jett's eyes (macOS): the jett-eyes helper, bundled next to the core. As the Tauri sidecar
 // our parent is the app itself: leave its windows (orb, captions, cards, ink) out of every shot.
 const eyesBin = process.platform === "darwin" ? findEyesBin() : undefined;
-const eyes = eyesBin
-  ? helperEyes({ bin: eyesBin, excludePids: process.env.LIVE_AGENT_EXIT_WITH_PARENT ? [process.ppid] : [] })
-  : undefined;
+const jettPids = process.env.LIVE_AGENT_EXIT_WITH_PARENT ? [process.ppid] : [];
+const eyes = eyesBin ? helperEyes({ bin: eyesBin, excludePids: jettPids }) : undefined;
+// Jett's hands (computer control): the same helper clicks, types and focuses apps.
+const hands = eyesBin ? helperHands({ bin: eyesBin, excludePids: jettPids }) : undefined;
 if (process.platform === "darwin" && !eyesBin) console.error("live-agent: no jett-eyes helper: Jett can't see the screen (run app/scripts/build-eyes.sh)");
 // Ticket 40: a network failure while starting (the Mac just woke, Wi-Fi not back yet)
 // must not end the core. The model adapter already retries on its own; this is the
@@ -89,6 +91,7 @@ const startOnce = () => startApp({
   // Ten quiet minutes end a chat on their own (note + tidy), like pressing New chat.
   chatIdleMs: 10 * 60_000,
   eyes,
+  hands,
   // Finding things on screen, last tier: one Gemini Flash call on a fresh screenshot (key read when it runs).
   ground: (shot, describe) => geminiGround({ apiKey: geminiApiKey() ?? "" })(shot, describe),
 });

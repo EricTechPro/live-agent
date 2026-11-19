@@ -40,6 +40,18 @@ export function actionLabel(name: string, args: Record<string, unknown>, lang: L
       return zh ? "在改图…" : "Changing the drawing…";
     case "cancel_job":
       return zh ? "在停止任务…" : "Stopping a job…";
+    case "open": {
+      const what = str(args.target);
+      return zh ? `在打开${what ? ` ${what}` : ""}…` : `Opening ${what ?? "it"}…`;
+    }
+    case "act_in_app": {
+      const app = str(args.app);
+      return zh ? `在用${app ? ` ${app}` : "这个应用"}…` : `Working in ${app ?? "the app"}…`;
+    }
+    case "list_windows":
+      return zh ? "在看开着什么…" : "Checking what's open…";
+    case "run_command":
+      return zh ? "在跑命令…" : "Running a command…";
     default:
       return `${name.replace(/_/g, " ")}…`;
   }

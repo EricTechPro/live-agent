@@ -38,7 +38,7 @@ export interface ToolCallsDeps {
   /** What the gate needs right now: the mode and the config's overrides. */
   gate(): { mode: SafetyMode; overrides: SafetyOverrides };
   /** The rest of what a running tool gets (folders, helper settings). */
-  context(): Pick<ToolContext, "workDir" | "brainPath" | "brainFolders" | "helpers" | "screen">;
+  context(): Pick<ToolContext, "workDir" | "brainPath" | "brainFolders" | "helpers" | "screen" | "hands">;
   /** The chat's canvas (tickets 31, 33). The session clears it on a new chat. */
   canvas: Board;
   /** True once the session is closing: job ends are not announced any more. */

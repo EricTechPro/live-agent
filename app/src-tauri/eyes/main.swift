@@ -11,13 +11,23 @@
 //   jett-eyes ax-controls [--pid N]          {"trusted","controls":[{role,label?,frame}],"texts":[{frame}],"window"}
 //   jett-eyes ocr [--rect x,y,w,h] [--text T] [--accurate]   {"lines":[{text,frame,confidence,match?}],"area"}
 //
+// Hands (computer control; the input commands need Accessibility, else exit 3):
+//   jett-eyes ax-press --x X --y Y [--pid N]  {"pressed":true,"via":"ax"|"mouse","role"?,"label"?}
+//   jett-eyes click-at --x X --y Y [--right] [--count N]   {"clicked":{x,y}}
+//   jett-eyes type --text T                  {"typed":N}         unicode key events; a newline = Return
+//   jett-eyes key --combo cmd+shift+t        {"pressed":"..."}
+//   jett-eyes scroll --direction up|down|left|right [--amount N] [--x X --y Y]
+//   jett-eyes windows [--exclude-pid N]...   {"apps":[{app,bundleId,pid,active,hidden}],"windows":[{app,pid,title?,bounds,windowId}]}
+//   jett-eyes focus --app NAME|BUNDLE-ID     {"app",...,"focused":bool}
+//
 // Coordinates are global points, top-left origin, main display at 0,0. `shot` captures the
 // main display with ScreenCaptureKit, leaving out Jett's own app (bundle id or --exclude-pid)
 // and the pointer, shrinks the long side to --max, and draws --ink (loops of [x,y] points)
 // on it in teal so the model sees what was circled.
 //
 // It runs as a child of the core, which runs as a child of Jett.app, so macOS asks for
-// Screen Recording on behalf of Jett. Errors: {"error":"..."} and exit 1 (2 = no permission).
+// Screen Recording on behalf of Jett. Errors: {"error":"..."} and exit 1 (2 = no Screen Recording,
+// 3 = no Accessibility).
 import AppKit
 import CoreGraphics
 import Foundation
@@ -446,6 +456,250 @@ func ocr() async {
     emit(["lines": Array(lines.prefix(800)), "area": rectJSON(area)])
 }
 
+// ---- hands: acting in other apps (computer control) ----
+//
+// Clicks, typing, keys and scrolls are posted CGEvents; they need Accessibility, so each of
+// those commands checks AXIsProcessTrusted first and exits 3 with a clear error when it is
+// off. `windows` and `focus` only read and activate apps.
+// Idea from Roamies (AGPL): idea only, our own code.
+
+func needTrust() {
+    guard axTrusted(prompt: false) else {
+        fail("Accessibility is off for Jett, so it can't click or type in other apps. Turn it on in System Settings > Privacy & Security > Accessibility, then try again.", code: 3)
+    }
+}
+
+func number(_ flag: String) -> Double? { values(flag).first.flatMap { Double($0) } }
+
+func pointArg() -> CGPoint {
+    guard let x = number("--x"), let y = number("--y") else { fail("needs --x and --y (global points)") }
+    return CGPoint(x: x, y: y)
+}
+
+let eventSource = CGEventSource(stateID: .hidSystemState)
+
+func post(_ event: CGEvent?) { event?.post(tap: .cghidEventTap) }
+
+func mouseClick(at p: CGPoint, right: Bool = false, count: Int = 1) {
+    let button: CGMouseButton = right ? .right : .left
+    let down: CGEventType = right ? .rightMouseDown : .leftMouseDown
+    let up: CGEventType = right ? .rightMouseUp : .leftMouseUp
+    post(CGEvent(mouseEventSource: eventSource, mouseType: .mouseMoved, mouseCursorPosition: p, mouseButton: button))
+    usleep(40_000)
+    for click in 1...max(1, min(count, 3)) {
+        for type in [down, up] {
+            let e = CGEvent(mouseEventSource: eventSource, mouseType: type, mouseCursorPosition: p, mouseButton: button)
+            e?.setIntegerValueField(.mouseEventClickState, value: Int64(click))
+            e?.flags = []
+            post(e)
+            usleep(type == down ? 25_000 : 60_000)
+        }
+    }
+}
+
+/// Roles whose Accessibility press is the click itself. A text field is clicked for real (to put the caret in).
+let pressRoles: Set<String> = [
+    "AXButton", "AXLink", "AXCheckBox", "AXRadioButton", "AXMenuItem", "AXMenuBarItem", "AXPopUpButton",
+    "AXMenuButton", "AXTab", "AXDisclosureTriangle", "AXSegmentedControl", "AXToggle", "AXSwitch",
+]
+
+/// ax-press --x X --y Y [--pid N]: press the control at a point; else a real click there.
+func axPress() {
+    needTrust()
+    let p = pointArg()
+    let pid = values("--pid").first.flatMap { Int32($0) }
+    // Hit-test inside the target app when we know it, so Jett's own overlay never answers.
+    let root = pid.map { AXUIElementCreateApplication($0) } ?? AXUIElementCreateSystemWide()
+    AXUIElementSetMessagingTimeout(root, 0.5)
+    var hit: AXUIElement?
+    if AXUIElementCopyElementAtPosition(root, Float(p.x), Float(p.y), &hit) == .success, var el = hit {
+        var owner: pid_t = 0
+        AXUIElementGetPid(el, &owner)
+        if !isJett(pid: owner, bundleId: NSRunningApplication(processIdentifier: owner)?.bundleIdentifier) {
+            // The words inside a button are its child: walk up a few levels to the control.
+            for _ in 0..<4 {
+                let role = axString(el, kAXRoleAttribute) ?? ""
+                if pressRoles.contains(role) {
+                    var names: CFArray?
+                    if AXUIElementCopyActionNames(el, &names) == .success,
+                       let list = names as? [String], list.contains(kAXPressAction),
+                       AXUIElementPerformAction(el, kAXPressAction as CFString) == .success {
+                        var out: [String: Any] = ["pressed": true, "via": "ax", "role": role]
+                        if let label = axLabels(el).first { out["label"] = label }
+                        emit(out)
+                        return
+                    }
+                    break
+                }
+                guard let parent = axAttr(el, kAXParentAttribute), CFGetTypeID(parent) == AXUIElementGetTypeID() else { break }
+                el = parent as! AXUIElement
+            }
+        }
+    }
+    mouseClick(at: p)
+    emit(["pressed": true, "via": "mouse"])
+}
+
+let keyCodes: [String: CGKeyCode] = [
+    "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7, "c": 8, "v": 9, "b": 11, "q": 12,
+    "w": 13, "e": 14, "r": 15, "y": 16, "t": 17, "1": 18, "2": 19, "3": 20, "4": 21, "6": 22, "5": 23,
+    "=": 24, "9": 25, "7": 26, "-": 27, "8": 28, "0": 29, "]": 30, "o": 31, "u": 32, "[": 33, "i": 34,
+    "p": 35, "l": 37, "j": 38, "'": 39, "k": 40, ";": 41, "\\": 42, ",": 43, "/": 44, "n": 45, "m": 46,
+    ".": 47, "`": 50,
+    "return": 36, "enter": 36, "tab": 48, "space": 49, "delete": 51, "backspace": 51, "escape": 53, "esc": 53,
+    "forwarddelete": 117, "home": 115, "end": 119, "pageup": 116, "pagedown": 121,
+    "left": 123, "right": 124, "down": 125, "up": 126,
+    "f1": 122, "f2": 120, "f3": 99, "f4": 118, "f5": 96, "f6": 97, "f7": 98, "f8": 100, "f9": 101,
+    "f10": 109, "f11": 103, "f12": 111,
+]
+
+func pressKey(_ code: CGKeyCode, flags: CGEventFlags) {
+    for down in [true, false] {
+        let e = CGEvent(keyboardEventSource: eventSource, virtualKey: code, keyDown: down)
+        e?.flags = flags
+        post(e)
+        usleep(15_000)
+    }
+}
+
+/// type --text T: unicode keyboard events, one character at a time; a newline presses Return.
+func typeText() {
+    needTrust()
+    guard let text = values("--text").first, !text.isEmpty else { fail("type needs --text") }
+    for ch in text {
+        if ch == "\n" || ch == "\r\n" {
+            pressKey(36, flags: [])
+            continue
+        }
+        let units = Array(String(ch).utf16)
+        for down in [true, false] {
+            let e = CGEvent(keyboardEventSource: eventSource, virtualKey: 0, keyDown: down)
+            e?.flags = []
+            e?.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units)
+            post(e)
+        }
+        usleep(4_000)
+    }
+    emit(["typed": text.count])
+}
+
+/// key --combo "cmd+shift+t": modifiers, then exactly one key.
+func keyCombo() {
+    needTrust()
+    let combo = (values("--combo").first ?? "").lowercased().replacingOccurrences(of: " ", with: "")
+    var flags: CGEventFlags = []
+    var key: CGKeyCode?
+    for part in combo.split(separator: "+").map(String.init) {
+        switch part {
+        case "cmd", "command", "⌘": flags.insert(.maskCommand)
+        case "ctrl", "control", "⌃": flags.insert(.maskControl)
+        case "opt", "option", "alt", "⌥": flags.insert(.maskAlternate)
+        case "shift", "⇧": flags.insert(.maskShift)
+        case "fn": flags.insert(.maskSecondaryFn)
+        default:
+            guard key == nil, let code = keyCodes[part] else { fail("unknown key combo \"\(combo)\" (try return, tab, escape, cmd+t)") }
+            key = code
+        }
+    }
+    guard let code = key else { fail("key combo \"\(combo)\" has no key in it") }
+    pressKey(code, flags: flags)
+    emit(["pressed": combo])
+}
+
+/// scroll --direction up|down|left|right [--amount lines] [--x X --y Y]
+func scroll() {
+    needTrust()
+    let direction = values("--direction").first ?? "down"
+    guard ["up", "down", "left", "right"].contains(direction) else { fail("scroll --direction is up, down, left or right") }
+    let amount = Int32(max(1, min(50, number("--amount") ?? 5)))
+    if number("--x") != nil {
+        post(CGEvent(mouseEventSource: eventSource, mouseType: .mouseMoved, mouseCursorPosition: pointArg(), mouseButton: .left))
+        usleep(40_000)
+    }
+    var left = amount
+    while left > 0 {
+        let n = min(left, 3)
+        left -= n
+        let dy: Int32 = direction == "up" ? n : direction == "down" ? -n : 0
+        let dx: Int32 = direction == "left" ? n : direction == "right" ? -n : 0
+        post(CGEvent(scrollWheelEvent2Source: eventSource, units: .line, wheelCount: 2, wheel1: dy, wheel2: dx, wheel3: 0))
+        usleep(30_000)
+    }
+    emit(["scrolled": direction, "amount": Int(amount)])
+}
+
+/// click-at --x X --y Y [--right] [--count N]
+func clickAt() {
+    needTrust()
+    let p = pointArg()
+    mouseClick(at: p, right: args.contains("--right"), count: Int(number("--count") ?? 1))
+    emit(["clicked": ["x": Double(p.x), "y": Double(p.y)]])
+}
+
+func appJSON(_ app: NSRunningApplication) -> [String: Any] {
+    var out: [String: Any] = ["app": app.localizedName ?? "unknown", "pid": Int(app.processIdentifier),
+                              "active": app.isActive, "hidden": app.isHidden]
+    if let id = app.bundleIdentifier { out["bundleId"] = id }
+    return out
+}
+
+func regularApps() -> [NSRunningApplication] {
+    NSWorkspace.shared.runningApplications.filter {
+        $0.activationPolicy == .regular && !isJett(pid: $0.processIdentifier, bundleId: $0.bundleIdentifier)
+    }
+}
+
+/// windows [--exclude-pid N]...: running apps with a Dock icon, and on-screen windows front to back.
+func listWindows() {
+    var windows: [[String: Any]] = []
+    let opts: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+    for info in (CGWindowListCopyWindowInfo(opts, kCGNullWindowID) as? [[String: Any]]) ?? [] {
+        guard (info[kCGWindowLayer as String] as? Int) == 0,
+              let pid = info[kCGWindowOwnerPID as String] as? Int32,
+              let boundsDict = info[kCGWindowBounds as String] as? NSDictionary,
+              let bounds = CGRect(dictionaryRepresentation: boundsDict),
+              bounds.width >= 80, bounds.height >= 60 else { continue }
+        let app = NSRunningApplication(processIdentifier: pid)
+        if isJett(pid: pid, bundleId: app?.bundleIdentifier) { continue }
+        var entry: [String: Any] = ["app": (info[kCGWindowOwnerName as String] as? String) ?? app?.localizedName ?? "unknown",
+                                    "pid": Int(pid), "bounds": rectJSON(bounds)]
+        if let number = info[kCGWindowNumber as String] as? Int { entry["windowId"] = number }
+        if let title = info[kCGWindowName as String] as? String, !title.isEmpty { entry["title"] = title }
+        windows.append(entry)
+    }
+    emit(["apps": regularApps().map(appJSON), "windows": Array(windows.prefix(80))])
+}
+
+/// focus --app NAME|BUNDLE-ID: unhide and bring a running app to the front.
+func focusApp() {
+    let wanted = (values("--app").first ?? "").trimmingCharacters(in: .whitespaces)
+    guard !wanted.isEmpty else { fail("focus needs --app") }
+    let name = wanted.lowercased().hasSuffix(".app") ? String(wanted.dropLast(4)) : wanted
+    guard let app = regularApps().first(where: {
+        $0.localizedName?.caseInsensitiveCompare(name) == .orderedSame || $0.bundleIdentifier?.caseInsensitiveCompare(name) == .orderedSame
+    }) else { fail("\(name) is not running") }
+    app.unhide()
+    app.activate(options: [.activateAllWindows])
+    // macOS 14 can refuse activation asked by a background helper: Accessibility can still do it.
+    let ax = AXUIElementCreateApplication(app.processIdentifier)
+    if axTrusted(prompt: false) {
+        AXUIElementSetAttributeValue(ax, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
+        if let main = axAttr(ax, kAXMainWindowAttribute), CFGetTypeID(main) == AXUIElementGetTypeID() {
+            AXUIElementPerformAction(main as! AXUIElement, kAXRaiseAction as CFString)
+        }
+    }
+    var focused = false
+    let until = Date().addingTimeInterval(1.5)
+    while Date() < until {
+        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        if NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier
+            || (axAttr(ax, kAXFrontmostAttribute) as? Bool) == true { focused = true; break }
+    }
+    var out = appJSON(app)
+    out["focused"] = focused
+    emit(out)
+}
+
 switch command {
 case "screen-ok":
     emit(["ok": CGPreflightScreenCaptureAccess()])
@@ -472,6 +726,20 @@ case "ax-find":
     axFind()
 case "ax-controls":
     axControls()
+case "ax-press":
+    axPress()
+case "click-at":
+    clickAt()
+case "type":
+    typeText()
+case "key":
+    keyCombo()
+case "scroll":
+    scroll()
+case "windows":
+    listWindows()
+case "focus":
+    focusApp()
 case "ocr":
     guard CGPreflightScreenCaptureAccess() else { fail("Screen Recording is off for Jett", code: 2) }
     if #available(macOS 14.0, *) {

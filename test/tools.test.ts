@@ -78,6 +78,7 @@ describe("safety gate mode table", () => {
     edit: { "ask-me": "ask", "auto-edits": "allow", bypass: "allow" },
     command: { "ask-me": "ask", "auto-edits": "ask", bypass: "allow" },
     helper: { "ask-me": "ask", "auto-edits": "ask", bypass: "allow" },
+    act: { "ask-me": "ask", "auto-edits": "ask", bypass: "allow" },
   };
 
   for (const risk of Object.keys(table) as RiskClass[]) {

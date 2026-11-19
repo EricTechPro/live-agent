@@ -173,7 +173,6 @@ Prior art: live-dj `adk_tools/smoke_live.py` (text-turn live smoke) and `adk_too
 - More than one helper at once by default (allowed in config, not tuned).
 - Syncing the brain across devices.
 - Windows and Linux polish (macOS first for the talk).
-- Clicking or typing in other apps (Roamies-style screen control).
 - Nightly tidy schedules (tidy runs after each chat only).
 
 ## Further Notes
@@ -288,3 +287,26 @@ Pure code with tests: `app/src/overlay.ts` (also follow, card placement, push to
 ### Why the app went to "Paused" by itself (v2)
 
 The core pauses only when the window posts `/pause` (nothing in the core pauses on its own). In v2, Space toggled pause whenever focus was not in a text field or button, and on macOS WebKit a clicked button never takes focus (starting a call also disables the button for a moment), so focus stays on the page. So a Space press after the call started (for example to talk, push-to-talk style) paused Jett. v3 has no pause in the window: Space is Start call or Mute, and Muted shows only when you chose it.
+
+## Addendum: computer control (2026-11-19)
+
+Eric's call, 2026-11-19: Jett gets full computer control, like Roamies. This reverses the old out-of-scope line "Clicking or typing in other apps". Roamies is AGPL: we borrow the idea only, never its code, assets or text. Every file here is our own.
+
+### Tools
+
+- `open` (risk `act`): an app by name (`open -a`), a web address (a bare domain gets `https://`), or a file or folder path. The core checks the input and runs macOS `open` with an argv array, never a shell: flags, shell characters, odd link schemes and missing paths are refused (`src/screen/hands.ts` `openArgv`).
+- `act_in_app` (risk `act`): an app and a list of steps, done in order: `click_text` (found by the same locator as `find_on_screen`, then an Accessibility press at its centre, else a real click), `click_at`, `type`, `key`, `scroll`, `wait`, `focus`. A closed app is launched in the background (`open -g -a`) and brought to the front first. A failed step stops the rest, and the model hears which step and what was done before it.
+- `list_windows` (risk `read`): running apps and on-screen windows.
+- `run_command` (risk `command`): one short shell command in the work folder, output back.
+
+### The helper
+
+`jett-eyes` (our Swift, `app/src-tauri/eyes/main.swift`) gains `ax-press`, `click-at`, `type` (unicode key events), `key` (combos like `cmd+t`), `scroll`, `windows` and `focus`. The input commands need Accessibility: without it they exit 3 and Jett says how to turn it on.
+
+### Safety
+
+A new `act` risk class: ask first in Ask first and Auto, run in Full access. One rule beats the mode and any config `allow` override: a click or key whose target words are delete, remove, pay, buy, send, submit, sign out, log out or purchase (or Cmd+Delete) always asks, even in Full access. Typed words do not count ("send me the deck" is just typing). A config `block` still blocks.
+
+### Testing
+
+Through the event stream with fake hands and fake eyes (`test/computer-control.test.ts`): the verdicts per mode, the risky rule, launch then focus then steps, a failed step, Accessibility off, the `open` input checks. The Swift helper is checked by building it and by hand on a real Mac.

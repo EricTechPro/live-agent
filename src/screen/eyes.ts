@@ -129,7 +129,8 @@ const URL_SCRIPTS: Record<string, string> = {
   "company.thebrowser.Browser": 'tell application id "company.thebrowser.Browser" to get URL of active tab of front window',
 };
 
-async function run(cmd: string[], timeoutMs: number): Promise<{ out: string; code: number }> {
+/** Run a command (argv, no shell) with a timeout; its stdout and exit code. */
+export async function run(cmd: string[], timeoutMs: number): Promise<{ out: string; code: number }> {
   const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "ignore" });
   const timer = setTimeout(() => proc.kill(), timeoutMs);
   try {

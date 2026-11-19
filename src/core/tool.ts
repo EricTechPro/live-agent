@@ -19,9 +19,11 @@ import type { CanvasChange } from "./board.ts";
 import type { Beat } from "./canvas.ts";
 import type { Jobs } from "./jobs.ts";
 import type { FrontWindow } from "../screen/eyes.ts";
+import type { Hands } from "../screen/hands.ts";
 import type { Found, Target } from "../screen/locator.ts";
 
-export type RiskClass = "read" | "edit" | "command" | "helper";
+/** `act`: clicks, types or opens things in other apps (computer control). */
+export type RiskClass = "read" | "edit" | "command" | "helper" | "act";
 
 /** What a running tool gets besides its args. */
 export interface ToolContext {
@@ -63,6 +65,11 @@ export interface ToolContext {
     /** Pin screen marks to the window they were found in: they are erased when it changes. */
     pin?(ids: string[], front: FrontWindow | null): void;
   };
+  /**
+   * Jett's hands (src/screen/hands.ts): open apps and links, click, type, press keys, scroll
+   * and focus apps. Missing when the session has none (tests, non-macOS).
+   */
+  hands?: Hands;
 }
 
 export interface HelperSettings extends HelperPaths {

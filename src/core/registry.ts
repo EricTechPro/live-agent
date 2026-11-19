@@ -10,7 +10,7 @@ import type { Tool } from "./tool.ts";
 /** The repo's own tools folder. */
 export const TOOLS_DIR = resolve(import.meta.dir, "../../tools");
 
-const RISKS = new Set(["read", "edit", "command", "helper"]);
+const RISKS = new Set(["read", "edit", "command", "helper", "act"]);
 
 export async function loadTools(dir: string = TOOLS_DIR): Promise<Tool[]> {
   const files = readdirSync(dir)
