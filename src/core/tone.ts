@@ -82,6 +82,13 @@ function workRules(brainPath?: string): string {
       "open, click or type: do it, then say one short line. If a step fails, say which one in one line.",
     "- Never delete, pay, buy, send or sign out unless the user clearly asked for exactly that. Those clicks always ask " +
       "the user first, so when asked, just call act_in_app and the app asks them.",
+    "- For questions that need the live web (news, prices, weather, recent releases, docs, anything after your training), " +
+      "do not guess: call start_helper with a research task (\"Search the web for ... and answer in 3 lines with sources\"). " +
+      "Helpers can search the web.",
+    '- When the user says "connect my <app>" (Linear, Notion, GitHub, ...), call start_helper with the task: find the ' +
+      "official MCP server for that app and reply with its exact command, args and env variable names, or its url. " +
+      "When it reports back, call add_connection with that, keys written as ${NAME}, and tell the user which keys to " +
+      "add to their .env file.",
     "- The safety mode decides if the user is asked first; if the call is declined or blocked, say so in one line.",
   ].join("\n");
 }

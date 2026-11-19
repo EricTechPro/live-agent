@@ -126,6 +126,12 @@ export type AgentEvent =
   | { type: "screen.boxes"; boxes: Rect[]; front: FrontWindow | null }
   /** Screen marks went stale (the window moved, the app switched, a scroll or click): they are erased next. */
   | { type: "screen.stale"; ids: string[]; reason: string }
+  /**
+   * The main chat's token use (the status bar): `contextTokens` is what the context holds now,
+   * of `contextWindow` (the model's input limit; missing for a model we do not know),
+   * `tokensUsed` the chat's total so far. A new chat starts again at 0.
+   */
+  | { type: "chat.usage"; model?: string; contextTokens: number; contextWindow?: number; tokensUsed: number }
   /** The model finished its reply. `reply` is the whole reply, joined for you. */
   | { type: "turn.done"; reply: string }
   /** Something went wrong in the session. The session may still be usable. */

@@ -190,7 +190,9 @@ describe("doctor", () => {
   test("Codex and Claude Code missing are warnings while off, failures when on", async () => {
     const missing = async () => ({ ok: false, installed: false, fix: CODEX_INSTALL_FIX });
     const missingClaude = async () => ({ ok: false, installed: false, fix: CLAUDE_CODE_INSTALL_FIX });
-    const off = await runDoctor(healthy({ codexStatus: missing, claudeCodeStatus: missingClaude }));
+    const codexOff = defaultConfig();
+    codexOff.helpers.codex = false;
+    const off = await runDoctor(healthy({ codexStatus: missing, claudeCodeStatus: missingClaude, config: codexOff }));
     expect(find(off, "Codex")).toMatchObject({ status: "warn", detail: "not installed (turned off)", fix: CODEX_INSTALL_FIX });
     expect(find(off, "Claude Code")).toMatchObject({ status: "warn", fix: CLAUDE_CODE_INSTALL_FIX });
     expect(off.exitCode).toBe(0);
@@ -205,6 +207,7 @@ describe("doctor", () => {
   test("a signed-out Codex or Claude Code says how to sign in: failure when on, warning when off", async () => {
     const config = defaultConfig();
     config.helpers.claudeCode = true;
+    config.helpers.codex = false;
     const r = await runDoctor(
       healthy({
         config,

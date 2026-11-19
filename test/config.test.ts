@@ -20,11 +20,13 @@ describe("config file", () => {
     expect(config).toEqual({
       brainPath: "sample-brain",
       safety: { mode: "auto-edits", overrides: {} },
-      helpers: { geminiCli: true, codex: false, claudeCode: false, maxAtOnce: 1 },
+      helpers: { geminiCli: true, codex: true, claudeCode: false, maxAtOnce: 1 },
       worktrees: false,
       voice: "Puck",
       tone: "short",
       brainFolders: { raw: "raw", wiki: "wiki", projects: "projects" },
+      defaultHelper: "codex",
+      mcpServers: {},
     });
   });
 
@@ -45,6 +47,8 @@ describe("config file", () => {
       voice: "Puck",
       tone: "short",
       brainFolders: { raw: "raw", wiki: "wiki", projects: "projects" },
+      defaultHelper: "codex",
+      mcpServers: {},
     });
   });
 

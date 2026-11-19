@@ -17,6 +17,7 @@ import {
   defaultConfig,
   type BrainFolders,
   type Config,
+  type McpServer,
   type SafetyMode,
   type Tone,
 } from "../config/index.ts";
@@ -123,5 +124,20 @@ export function saveSetup(configPath: string, answers: SetupAnswers): { config: 
 
   // An empty folder gets all three parts; a mapped one only what it lacks.
   for (const folder of folders) mkdirSync(join(root, folder), { recursive: true });
+  return { config };
+}
+
+/**
+ * Add or replace one app connection (config `mcpServers`, the add_connection tool) and
+ * write the file. Everything else in it stays as written. Throws ConfigError for a bad entry.
+ */
+export function saveConnection(configPath: string, name: string, server: McpServer): { config: Config } {
+  const raw = readRaw(configPath);
+  const next = { ...raw, mcpServers: { ...raw.mcpServers, [name]: server } };
+  const config = checkConfig(next);
+  mkdirSync(dirname(configPath), { recursive: true });
+  const temp = `${configPath}.tmp-${process.pid}`;
+  writeFileSync(temp, JSON.stringify(next, null, 2) + "\n");
+  renameSync(temp, configPath);
   return { config };
 }

@@ -5,7 +5,7 @@
 // marked `data-hit`: a timer asks Rust where the cursor is and turns click-through off
 // while it is over one (overlay.ts `capture`).
 import { Room, RoomEvent, Track, type Participant } from "livekit-client";
-import { mountBoardAndBar } from "./board-view.ts";
+import { mountBoardAndBar, mountStatusBar } from "./board-view.ts";
 import { mountModePill } from "./mode-pill.ts";
 import { mountApprovals } from "./approvals-view.ts";
 import { mountBrainView } from "./brain-view.ts";
@@ -1177,9 +1177,10 @@ async function boot() {
   mountBoardAndBar(core, $("jobs"), $("bar"), {
     buttons: [
       { button: jobsBtn, count: $("jobs-count"), label: "Jobs" },
-      { button: tabBtns.jobs, count: $("tab-jobs-count"), label: "Jobs" },
+      { button: tabBtns.jobs, count: $("tab-jobs-count"), label: "Agents" },
     ],
   });
+  mountStatusBar(core, $("status"));
   mountModePill(core, $<HTMLButtonElement>("mode-pill"), $<HTMLUListElement>("mode-menu"));
   mountApprovals(core, approvalsEl);
   const reader = mountBrainView(core, {

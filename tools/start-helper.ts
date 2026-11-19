@@ -2,7 +2,7 @@
 // Risk class "helper": the gate asks first in Ask me and Auto edits.
 // The tool answers at once with the job id; the core tells the model again
 // when the job ends, so the voice can announce it.
-// Which helper: the one the user named ("use Claude Code"), else the first one
+// Which helper: the one the user named ("use Claude Code"), else the config's defaultHelper, else the first one
 // turned on in the config (src/helpers/index.ts).
 import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
@@ -40,16 +40,16 @@ export default defineTool<{ task: string; title?: string; folder?: string; helpe
         enum: [...HELPER_IDS],
         description:
           "Which helper to use, only if the user named one (\"use Codex\", \"use Claude Code\"). " +
-          "Leave it out otherwise: the first helper turned on in the config is used.",
+          "Leave it out otherwise: the default helper in the config is used.",
       },
     },
     required: ["task"],
   },
   async run({ task, title, folder, helper: asked }, { brainPath, jobs, helpers }) {
     if (!jobs || !helpers) throw new Error("helper jobs are not available in this session");
-    const { geminiCli, codex = false, claudeCode = false, worktrees, ...paths } = helpers;
+    const { geminiCli, codex = false, claudeCode = false, worktrees, defaultHelper, ...paths } = helpers;
     // Off, or none on: a plain fix for the voice, and no job starts.
-    const helper = pickHelper({ geminiCli, codex, claudeCode }, asked);
+    const helper = pickHelper({ geminiCli, codex, claudeCode }, asked, defaultHelper);
     // Not installed or not signed in: the same, before any worktree or branch is made.
     const status = await helper.status(paths);
     if (!status.ok) throw new Error(status.fix ?? `${helper.label} is not ready.`);

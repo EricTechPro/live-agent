@@ -4,6 +4,7 @@ import type { CoreClient } from "./core-client.ts";
 import { addBarEvent, emptyBar, type Bar } from "./bottom-bar.ts";
 import { addJobEvent, elapsed, emptyBoard, type JobBoard, type JobRow } from "./job-board.ts";
 import { iconSvg, type IconName } from "./icons.ts";
+import { addStatusEvent, contextPercent, formatTokens, startStatus, type Status } from "./status-bar.ts";
 
 const STATUS_LABELS = { waiting: "Waiting", working: "Working", done: "Done", failed: "Failed", cancelled: "Cancelled" };
 // Each helper's pixel mark on its card (ticket 29); anything else gets the jobs icon.
@@ -31,7 +32,7 @@ export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: H
 
   // ---- job board (the right panel's Jobs tab; a new job never switches to it) ----
   const list = el("ol", { className: "job-list" });
-  const empty = el("p", { className: "job-empty", textContent: "No helper jobs yet." });
+  const empty = el("p", { className: "job-empty", textContent: "No helper agents yet. Ask Jett to research, connect an app or build something." });
   jobsEl.append(empty, list);
 
   function renderBoard() {
@@ -90,6 +91,9 @@ export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: H
     }
     const where = job.worktree ? job.worktree.branch : job.folder ? (job.folder.split("/").filter(Boolean).pop() ?? job.folder) : "";
     if (where) meta.append(el("span", { className: "job-folder", textContent: where, title: job.worktree ? job.worktree.path : job.folder! }));
+    if (job.tokens !== undefined) {
+      meta.append(el("span", { className: "job-tokens", textContent: `${formatTokens(job.tokens)} tokens`, title: `${job.tokens.toLocaleString()} tokens` }));
+    }
     li.append(meta);
 
     // Done or failed: one plain line; click it for the whole answer or error.
@@ -151,4 +155,38 @@ export function mountBoardAndBar(core: CoreClient, jobsEl: HTMLElement, barEl: H
 
   renderBoard();
   renderBar();
+}
+
+/** The popover's status bar: the live model, a bar of how full its context is, and the chat's tokens used. */
+export function mountStatusBar(core: CoreClient, statusEl: HTMLElement) {
+  let status: Status = startStatus;
+  const model = el("span", { className: "status-model" });
+  const fill = el("span");
+  const ctx = el("span", { className: "status-ctx" }, fill);
+  ctx.setAttribute("role", "progressbar");
+  ctx.setAttribute("aria-label", "Context used");
+  ctx.setAttribute("aria-valuemin", "0");
+  ctx.setAttribute("aria-valuemax", "100");
+  const tokens = el("span", { className: "status-tokens" });
+  statusEl.append(model, ctx, tokens);
+
+  function render() {
+    const pct = contextPercent(status);
+    model.textContent = status.model;
+    model.title = status.model;
+    fill.style.width = `${pct ?? 0}%`;
+    ctx.dataset.level = (pct ?? 0) >= 80 ? "high" : "ok";
+    ctx.setAttribute("aria-valuenow", String(pct ?? 0));
+    ctx.title = status.contextWindow
+      ? `Context ${formatTokens(status.contextTokens)} of ${formatTokens(status.contextWindow)} (${pct}%)`
+      : `Context ${formatTokens(status.contextTokens)} (window unknown)`;
+    tokens.textContent = `${formatTokens(status.tokensUsed)} tokens`;
+    tokens.title = `${status.tokensUsed.toLocaleString()} tokens used in this chat`;
+  }
+
+  core.onEvent((event) => {
+    const next = addStatusEvent(status, event);
+    if (next !== status) (status = next), render();
+  });
+  render();
 }

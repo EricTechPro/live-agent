@@ -33,8 +33,9 @@ import {
   type LiveServerMessage,
 } from "@google/genai";
 import type { Model, ModelEvent } from "../core/model.ts";
+import { DEFAULT_LIVE_MODEL } from "./live-models.ts";
 
-export const DEFAULT_LIVE_MODEL = "gemini-3.8-live";
+export { DEFAULT_LIVE_MODEL };
 
 const NETWORK_CODES = /\b(ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH|EHOSTUNREACH|ENETDOWN|EPIPE|ECONNABORTED)\b/;
 
@@ -107,6 +108,7 @@ export function geminiLiveModel(options: GeminiLiveOptions): Model {
   const networkDelaysMs = options.networkDelaysMs ?? NETWORK_DELAYS_MS;
 
   return {
+    name: options.model ?? DEFAULT_LIVE_MODEL,
     async connect(onEvent, connectOptions) {
       const config: LiveConnectConfig = {
         responseModalities: [Modality.AUDIO],
@@ -342,8 +344,13 @@ export function toModelEvents(message: LiveServerMessage): ModelEvent[] {
   }
   const cancelled = message.toolCallCancellation?.ids;
   if (cancelled?.length) events.push({ type: "tool.cancel", ids: cancelled });
+  // Token use: the whole request (prompt + reply) is what the context holds now.
+  const u = message.usageMetadata;
+  const usage: ModelEvent[] = u
+    ? [{ type: "usage", contextTokens: u.totalTokenCount ?? (u.promptTokenCount ?? 0) + (u.responseTokenCount ?? 0) }]
+    : [];
   const content = message.serverContent;
-  if (!content) return events;
+  if (!content) return [...events, ...usage];
   const heard = content.inputTranscription?.text;
   if (heard) events.push({ type: "user.text", text: heard });
   for (const part of content.modelTurn?.parts ?? []) {
@@ -358,6 +365,7 @@ export function toModelEvents(message: LiveServerMessage): ModelEvent[] {
   if (text) events.push({ type: "text", text });
   if (content.generationComplete) events.push({ type: "generation.complete" });
   if (content.interrupted) events.push({ type: "interrupted" });
+  events.push(...usage);
   if (content.turnComplete) events.push({ type: "turn.complete" });
   return events;
 }

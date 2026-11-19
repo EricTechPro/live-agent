@@ -6,6 +6,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultConfig } from "../src/config/index.ts";
+import { geminiOnly } from "./gemini-only.ts";
 import { startSession } from "../src/core/agent.ts";
 import type { AgentEvent, EventOf } from "../src/core/events.ts";
 import type { ModelEvent } from "../src/core/model.ts";
@@ -35,7 +36,7 @@ const startHelper = (args: Record<string, unknown>): ModelEvent => ({
 const say = (text: string): ModelEvent[] => [{ type: "text", text }];
 
 async function run(args: Record<string, unknown>, script: ScriptEntry[] = [[startHelper(args)], say("Started."), say("Done.")]) {
-  const config = { ...defaultConfig(), brainPath: brain, worktrees: false };
+  const config = { ...geminiOnly(defaultConfig()), brainPath: brain, worktrees: false };
   // workDir = the app's home, like the Tauri shell's `chdir` into LIVE_AGENT_HOME.
   const s = await startSession({
     model: scriptedModel(script), tools, mode: "bypass", workDir: home, config,

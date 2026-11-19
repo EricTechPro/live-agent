@@ -6,6 +6,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultConfig } from "../src/config/index.ts";
+import { geminiOnly } from "./gemini-only.ts";
 import { startSession, type SessionOptions } from "../src/core/agent.ts";
 import type { AgentEvent, EventOf } from "../src/core/events.ts";
 import type { ModelEvent, ModelInput } from "../src/core/model.ts";
@@ -35,7 +36,7 @@ echo 'not json, a warning'
 echo '{"type":"init","session_id":"s1","model":"gemini"}'
 echo '{"type":"message","role":"assistant","content":"Fixed the ","delta":true}'
 echo '{"type":"message","role":"assistant","content":"bug.","delta":true}'
-echo '{"type":"result","status":"success"}'`,
+echo '{"type":"result","status":"success","stats":{"total_tokens":321,"input_tokens":300,"output_tokens":21}}'`,
 );
 const fails = fakeCli("fails.sh", `echo "boom: tests are red" >&2\nexit 1`);
 const keyRejected = fakeCli("auth.sh", `echo "auth needed" >&2\nexit 41`);
@@ -59,7 +60,7 @@ function session(script: ScriptEntry[], bin: string, extra: Partial<SessionOptio
   return startSession({
     model: scriptedModel(script), tools, mode: "bypass", workDir: dir,
     // Helper jobs with no folder start in the brain folder (ticket 21): here, the temp dir.
-    config: { ...defaultConfig(), brainPath: dir },
+    config: { ...geminiOnly(defaultConfig()), brainPath: dir },
     helpers: { geminiCliBin: bin, geminiCliHome: helperHome, geminiApiKey: "secret-test-key", cancelGraceMs: 200 }, ...extra,
   });
 }
@@ -140,6 +141,23 @@ describe("starting a helper job", () => {
     }
   });
 
+  test("the config's app connections go in the private home's settings, ${VAR} kept for Gemini CLI", async () => {
+    const config = { ...geminiOnly(defaultConfig()), brainPath: dir };
+    config.mcpServers = { linear: { command: "npx", args: ["linear-mcp"], env: { KEY: "${LINEAR_KEY}" } }, notion: { url: "https://n.example/mcp" } };
+    const s = await session([[startHelper("c1")], say("Started."), say("Done.")], ok, { config });
+    const rec = recorder(s);
+    await s.sendText("Fix the bug.");
+    await rec.until(jobEnded("job-1"));
+    expect(JSON.parse(readFileSync(join(dir, "ok-settings"), "utf8"))).toEqual({
+      security: { auth: { selectedType: "gemini-api-key" } },
+      mcpServers: {
+        linear: { command: "npx", args: ["linear-mcp"], env: { KEY: "${LINEAR_KEY}" } },
+        notion: { httpUrl: "https://n.example/mcp" },
+      },
+    });
+    await s.close();
+  });
+
   test("by default the private CLI home is live-agent's own folder, never the user's ~/.gemini", () => {
     const home = defaultHelperHome();
     expect(home).toContain("live-agent");
@@ -155,7 +173,7 @@ describe("job states", () => {
     const end = (await rec.until(jobEnded("job-1"))) as EventOf<"job.state">;
 
     expect(rec.jobStates("job-1")).toEqual(["queued", "running", "done"]);
-    expect(end).toMatchObject({ kind: "gemini-cli", title: "fix the bug", message: "Fixed the bug." });
+    expect(end).toMatchObject({ kind: "gemini-cli", title: "fix the bug", message: "Fixed the bug.", tokens: 321 });
     await s.close();
   });
 
@@ -170,7 +188,7 @@ describe("job states", () => {
   });
 
   test("with max-at-once 1, a second job waits in queued until the first ends", async () => {
-    const config = defaultConfig();
+    const config = geminiOnly(defaultConfig());
     config.brainPath = dir;
     config.helpers.maxAtOnce = 1;
     const s = await session(
@@ -191,7 +209,7 @@ describe("job states", () => {
   });
 
   test("with max-at-once 2, two jobs run side by side", async () => {
-    const config = defaultConfig();
+    const config = geminiOnly(defaultConfig());
     config.brainPath = dir;
     config.helpers.maxAtOnce = 2;
     const s = await session(
@@ -251,7 +269,7 @@ describe("cancelling", () => {
   }, 10_000);
 
   test("cancelling a queued job removes it before it runs", async () => {
-    const config = defaultConfig();
+    const config = geminiOnly(defaultConfig());
     config.brainPath = dir;
     config.helpers.maxAtOnce = 1;
     const s = await session(
@@ -290,7 +308,7 @@ describe("cancelling", () => {
   test("closing with a running job also writes the chat-end note, and stays prompt", async () => {
     const brain = mkdtempSync(join(dir, "brain-"));
     const s = await session([[startHelper("c1")], say("Started.")], hangs, {
-      config: { ...defaultConfig(), brainPath: brain },
+      config: { ...geminiOnly(defaultConfig()), brainPath: brain },
     });
     const rec = recorder(s);
     await s.sendText("Fix the bug.");
@@ -348,7 +366,7 @@ describe("Gemini CLI missing or no key", () => {
   });
 
   test("with Gemini CLI turned off in the config, no job starts and the model is told why", async () => {
-    const config = defaultConfig();
+    const config = geminiOnly(defaultConfig());
     config.helpers.geminiCli = false;
     const s = await session([[startHelper("c1")], say("Helpers are off.")], ok, { config });
     const events = await s.sendText("Fix the bug.");

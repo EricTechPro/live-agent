@@ -26,7 +26,7 @@
 import { existsSync } from "node:fs";
 import { brainRoot, type BrainFolders } from "../brain/index.ts";
 import { tidyJob, type TidyModel } from "../brain/tidy.ts";
-import { defaultConfig, defaultConfigPath, type Config } from "../config/index.ts";
+import { defaultConfig, defaultConfigPath, type Config, type McpServer } from "../config/index.ts";
 import { errorMessage } from "../errors.ts";
 import type { HelperPaths } from "../helpers/cli-job.ts";
 import { createBoard } from "./board.ts";
@@ -47,6 +47,8 @@ import { createScreen, type ReleaseInput, type Screen } from "../screen/service.
 import { createFollow, type Follow } from "../screen/follow.ts";
 import { createLocator, type Ground } from "../screen/locator.ts";
 import type { Pt } from "../screen/geometry.ts";
+import { contextWindowOf } from "../models/live-models.ts";
+import { saveConnection } from "../setup/index.ts";
 
 /** A mic chunk with someone talking in it (not room hum): any sample past ~8% of full scale. */
 export function isVoice(data: Int16Array, threshold = 2600): boolean {
@@ -244,6 +246,8 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   let offline = false;
   /** Esc stopped the reply (ticket 37): drop its voice until the user speaks or the turn ends. */
   let silenced = false;
+  /** The chat's tokens (the status bar): `used` by finished turns, `turn` the one in flight. */
+  const usage = { used: 0, turn: 0 };
 
   // ---- jobs and tool calls -------------------------------------------------
   const jobs = createJobs({
@@ -311,8 +315,11 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         geminiCli: config.helpers.geminiCli,
         codex: config.helpers.codex,
         claudeCode: config.helpers.claudeCode,
+        defaultHelper: config.defaultHelper,
+        mcpServers: config.mcpServers,
         worktrees: config.worktrees,
       },
+      connections: { add: (name: string, server: McpServer) => applyConfig(saveConnection(configPath, name, server).config) },
       screen: screen && {
         look: () => screen.look(),
         find: (target) => locate!(target),
@@ -437,7 +444,20 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       case "generation.complete":
         // Chat turns wait for turn.complete: the user is still hearing the reply.
         break;
+      case "usage":
+        // The latest count in a turn wins; a finished turn adds to the chat's total.
+        usage.turn = event.contextTokens;
+        emit({
+          type: "chat.usage",
+          ...(options.model.name ? { model: options.model.name } : {}),
+          contextTokens: event.contextTokens,
+          ...(contextWindowOf(options.model.name) ? { contextWindow: contextWindowOf(options.model.name) } : {}),
+          tokensUsed: usage.used + usage.turn,
+        });
+        break;
       case "turn.complete":
+        usage.used += usage.turn;
+        usage.turn = 0;
         silenced = false;
         if (!turn) return;
         turn.awaiting--;
@@ -537,6 +557,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       modelSession = await connectModel();
       queueTidy(notePath);
       canvas.clear();
+      usage.used = usage.turn = 0;
       emit({ type: "chat.started" });
     } finally {
       switching = false;

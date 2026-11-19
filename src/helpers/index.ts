@@ -11,7 +11,8 @@
 // cli-job.ts; the worktree (worktree.ts) just gives them a different cwd.
 //
 // Turning a helper on in the config is what allows it. The order below is the
-// default order: with no helper named, the first one turned on is used.
+// fallback order: with no helper named, the config's defaultHelper is used if it is on,
+// else the first one turned on.
 import type { Config } from "../config/index.ts";
 import type { JobSpec } from "../core/jobs.ts";
 import { claudeCodeJob, claudeCodeStatus } from "./claude-code.ts";
@@ -56,10 +57,15 @@ export const HELPERS: readonly HelperAdapter[] = [
 const TURN_ON = "Turn it on in setup, or in live-agent.config.json";
 
 /**
- * The helper to use: the one asked for, or the first one turned on.
+ * The helper to use: the one asked for, else the default (config `defaultHelper`)
+ * if it is on, else the first one turned on.
  * Throws a plain message with the fix when it is off or none is on.
  */
-export function pickHelper(on: Pick<Config["helpers"], "geminiCli" | "codex" | "claudeCode">, asked?: string): HelperAdapter {
+export function pickHelper(
+  on: Pick<Config["helpers"], "geminiCli" | "codex" | "claudeCode">,
+  asked?: string,
+  fallback?: string,
+): HelperAdapter {
   if (asked) {
     const helper = HELPERS.find((h) => h.id === asked);
     if (!helper) throw new Error(`there is no helper called "${asked}". Helpers: ${HELPER_IDS.join(", ")}`);
@@ -68,6 +74,8 @@ export function pickHelper(on: Pick<Config["helpers"], "geminiCli" | "codex" | "
     }
     return helper;
   }
+  const preferred = HELPERS.find((h) => h.id === fallback && on[h.configKey]);
+  if (preferred) return preferred;
   const first = HELPERS.find((h) => on[h.configKey]);
   if (!first) throw new Error(`every helper is turned off in the config (helpers.geminiCli, helpers.codex, helpers.claudeCode). ${TURN_ON}.`);
   return first;

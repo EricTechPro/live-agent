@@ -5,6 +5,7 @@ import { chmodSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultConfig } from "../src/config/index.ts";
+import { geminiOnly } from "./gemini-only.ts";
 import { startSession } from "../src/core/agent.ts";
 import type { AgentEvent, EventOf } from "../src/core/events.ts";
 import { createJobs } from "../src/core/jobs.ts";
@@ -27,7 +28,7 @@ chmodSync(failing, 0o755);
 async function run(args: Record<string, unknown>, bin = cli) {
   const s = await startSession({
     model: scriptedModel([[{ type: "tool.call", id: "c1", name: "start_helper", args }], [{ type: "text", text: "Started." }], [{ type: "text", text: "Done." }]]),
-    tools, mode: "bypass", workDir: dir, config: { ...defaultConfig(), brainPath: dir, worktrees: false },
+    tools, mode: "bypass", workDir: dir, config: { ...geminiOnly(defaultConfig()), brainPath: dir, worktrees: false },
     helpers: { geminiCliBin: bin, geminiCliHome: join(dir, "cli-home"), geminiApiKey: "k" },
   });
   const states: EventOf<"job.state">[] = [];

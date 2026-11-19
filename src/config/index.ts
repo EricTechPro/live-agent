@@ -27,6 +27,18 @@ export interface Config {
   voice: string;
   tone: Tone;
   brainFolders: BrainFolders;
+  /** The helper used when the user names none (falls back to the first one on). */
+  defaultHelper: "codex" | "claude-code" | "gemini-cli";
+  /** App connections every helper job gets (src/helpers/mcp.ts). */
+  mcpServers: Record<string, McpServer>;
+}
+
+/** One MCP server: a local `command` (with args and env) or a remote `url`. Values may use ${VAR}. */
+export interface McpServer {
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
 }
 
 /** Where the config lives unless told otherwise. */
@@ -38,6 +50,8 @@ type SchemaNode = {
   type?: string;
   properties?: Record<string, SchemaNode>;
   additionalProperties?: SchemaNode | false;
+  items?: SchemaNode;
+  propertyNames?: { pattern: string; patternMessage?: string };
   enum?: unknown[];
   minimum?: number;
   minLength?: number;
@@ -103,7 +117,7 @@ const show = (value: unknown) => JSON.stringify(value);
 // Check the file's value against one schema node, then lay it over the
 // defaults, so a file that only sets `safety.mode` still gets every other
 // default. A tiny hand validator: it covers exactly the keywords our schema
-// uses (type, enum, minimum, minLength, pattern, properties, additionalProperties).
+// uses (type, enum, minimum, minLength, pattern, properties, additionalProperties, items, propertyNames).
 function fill(node: SchemaNode, value: unknown, field: string): unknown {
   if (value === undefined) return defaultsOf(node);
   const name = field || "config";
@@ -120,6 +134,9 @@ function fill(node: SchemaNode, value: unknown, field: string): unknown {
         const path = field ? `${field}.${key}` : key;
         const childNode = props[key] ?? node.additionalProperties;
         if (!childNode) throw new ConfigError(`unknown field ${show(path)}`);
+        if (node.propertyNames && !new RegExp(node.propertyNames.pattern).test(key)) {
+          throw new ConfigError(`${name} key ${show(key)}: ${node.propertyNames.patternMessage ?? `must match ${node.propertyNames.pattern}`}`);
+        }
         const filled = fill(childNode, child, path);
         if (key !== "$schema") out[key] = filled;
       }
@@ -131,6 +148,9 @@ function fill(node: SchemaNode, value: unknown, field: string): unknown {
       }
       return out;
     }
+    case "array":
+      if (!Array.isArray(value)) throw new ConfigError(`${name} must be a list (got ${show(value)})`);
+      return value.map((item, i) => (node.items ? fill(node.items, item, `${name}.${i}`) : item));
     case "boolean":
       if (typeof value !== "boolean") throw new ConfigError(`${name} must be a boolean (got ${show(value)})`);
       break;

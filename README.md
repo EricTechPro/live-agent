@@ -153,10 +153,12 @@ This is the whole file with every default:
   },
   "helpers": {
     "geminiCli": true,
-    "codex": false,
+    "codex": true,
     "claudeCode": false,
     "maxAtOnce": 1
   },
+  "defaultHelper": "codex",
+  "mcpServers": {},
   "worktrees": false,
   "voice": "Puck"
 }
@@ -170,9 +172,11 @@ This is the whole file with every default:
 | `safety.mode` | what runs without asking: `ask-me`, `auto-edits` or `bypass` (table below) | `auto-edits` |
 | `safety.overrides` | per-tool verdicts that win over the mode: `allow`, `ask` or `block` | `{}` |
 | `helpers.geminiCli` | allow the Gemini CLI helper | `true` |
-| `helpers.codex` | allow Codex as a helper (needs your own Codex sign-in) | `false` |
+| `helpers.codex` | allow Codex as a helper (needs your own Codex sign-in). Codex jobs can search the live web | `true` |
 | `helpers.claudeCode` | allow Claude Code as a helper (needs your own Claude Code sign-in) | `false` |
 | `helpers.maxAtOnce` | most helper jobs running at once; extra jobs wait in the queue | `1` |
+| `defaultHelper` | the helper used when you name none: `codex`, `claude-code` or `gemini-cli` (if it is off, the first one on) | `codex` |
+| `mcpServers` | app connections every helper job gets: `{ "linear": { "command": "npx", "args": [...], "env": { "LINEAR_API_KEY": "${LINEAR_API_KEY}" } } }` or `{ "notion": { "url": "https://..." } }`. Keys go in `.env`; `${NAME}` reads them. Say "connect my Linear" and Jett adds one | `{}` |
 | `worktrees` | give each helper job its own git worktree and branch, so it never touches your checkout ([Worktrees](#worktrees)) | `false` |
 | `voice` | Gemini Live voice name, e.g. `Puck`, `Kore`, `Charon` (not wired yet: today it always uses Gemini's default voice) | `Puck` |
 

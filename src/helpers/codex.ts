@@ -9,13 +9,17 @@
 //   folder; the OS sandbox blocks writes elsewhere. Our own safety gate already
 //   asked the user before a helper starts (helper risk).
 // - --skip-git-repo-check: with worktrees off the folder may not be a git repo.
-// - --json: one event per line; the summary is the last `agent_message`.
+// - -c web_search="live": live web search (Codex's default is "cached" results).
+// - -c mcp_servers.<name>.*: the config's app connections (src/helpers/mcp.ts).
+// - --json: one event per line; the summary is the last `agent_message`, the
+//   tokens come from each `turn.completed` usage.
 // - Auth: the user's own Codex sign-in (`codex login`, ChatGPT or an OpenAI key).
 //   live-agent never signs in for them and never passes on the Gemini key.
 // - Ready check: `codex login status` exits 0 when signed in (no model call).
 import type { JobSpec } from "../core/jobs.ts";
 import { capSummary, childEnv, shortTitle, jsonLine, runCli, signInStatus, type HelperPaths } from "./cli-job.ts";
 import type { HelperStatus } from "./index.ts";
+import { codexMcpArgs } from "./mcp.ts";
 
 export const DEFAULT_CODEX_BIN = "codex";
 export const CODEX_INSTALL_FIX = "Codex is not installed. Install it with: npm install -g @openai/codex";
@@ -31,19 +35,29 @@ export function codexJob({ task, cwd, cancelGraceMs = 3000, ...paths }: HelperPa
   return {
     kind: "codex",
     title: shortTitle(task),
-    async run({ signal }) {
+    async run({ signal, setTokens }) {
       const status = await codexStatus(paths);
       if (!status.ok) throw new Error(status.fix);
       let said = "";
       let error: string | undefined;
+      let tokens = 0;
+      const mcp = codexMcpArgs(paths.mcpServers);
       const r = await runCli({
-        argv: [status.bin!, "exec", "--json", "--sandbox", "workspace-write", "--skip-git-repo-check", "--color", "never", "--", task],
+        argv: [
+          status.bin!, "exec", "--json", "--sandbox", "workspace-write", "--skip-git-repo-check", "--color", "never",
+          "-c", 'web_search="live"', ...mcp.args, "--", task,
+        ],
         cwd,
-        env: childEnv(),
+        env: { ...childEnv(), ...mcp.env },
         signal,
         cancelGraceMs,
         onLine(line) {
           const ev = jsonLine(line);
+          // One per turn: cached_input_tokens is part of input_tokens, so it is not added again.
+          if (ev?.type === "turn.completed" && ev.usage) {
+            tokens += (ev.usage.input_tokens ?? 0) + (ev.usage.output_tokens ?? 0);
+            setTokens?.(tokens);
+          }
           if (ev?.type === "item.completed" && ev.item?.type === "agent_message" && typeof ev.item.text === "string") said = ev.item.text;
           if (ev?.type === "turn.failed") error = ev.error?.message ?? "Codex reported an error";
           if (ev?.type === "error" && typeof ev.message === "string") error = ev.message;

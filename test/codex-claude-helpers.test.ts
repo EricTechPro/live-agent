@@ -31,10 +31,11 @@ const codexOk = fakeCli(
 echo "$PWD" > "${dir}/codex-cwd"
 echo "$@" > "${dir}/codex-args"
 echo "gemini=\${GEMINI_API_KEY:-none} google=\${GOOGLE_API_KEY:-none}" > "${dir}/codex-env"
+echo "linear=\${LINEAR_API_KEY:-none}" > "${dir}/codex-mcp-env"
 echo '{"type":"thread.started","thread_id":"t1"}'
 echo '{"type":"item.completed","item":{"id":"i0","type":"reasoning","text":"thinking"}}'
 echo '{"type":"item.completed","item":{"id":"i1","type":"agent_message","text":"Fixed the off-by-one."}}'
-echo '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}'`,
+echo '{"type":"turn.completed","usage":{"input_tokens":1200,"cached_input_tokens":1000,"output_tokens":34}}'`,
 );
 const codexSignedOut = fakeCli(
   "codex-out.sh",
@@ -54,7 +55,8 @@ const claudeOk = fakeCli(
 echo "$PWD" > "${dir}/claude-cwd"
 echo "$@" > "${dir}/claude-args"
 echo "gemini=\${GEMINI_API_KEY:-none} google=\${GOOGLE_API_KEY:-none}" > "${dir}/claude-env"
-echo '{"type":"result","subtype":"success","is_error":false,"result":"Fixed it in add.js."}'`,
+while [ $# -gt 0 ]; do if [ "$1" = --mcp-config ]; then cat "$2" > "${dir}/claude-mcp"; fi; shift; done
+echo '{"type":"result","subtype":"success","is_error":false,"result":"Fixed it in add.js.","usage":{"input_tokens":10,"cache_creation_input_tokens":200,"cache_read_input_tokens":300,"output_tokens":40}}'`,
 );
 const claudeSignedOut = fakeCli(
   "claude-out.sh",
@@ -83,7 +85,7 @@ const say = (text: string): ModelEvent[] => [{ type: "text", text }];
 
 function configWith(on: Partial<Config["helpers"]>): Config {
   const config = defaultConfig();
-  config.helpers = { ...config.helpers, geminiCli: false, ...on };
+  config.helpers = { ...config.helpers, geminiCli: false, codex: false, ...on };
   // Helper jobs with no folder start in the brain folder (ticket 21): here, the temp dir.
   config.brainPath = dir;
   return config;
@@ -141,8 +143,10 @@ describe("Codex helper", () => {
     process.env.GOOGLE_API_KEY = "voice-key-in-env";
     try {
       const { end } = await runJob({ helper: "codex" }, configWith({ codex: true }), { codexBin: codexOk });
-      expect(end).toMatchObject({ kind: "codex", state: "done", message: "Fixed the off-by-one." });
+      expect(end).toMatchObject({ kind: "codex", state: "done", message: "Fixed the off-by-one.", tokens: 1234 });
       const args = readFileSync(join(dir, "codex-args"), "utf8");
+      // Helper jobs can search the live web.
+      expect(args).toContain('-c web_search="live"');
       expect(args).toContain("exec --json");
       expect(args).toContain("--sandbox workspace-write");
       expect(args.trim().endsWith("fix the bug")).toBe(true);
@@ -202,7 +206,7 @@ exit 1`,
 describe("Claude Code helper", () => {
   test("turning Claude Code on lets the agent start a Claude Code job that edits unattended", async () => {
     const { end } = await runJob({ helper: "claude-code" }, configWith({ claudeCode: true }), { claudeCodeBin: claudeOk });
-    expect(end).toMatchObject({ kind: "claude-code", state: "done", message: "Fixed it in add.js." });
+    expect(end).toMatchObject({ kind: "claude-code", state: "done", message: "Fixed it in add.js.", tokens: 550 });
     const args = readFileSync(join(dir, "claude-args"), "utf8");
     expect(args).toContain("-p fix the bug");
     expect(args).toContain("--output-format json");
@@ -240,7 +244,51 @@ describe("Claude Code helper", () => {
   });
 });
 
+describe("app connections (mcpServers)", () => {
+  const withLinear = (on: Partial<Config["helpers"]>) => {
+    const config = configWith(on);
+    config.mcpServers = { linear: { command: "npx", args: ["-y", "linear-mcp"], env: { LINEAR_API_KEY: "${TEST_LINEAR_KEY}" } } };
+    return config;
+  };
+
+  test("a Codex job gets each server as -c overrides, its key in the environment only", async () => {
+    process.env.TEST_LINEAR_KEY = "lin-123";
+    try {
+      await runJob({ helper: "codex" }, withLinear({ codex: true }), { codexBin: codexOk });
+      const args = readFileSync(join(dir, "codex-args"), "utf8");
+      expect(args).toContain('mcp_servers.linear.command="npx"');
+      expect(args).toContain('mcp_servers.linear.env_vars=["LINEAR_API_KEY"]');
+      expect(args).not.toContain("lin-123");
+      expect(readFileSync(join(dir, "codex-mcp-env"), "utf8").trim()).toBe("linear=lin-123");
+    } finally {
+      delete process.env.TEST_LINEAR_KEY;
+    }
+  });
+
+  test("a Claude Code job gets one --mcp-config file with the key filled in, removed after", async () => {
+    process.env.TEST_LINEAR_KEY = "lin-123";
+    try {
+      await runJob({ helper: "claude-code" }, withLinear({ claudeCode: true }), { claudeCodeBin: claudeOk });
+      expect(JSON.parse(readFileSync(join(dir, "claude-mcp"), "utf8"))).toEqual({
+        mcpServers: { linear: { command: "npx", args: ["-y", "linear-mcp"], env: { LINEAR_API_KEY: "lin-123" } } },
+      });
+      const args = readFileSync(join(dir, "claude-args"), "utf8");
+      const file = args.split("--mcp-config ")[1]!.split(" ")[0]!.trim();
+      expect(existsSync(file)).toBe(false);
+    } finally {
+      delete process.env.TEST_LINEAR_KEY;
+    }
+  });
+});
+
 describe("choosing a helper", () => {
+  test("with no helper named, the config's defaultHelper is used when it is on", async () => {
+    const config = configWith({ codex: true, claudeCode: true });
+    config.defaultHelper = "claude-code";
+    const { end } = await runJob({}, config, { codexBin: codexOk, claudeCodeBin: claudeOk });
+    expect(end.kind).toBe("claude-code");
+  });
+
   test("with no helper named, the first one turned on is used (Gemini CLI, Codex, Claude Code)", async () => {
     const { end } = await runJob({}, configWith({ codex: true, claudeCode: true }), { codexBin: codexOk, claudeCodeBin: claudeOk });
     expect(end.kind).toBe("codex");

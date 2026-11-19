@@ -329,6 +329,16 @@ html:not([data-polled]) .dock:hover .quick-btn, .dock.hover .quick-btn, .quick-b
 .tab .badge { top: -4px; right: -4px; }
 .view { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 0; overflow: hidden; }
 #panel-jobs, #panel-brain { overflow: auto; padding-bottom: 12px; }
+/* The popover's status bar: model, context bar, tokens used. */
+.status-bar {
+  flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 12px 8px; border-top: 1px solid rgba(120, 255, 226, .14);
+  font: 500 10.5px/1.2 var(--mono); color: var(--ink-3); white-space: nowrap;
+}
+.status-model { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.status-ctx { flex: 1; min-width: 40px; height: 4px; border-radius: 2px; background: rgba(0, 0, 0, .35); overflow: hidden; }
+.status-ctx > span { display: block; height: 100%; background: var(--led); border-radius: inherit; transition: width .3s var(--ease); }
+.status-ctx[data-level="high"] > span { background: var(--bad); }
+.status-tokens { flex: none; font-variant-numeric: tabular-nums; }
 .side-title { margin: 4px 0 6px; font: 700 10px/1.2 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
 .side-empty { margin: 0 0 14px; color: var(--ink-3); font-size: 11px; }
 

@@ -22,6 +22,7 @@ import { join } from "node:path";
 import type { JobSpec } from "../core/jobs.ts";
 import { capSummary, childEnv, findBin, shortTitle, jsonLine, liveAgentDataDir, runCli, type HelperPaths } from "./cli-job.ts";
 import { geminiApiKey } from "../gemini-key.ts";
+import { geminiMcpServers, type McpServers } from "./mcp.ts";
 
 const KEY_GUIDE = "README.md#get-your-gemini-key";
 export const INSTALL_FIX = "Gemini CLI is not installed. Install it with: npm install -g @google/gemini-cli";
@@ -43,16 +44,24 @@ export function defaultHelperHome(): string {
   return join(liveAgentDataDir(), "gemini-cli");
 }
 
-/** Make sure the private home's settings select API-key auth (any other settings in it are kept). */
-function prepareHome(home: string) {
+/**
+ * Make sure the private home's settings select API-key auth and carry the config's
+ * app connections (`mcpServers`, ${VAR} left for Gemini CLI to fill in). Any other
+ * settings in it are kept.
+ */
+function prepareHome(home: string, mcpServers: McpServers = {}) {
   const dir = join(home, ".gemini");
   const file = join(dir, "settings.json");
   let settings: any = {};
   try {
     settings = JSON.parse(readFileSync(file, "utf8")) ?? {};
   } catch {}
-  if (settings?.security?.auth?.selectedType === "gemini-api-key") return;
+  const before = JSON.stringify(settings);
   settings.security = { ...settings.security, auth: { ...settings.security?.auth, selectedType: "gemini-api-key" } };
+  const servers = geminiMcpServers(mcpServers);
+  if (Object.keys(servers).length) settings.mcpServers = servers;
+  else delete settings.mcpServers;
+  if (JSON.stringify(settings) === before) return;
   mkdirSync(dir, { recursive: true });
   writeFileSync(file, `${JSON.stringify(settings, null, 2)}\n`);
 }
@@ -84,14 +93,15 @@ export function geminiCliJob({
   geminiCliHome: home = defaultHelperHome(),
   geminiApiKey: apiKey = geminiApiKey(),
   cancelGraceMs = 3000,
+  mcpServers,
 }: GeminiCliOptions): JobSpec {
   return {
     kind: "gemini-cli",
     title: shortTitle(task),
-    async run({ signal }) {
+    async run({ signal, setTokens }) {
       const status = geminiCliStatus({ bin, apiKey });
       if (!status.ok) throw new Error(status.fix);
-      prepareHome(home);
+      prepareHome(home, mcpServers);
 
       let said = "";
       let error: string | undefined;
@@ -107,6 +117,7 @@ export function geminiCliJob({
           const ev = jsonLine(line);
           if (ev?.type === "message" && ev.role === "assistant" && typeof ev.content === "string") said += ev.content;
           if (ev?.type === "result" && ev.status === "error") error = ev.error?.message ?? "Gemini CLI reported an error";
+          if (ev?.type === "result" && typeof ev.stats?.total_tokens === "number") setTokens?.(ev.stats.total_tokens);
         },
       });
       if (r === "cancelled") return "cancelled";

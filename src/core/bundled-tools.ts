@@ -7,6 +7,7 @@
 // one line, and the test tells you about the line.
 import type { Tool } from "./tool.ts";
 import actInApp from "../../tools/act-in-app.ts";
+import addConnection from "../../tools/add-connection.ts";
 import cancelJob from "../../tools/cancel-job.ts";
 import draw from "../../tools/draw.ts";
 import editCanvas from "../../tools/edit-canvas.ts";
@@ -24,4 +25,5 @@ import startHelper from "../../tools/start-helper.ts";
 export const bundledTools: Tool[] = [
   actInApp, cancelJob, draw, editCanvas, findOnScreen, listWindows, look, markScreen, open, readFile, remember, runCommand,
   searchBrain, startHelper,
+  addConnection,
 ];

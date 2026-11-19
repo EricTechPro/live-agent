@@ -16,6 +16,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { watchGroup } from "./group-watchdog.ts";
 import type { HelperStatus } from "./index.ts";
+import type { McpServers } from "./mcp.ts";
 
 /**
  * Where the helper CLIs live and what Gemini CLI runs on. One shape all the way down:
@@ -37,6 +38,8 @@ export interface HelperPaths {
   cancelGraceMs?: number;
   /** Where helper worktrees go (config `worktrees`). Default: `defaultWorktreesRoot()` in src/helpers/worktree.ts. */
   worktreesRoot?: string;
+  /** App connections every helper job gets (config `mcpServers`, src/helpers/mcp.ts). */
+  mcpServers?: McpServers;
 }
 
 /** live-agent's own folder in the OS app-data folder (the helper's CLI home, helper worktrees). */

@@ -43,6 +43,12 @@ export type ModelEvent =
   | { type: "reconnecting"; attempt: number; retryInMs: number; message: string }
   /** Reached the model again after `reconnecting`. */
   | { type: "connected" }
+  /**
+   * Token use of the reply in flight (Gemini Live's usageMetadata): `contextTokens` is the
+   * whole request, prompt plus reply, so what the context holds now. Later counts in the
+   * same turn replace earlier ones.
+   */
+  | { type: "usage"; contextTokens: number }
   /** The connection or the model reported a problem. */
   | { type: "error"; message: string };
 
@@ -113,6 +119,8 @@ export interface ConnectOptions {
 }
 
 export interface Model {
+  /** The model's id ("gemini-3.8-live"), for the status bar. A fake model may leave it out. */
+  name?: string;
   /** Open a conversation. The adapter calls `onEvent` for every ModelEvent, in order. */
   connect(onEvent: (event: ModelEvent) => void, options?: ConnectOptions): Promise<ModelSession>;
 }

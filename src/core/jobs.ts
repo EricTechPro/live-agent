@@ -37,11 +37,18 @@ export interface JobInfo {
   folder?: string;
   /** Helper jobs with worktrees on (config `worktrees`): the git worktree and branch the job works in. */
   worktree?: { path: string; branch: string };
+  /** Helper jobs: tokens the helper has used so far (input + output), from its CLI's own report. */
+  tokens?: number;
 }
 
 export interface JobRun {
   /** Aborted when the job is cancelled. The runner must stop and settle soon after. */
   signal: AbortSignal;
+  /**
+   * Report the tokens used so far (a running total). It rides on the next `job.state`
+   * (the CLIs report usage at the end of a turn, so in practice: the done or failed one).
+   */
+  setTokens?(tokens: number): void;
 }
 
 export interface JobSpec {
@@ -107,7 +114,14 @@ export function createJobs({ maxAtOnce, onState }: JobsOptions): Jobs {
     set(entry, "running");
     const { signal } = entry.abort;
     entry.settled = Promise.resolve()
-      .then(() => entry.spec.run({ signal }))
+      .then(() =>
+        entry.spec.run({
+          signal,
+          setTokens(tokens) {
+            entry.info.tokens = tokens;
+          },
+        }),
+      )
       .then(
         (summary) => (signal.aborted ? set(entry, "cancelled") : set(entry, "done", summary)),
         (err: unknown) =>

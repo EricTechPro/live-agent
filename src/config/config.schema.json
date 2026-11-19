@@ -59,7 +59,7 @@
         "codex": {
           "description": "Allow the Codex helper.",
           "type": "boolean",
-          "default": false
+          "default": true
         },
         "claudeCode": {
           "description": "Allow the Claude Code helper.",
@@ -126,6 +126,55 @@
           "default": "projects"
         }
       }
+    },
+    "defaultHelper": {
+      "description": "The helper to use when the user does not name one. If it is turned off, the first helper turned on is used.",
+      "type": "string",
+      "enum": [
+        "codex",
+        "claude-code",
+        "gemini-cli"
+      ],
+      "default": "codex"
+    },
+    "mcpServers": {
+      "description": "App connections (MCP servers) every helper job gets, keyed by name. Same shape as Claude Code and Codex: {command, args, env} for a local server, or {url} for a remote one. Values may use ${VAR} from the .env file, so keys stay out of this file.",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z0-9_-]+$",
+        "patternMessage": "names may use only letters, digits, - and _"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "description": "The program that starts a local server, e.g. npx.",
+            "type": "string",
+            "minLength": 1
+          },
+          "args": {
+            "description": "Its arguments.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "env": {
+            "description": "Environment for the server. Values may use ${VAR} from .env.",
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "url": {
+            "description": "A remote server's address (streamable HTTP).",
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "default": {}
     }
   }
 }

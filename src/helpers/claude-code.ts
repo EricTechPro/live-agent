@@ -9,13 +9,18 @@
 // - bypassPermissions: edits and commands run, like Gemini CLI's yolo. Our own
 //   safety gate already asked the user before a helper starts (helper risk).
 // - --output-format json: one result object; `result` is the summary,
-//   `is_error` says it failed.
+//   `is_error` says it failed, `usage` has the tokens.
+// - --mcp-config <file>: the config's app connections (src/helpers/mcp.ts).
 // - --no-session-persistence: helper runs do not fill the user's /resume list.
 // - Auth: the user's own Claude Code sign-in (`claude auth login`, or their
 //   ANTHROPIC_API_KEY). live-agent never signs in for them and never passes on
 //   the Gemini key.
 // - Ready check: `claude auth status` exits 0 when signed in (no model call).
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { JobSpec } from "../core/jobs.ts";
+import { claudeMcpConfig } from "./mcp.ts";
 import { capSummary, childEnv, shortTitle, jsonLine, runCli, signInStatus, type HelperPaths } from "./cli-job.ts";
 import type { HelperStatus } from "./index.ts";
 
@@ -40,23 +45,41 @@ export function claudeCodeJob({ task, cwd, cancelGraceMs = 3000, ...paths }: Hel
   return {
     kind: "claude-code",
     title: shortTitle(task),
-    async run({ signal }) {
+    async run({ signal, setTokens }) {
       const status = await claudeCodeStatus(paths);
       if (!status.ok) throw new Error(status.fix);
       let result: any;
-      const r = await runCli({
-        argv: [
-          status.bin!, "-p", task, "--output-format", "json", "--permission-mode", "bypassPermissions", "--no-session-persistence",
-        ],
-        cwd,
-        env: standaloneEnv(),
-        signal,
-        cancelGraceMs,
-        onLine(line) {
-          const ev = jsonLine(line);
-          if (ev?.type === "result") result = ev;
-        },
-      });
+      // The app connections, keys filled in: a private file that lives only as long as the job.
+      const mcpDir = paths.mcpServers && Object.keys(paths.mcpServers).length ? mkdtempSync(join(tmpdir(), "live-agent-mcp-")) : undefined;
+      const mcpFile = mcpDir && join(mcpDir, "mcp.json");
+      if (mcpFile) writeFileSync(mcpFile, claudeMcpConfig(paths.mcpServers), { mode: 0o600 });
+      let r: Awaited<ReturnType<typeof runCli>>;
+      try {
+        r = await runCli({
+          argv: [
+            status.bin!, "-p", task, "--output-format", "json", "--permission-mode", "bypassPermissions", "--no-session-persistence",
+            // Last: --mcp-config takes every value after it.
+            ...(mcpFile ? ["--mcp-config", mcpFile] : []),
+          ],
+          cwd,
+          env: standaloneEnv(),
+          signal,
+          cancelGraceMs,
+          onLine(line) {
+            const ev = jsonLine(line);
+            if (ev?.type !== "result") return;
+            result = ev;
+            const u = ev.usage;
+            if (u) {
+              setTokens?.(
+                (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.output_tokens ?? 0),
+              );
+            }
+          },
+        });
+      } finally {
+        if (mcpDir) rmSync(mcpDir, { recursive: true, force: true });
+      }
       if (r === "cancelled") return "cancelled";
       const text = typeof result?.result === "string" ? result.result : "";
       if (r.code !== 0 || result?.is_error) {

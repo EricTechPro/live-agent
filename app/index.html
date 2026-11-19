@@ -107,7 +107,7 @@
         <header class="pop-head">
           <div class="tabs" role="tablist" aria-label="Views">
             <button id="tab-chat" class="ib tab" role="tab" type="button" aria-controls="panel-chat" aria-selected="true" aria-label="Chat" data-tip="Chat" data-icon="chat" data-size="16"></button>
-            <button id="tab-jobs" class="ib tab" role="tab" type="button" aria-controls="panel-jobs" aria-selected="false" tabindex="-1" aria-label="Jobs" data-tip="Jobs"><span class="icon-slot" data-icon="jobs" data-size="16"></span><b id="tab-jobs-count" class="badge" data-count="0" aria-hidden="true">0</b></button>
+            <button id="tab-jobs" class="ib tab" role="tab" type="button" aria-controls="panel-jobs" aria-selected="false" tabindex="-1" aria-label="Agents" data-tip="Agents"><span class="icon-slot" data-icon="jobs" data-size="16"></span><b id="tab-jobs-count" class="badge" data-count="0" aria-hidden="true">0</b></button>
             <button id="tab-brain" class="ib tab" role="tab" type="button" aria-controls="panel-brain" aria-selected="false" tabindex="-1" aria-label="Brain" data-tip="Chats and notes" data-icon="brain" data-size="16"></button>
           </div>
           <span class="spacer"></span>
@@ -131,7 +131,7 @@
           <footer id="bar" class="bar" aria-label="Status"></footer>
         </section>
         <section id="panel-jobs" class="view" role="tabpanel" aria-labelledby="tab-jobs" hidden>
-          <div id="jobs" class="jobs" aria-label="Job board"></div>
+          <div id="jobs" class="jobs" aria-label="Agents"></div>
         </section>
         <section id="panel-brain" class="view" role="tabpanel" aria-labelledby="tab-brain" hidden>
           <div id="brain-lists" class="brain-lists">
@@ -153,6 +153,8 @@
             <pre id="reader-text" class="reader-text" tabindex="0"></pre>
           </section>
         </section>
+        <!-- The main chat's model, how full its context is, and tokens used (status-bar.ts). -->
+        <footer id="status" class="status-bar" aria-label="Model and tokens"></footer>
       </section>
     </main>
     <!--

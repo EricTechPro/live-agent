@@ -13,7 +13,7 @@
 // Why a risk class on every tool: the safety gate decides by risk class and
 // mode (see src/core/safety.ts), so a new tool is safe by declaring one word.
 
-import type { BrainFolders } from "../config/index.ts";
+import type { BrainFolders, McpServer } from "../config/index.ts";
 import type { HelperPaths } from "../helpers/cli-job.ts";
 import type { CanvasChange } from "./board.ts";
 import type { Beat } from "./canvas.ts";
@@ -54,6 +54,8 @@ export interface ToolContext {
   jobs?: Pick<Jobs, "submit" | "cancel" | "list">;
   /** Helper settings: which helpers are on (config `helpers`) and where their CLIs are. */
   helpers?: HelperSettings;
+  /** App connections (config `mcpServers`): add one to the config file; the next helper job gets it. */
+  connections?: { add(name: string, server: McpServer): void };
   /**
    * Jett's eyes (src/screen): `look` sends one screenshot of the screen into the model and
    * answers with what it is. Missing when the session has no eyes (tests, non-macOS).
@@ -79,6 +81,8 @@ export interface HelperSettings extends HelperPaths {
   codex?: boolean;
   /** Config `helpers.claudeCode`: is the Claude Code helper turned on? */
   claudeCode?: boolean;
+  /** Config `defaultHelper`: used when the user names no helper (if it is on). */
+  defaultHelper?: string;
   /** Config `worktrees`: does each helper job get its own git worktree? */
   worktrees?: boolean;
 }

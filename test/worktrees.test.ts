@@ -5,6 +5,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultConfig } from "../src/config/index.ts";
+import { geminiOnly } from "./gemini-only.ts";
 import { startSession } from "../src/core/agent.ts";
 import type { AgentEvent, EventOf } from "../src/core/events.ts";
 import type { ModelEvent, ModelInput } from "../src/core/model.ts";
@@ -55,7 +56,7 @@ const startHelper = (id: string, folder: string, task = "fix the add bug"): Mode
 const say = (text: string): ModelEvent[] => [{ type: "text", text }];
 
 function session(script: ScriptEntry[], worktrees: boolean, geminiCliBin = fixer) {
-  const config = defaultConfig();
+  const config = geminiOnly(defaultConfig());
   config.worktrees = worktrees;
   return startSession({
     model: scriptedModel(script), tools, mode: "bypass", workDir: dir, config,
