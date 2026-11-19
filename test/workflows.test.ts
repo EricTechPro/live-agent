@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cronMatches, parseCron } from "../src/workflows/cron.ts";
 import {
-  catalog, deleteWorkflow, helperTask, listSkills, listWorkflows, saveWorkflow, skillsDir, workflowsDir,
+  catalog, deleteWorkflow, helperTask, listSkills, listWorkflows, saveWorkflow, skillsDir, workflowJob, workflowsDir,
 } from "../src/workflows/index.ts";
 import { startScheduler } from "../src/workflows/scheduler.ts";
 
@@ -162,4 +162,17 @@ test("the scheduler reads files on each tick and never catches up missed runs", 
   s.tick();
   expect(fired).toEqual(["news"]);
   s.stop();
+});
+
+test("a workflow with no helper gets the config's default helper; a named one keeps its own", () => {
+  const home = mkdtempSync(join(tmpdir(), "live-agent-wf-default-"));
+  const base = { name: "w", description: "d", trigger: "manual", instructions: "x" };
+  const helpers = { geminiCli: true, codex: true, claudeCode: false };
+  const where = (defaultHelper: string) => ({ home, brainPath: home, helpers: { ...helpers, defaultHelper } });
+  expect(workflowJob(base, where("codex")).kind).toBe("codex");
+  expect(workflowJob(base, where("gemini-cli")).kind).toBe("gemini-cli");
+  expect(workflowJob({ ...base, helper: "gemini-cli" }, where("codex")).kind).toBe("gemini-cli");
+  // The default is off: the first helper turned on.
+  expect(workflowJob(base, where("claude-code")).kind).toBe("gemini-cli");
+  rmSync(home, { recursive: true, force: true });
 });

@@ -264,6 +264,24 @@ describe("the session uses a save at once", () => {
     await session.close();
   });
 
+  test("a helper switch (the Agents tab) is used at once and keeps the chat: no reconnect", async () => {
+    const { model, connects } = recording();
+    const configPath = freshPath();
+    const first = saveSetup(configPath, { brainPath: freshFolder() }).config;
+    const session = await startSession({ model, configPath, config: first });
+    const events: AgentEvent[] = [];
+    session.onEvent((e) => events.push(e));
+
+    const { config } = saveSetup(configPath, { defaultHelper: "claude-code", helpers: { claudeCode: true, geminiCli: false } });
+    expect(config).toMatchObject({ defaultHelper: "claude-code", helpers: { claudeCode: true, geminiCli: false } });
+    expect(JSON.parse(readFileSync(configPath, "utf8")).defaultHelper).toBe("claude-code");
+    await session.setup.apply(config);
+
+    expect(events.map((e) => e.type)).toEqual(["setup.saved"]);
+    expect(connects.length).toBe(1);
+    await session.close();
+  });
+
   test("setup is needed until a config file exists", async () => {
     const configPath = freshPath();
     const session = await startSession({ model: scriptedModel([]), configPath });

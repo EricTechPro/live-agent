@@ -29,6 +29,8 @@ export interface Config {
   brainFolders: BrainFolders;
   /** The helper used when the user names none (falls back to the first one on). */
   defaultHelper: "codex" | "claude-code" | "gemini-cli";
+  /** Tell the model when a scheduled workflow ends during a chat, so it can mention it. */
+  announceScheduled: boolean;
   /** App connections every helper job gets (src/helpers/mcp.ts). */
   mcpServers: Record<string, McpServer>;
 }

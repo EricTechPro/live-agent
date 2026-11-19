@@ -5,13 +5,14 @@ import { afterAll, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { defaultConfig, type SafetyMode } from "../src/config/index.ts";
+import { defaultConfig, type Config, type SafetyMode } from "../src/config/index.ts";
 import { startSession } from "../src/core/agent.ts";
 import type { AgentEvent, EventOf } from "../src/core/events.ts";
-import type { ConnectOptions, Model, ModelEvent } from "../src/core/model.ts";
+import type { ConnectOptions, Model, ModelEvent, ModelInput } from "../src/core/model.ts";
 import { loadTools } from "../src/core/registry.ts";
 import { scriptedModel } from "../src/models/scripted.ts";
 import { saveWorkflow, skillsDir, workflowsDir } from "../src/workflows/index.ts";
+import { geminiOnly } from "./gemini-only.ts";
 
 const dir = realpathSync(mkdtempSync(join(tmpdir(), "live-agent-workflow-tools-")));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -19,7 +20,7 @@ const tools = await loadTools();
 
 const cli = join(dir, "gemini.sh");
 // Notes the task (-p "<task>") it got, then answers like Gemini CLI's stream-json.
-writeFileSync(cli, `#!/bin/sh\nprintf '%s' "$2" > "${dir}/task"\necho '{"type":"message","role":"assistant","content":"Done."}'\n`);
+writeFileSync(cli, `#!/bin/sh\nprintf '%s' "$2" > "${dir}/task"\necho '{"type":"message","role":"assistant","content":"Done."}'\necho '{"type":"result","status":"success","stats":{"total_tokens":42}}'\n`);
 chmodSync(cli, 0o755);
 
 let n = 0;
@@ -39,14 +40,14 @@ const result = (events: AgentEvent[], name: string) =>
 async function session(
   where: { home: string; brain: string },
   script: ModelEvent[][],
-  extra: { mode?: SafetyMode; model?: Model; schedule?: { tickMs?: number; now?: () => Date } } = {},
+  extra: { mode?: SafetyMode; model?: Model; schedule?: { tickMs?: number; now?: () => Date }; config?: Partial<Config> } = {},
 ) {
   return startSession({
     model: extra.model ?? scriptedModel(script),
     tools,
     mode: extra.mode ?? "bypass",
     workDir: where.home,
-    config: { ...defaultConfig(), brainPath: where.brain, worktrees: false },
+    config: { ...geminiOnly(defaultConfig()), brainPath: where.brain, worktrees: false, ...extra.config },
     helpers: { geminiCliBin: cli, geminiCliHome: join(dir, "cli-home"), geminiApiKey: "k" },
     chatEndNote: false,
     ...(extra.schedule ? { schedule: extra.schedule } : {}),
@@ -158,6 +159,41 @@ test("the session's scheduler fires a due workflow with no approval, even in Ask
   const job = await jobEnd(s);
   expect(job).toMatchObject({ state: "done", title: "tick", kind: "gemini-cli" });
   expect(readFileSync(join(dir, "task"), "utf8")).toBe("Scheduled run.");
+  await s.close();
+});
+
+test("a scheduled job counts its tokens and, mid-chat, is told to the model once it is idle", async () => {
+  const where = places();
+  saveWorkflow(where.home, { name: "tick", description: "d", trigger: "* * * * *", instructions: "Scheduled run." });
+  const inputs: ModelInput[] = [];
+  const model = scriptedModel([say("Hi."), say("Your tick workflow is done.")], { inputs });
+  const s = await session(where, [], { model, schedule: { tickMs: 30 } });
+  const end = jobEnd(s);
+  const events: AgentEvent[] = [];
+  s.onEvent((e) => events.push(e));
+  await s.sendText("hi");
+  const job = await end;
+  expect(job).toMatchObject({ state: "done", title: "tick", tokens: 42 });
+  const deadline = Date.now() + 2000;
+  while (!events.some((e) => e.type === "turn.done" && e.reply.includes("tick workflow")) && Date.now() < deadline) await Bun.sleep(5);
+  const notice = inputs.find((i) => i.type === "text" && i.text.startsWith("[Notice"));
+  expect(notice).toMatchObject({ text: expect.stringContaining('"tick" finished: Done.') });
+  // A notice is not the user talking: no user transcript for it.
+  expect(events.filter((e) => e.type === "transcript" && e.role === "user").map((e) => (e as { text: string }).text)).toEqual(["hi"]);
+  await s.close();
+});
+
+test("announceScheduled off: a scheduled job ends without a word to the model", async () => {
+  const where = places();
+  saveWorkflow(where.home, { name: "tick", description: "d", trigger: "* * * * *", instructions: "Scheduled run." });
+  const inputs: ModelInput[] = [];
+  const model = scriptedModel([say("Hi.")], { inputs });
+  const s = await session(where, [], { model, schedule: { tickMs: 30 }, config: { announceScheduled: false } });
+  const end = jobEnd(s);
+  await s.sendText("hi");
+  await end;
+  await Bun.sleep(30);
+  expect(inputs.filter((i) => i.type === "text").length).toBe(1);
   await s.close();
 });
 

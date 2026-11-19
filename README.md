@@ -175,7 +175,8 @@ This is the whole file with every default:
 | `helpers.codex` | allow Codex as a helper (needs your own Codex sign-in). Codex jobs can search the live web | `true` |
 | `helpers.claudeCode` | allow Claude Code as a helper (needs your own Claude Code sign-in) | `false` |
 | `helpers.maxAtOnce` | most helper jobs running at once; extra jobs wait in the queue | `1` |
-| `defaultHelper` | the helper used when you name none: `codex`, `claude-code` or `gemini-cli` (if it is off, the first one on) | `codex` |
+| `defaultHelper` | the helper used when you name none (also by workflows with no `helper`): `codex`, `claude-code` or `gemini-cli` (if it is off, the first one on). Switch it, and each helper on or off, in the Agents tab's Helpers section | `codex` |
+| `announceScheduled` | when a scheduled workflow ends during a chat, Jett mentions it in one short line once it is free | `true` |
 | `mcpServers` | app connections every helper job gets: `{ "linear": { "command": "npx", "args": [...], "env": { "LINEAR_API_KEY": "${LINEAR_API_KEY}" } } }` or `{ "notion": { "url": "https://..." } }`. Keys go in `.env`; `${NAME}` reads them. Say "connect my Linear" and Jett adds one | `{}` |
 | `worktrees` | give each helper job its own git worktree and branch, so it never touches your checkout ([Worktrees](#worktrees)) | `false` |
 | `voice` | Gemini Live voice name, e.g. `Puck`, `Kore`, `Charon` (not wired yet: today it always uses Gemini's default voice) | `Puck` |

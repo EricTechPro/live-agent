@@ -443,6 +443,18 @@ html:not([data-polled]) .dock:hover .quick-btn, .dock.hover .quick-btn, .quick-b
 .reader-text:focus-visible { outline: 2px solid var(--ink); outline-offset: -4px; }
 #panel-brain:has(.reader:not([hidden])) { overflow: hidden; }
 
+/* ---- Helpers settings (helper-settings.ts), at the top of the Agents view ---- */
+.helper-settings { flex: none; display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid rgba(120, 255, 226, .14); }
+.helper-settings .side-title { margin: 0; }
+.helper-row { display: flex; align-items: center; gap: 8px; }
+.helper-row label { flex: none; font-size: 11px; color: var(--ink-3); }
+.helper-row .sel { flex: 1; }
+.helper-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.helper-chips .chip { padding: 5px 9px; font-size: 11px; }
+.helper-chips .chip:disabled { cursor: default; opacity: .6; }
+.helper-note { margin: 0; font-size: 11px; color: var(--bad); }
+.helper-note:empty { display: none; }
+
 /* ---- job cards (ticket 29), in the Jobs view ---- */
 .jobs { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 .job-empty { margin: 0; color: var(--ink-3); }

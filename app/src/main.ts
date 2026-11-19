@@ -6,6 +6,7 @@
 // while it is over one (overlay.ts `capture`).
 import { Room, RoomEvent, Track, type Participant } from "livekit-client";
 import { mountBoardAndBar, mountStatusBar } from "./board-view.ts";
+import { mountHelperSettings } from "./helper-settings-view.ts";
 import { mountModePill } from "./mode-pill.ts";
 import { mountApprovals } from "./approvals-view.ts";
 import { mountBrainView } from "./brain-view.ts";
@@ -1181,6 +1182,7 @@ async function boot() {
     ],
   });
   mountStatusBar(core, $("status"));
+  mountHelperSettings(core, $("helper-settings"));
   mountModePill(core, $<HTMLButtonElement>("mode-pill"), $<HTMLUListElement>("mode-menu"));
   mountApprovals(core, approvalsEl);
   const reader = mountBrainView(core, {

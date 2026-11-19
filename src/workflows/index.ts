@@ -173,12 +173,13 @@ export function catalog(home: string): string {
 }
 
 /**
- * The helper job for one workflow, working in the brain folder. Throws a plain fix
- * when its helper (or every helper) is turned off.
+ * The helper job for one workflow, working in the brain folder. A workflow with no
+ * `helper` uses the config `defaultHelper` (if it is on). Throws a plain fix when its
+ * helper (or every helper) is turned off.
  */
 export function workflowJob(wf: Workflow, where: { home: string; brainPath: string; helpers: HelperSettings }): JobSpec {
-  const { geminiCli, codex = false, claudeCode = false, worktrees: _, ...paths } = where.helpers;
-  const helper = pickHelper({ geminiCli, codex, claudeCode }, wf.helper);
+  const { geminiCli, codex = false, claudeCode = false, worktrees: _, defaultHelper, ...paths } = where.helpers;
+  const helper = pickHelper({ geminiCli, codex, claudeCode }, wf.helper, defaultHelper);
   return {
     ...helper.job({ task: helperTask(wf.instructions, where.home), cwd: where.brainPath, ...paths }),
     title: wf.name,

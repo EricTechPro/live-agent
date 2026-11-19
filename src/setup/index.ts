@@ -33,6 +33,8 @@ export interface SetupAnswers {
   /** Which helper CLIs to turn on or off. */
   helpers?: { geminiCli?: boolean | null; codex?: boolean | null; claudeCode?: boolean | null } | null;
   maxAtOnce?: number | null;
+  /** The helper used when the user names none (the Agents tab's Helpers section). */
+  defaultHelper?: Config["defaultHelper"] | null;
 }
 
 /** Read the config file as written (not filled with defaults). Missing file: `{}`. */
@@ -98,6 +100,7 @@ export function saveSetup(configPath: string, answers: SetupAnswers): { config: 
     if (given(answers.helpers?.[key])) next.helpers[key] = answers.helpers[key];
   }
   if (given(answers.maxAtOnce)) next.helpers.maxAtOnce = answers.maxAtOnce;
+  if (given(answers.defaultHelper)) next.defaultHelper = answers.defaultHelper;
 
   const config = checkConfig(next); // throws ConfigError naming the bad answer; nothing is written
   const root = brainRoot(config.brainPath);

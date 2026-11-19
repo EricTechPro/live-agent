@@ -329,7 +329,7 @@ Jett's home is the folder the config is read from: `LIVE_AGENT_HOME` when instal
 
 ### Scheduler
 
-In the core process (`src/workflows/scheduler.ts`): runs only while Jett is open, reads the files on every tick (twice a minute, at most one run per workflow per matching minute), and skips missed runs. Scheduled jobs go straight to the jobs runner with no approval card, in every mode (Eric's call); they show on the job board like any job. A helper that is off shows as a failed job with the fix.
+In the core process (`src/workflows/scheduler.ts`): runs only while Jett is open, reads the files on every tick (twice a minute, at most one run per workflow per matching minute), and skips missed runs. Scheduled jobs go straight to the jobs runner with no approval card, in every mode (Eric's call); they show on the job board like any job. A helper that is off shows as a failed job with the fix. A workflow with no `helper` uses the config `defaultHelper`. Scheduled jobs count their tokens like any helper job. When one ends during a chat (config `announceScheduled`, default on), the core sends the model a short text notice once no turn is in flight, and the model mentions it in one line; no user transcript is shown for it.
 
 ### Teaching Gemini
 

@@ -19,7 +19,7 @@ export default defineTool<{ name: string }>({
   async run({ name }, { workDir, brainPath, jobs, helpers }) {
     if (!jobs || !helpers) throw new Error("helper jobs are not available in this session");
     const wf = findWorkflow(workDir, name);
-    const helper = pickHelper({ geminiCli: helpers.geminiCli, codex: !!helpers.codex, claudeCode: !!helpers.claudeCode }, wf.helper);
+    const helper = pickHelper({ geminiCli: helpers.geminiCli, codex: !!helpers.codex, claudeCode: !!helpers.claudeCode }, wf.helper, helpers.defaultHelper);
     // Not installed or not signed in: a plain fix, and no job starts.
     const status = await helper.status(helpers);
     if (!status.ok) throw new Error(status.fix ?? `${helper.label} is not ready.`);

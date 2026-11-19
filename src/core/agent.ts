@@ -116,6 +116,16 @@ export interface SessionOptions {
 }
 
 /** What `onAudio` hears: a chunk of the model's voice, or "drop what you queued" (interrupted). */
+/** The model's note about a scheduled workflow that ended: not from the user, one short line wanted. */
+export function scheduledNotice(job: { title: string; state: string; summary?: string; message?: string }): string {
+  const how = job.state === "done" ? "finished" : "failed";
+  const what = job.summary ?? job.message;
+  return (
+    `[Notice, not from the user] The scheduled workflow "${job.title}" ${how}${what ? `: ${what}` : "."} ` +
+    "Mention it in one short sentence, then carry on."
+  );
+}
+
 export type AudioOut = { type: "audio"; data: Int16Array; sampleRate: number } | { type: "clear" };
 
 export interface AgentSession {
@@ -255,6 +265,10 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
   let silenced = false;
   /** The chat's tokens (the status bar): `used` by finished turns, `turn` the one in flight. */
   const usage = { used: 0, turn: 0 };
+  /** Jobs the scheduler started (not the model): their end is a notice, not a tool result. */
+  const scheduled = new Set<string>();
+  /** Scheduled-job notices waiting for the model to be idle (flushNotices). */
+  const notices: string[] = [];
 
   // ---- jobs and tool calls -------------------------------------------------
   const jobs = createJobs({
@@ -262,6 +276,13 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     onState(job) {
       emit({ type: "job.state", ...job });
       toolCalls.onJobState(job);
+      if (scheduled.has(job.id) && (job.state === "done" || job.state === "failed" || job.state === "cancelled")) {
+        scheduled.delete(job.id);
+        if (config.announceScheduled && job.state !== "cancelled") {
+          notices.push(scheduledNotice(job));
+          flushNotices();
+        }
+      }
     },
   });
   // The sketch canvas's marks (tickets 31, 33). A new chat starts a clean board.
@@ -348,14 +369,32 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         home: workDir,
         ...options.schedule,
         submit(wf) {
+          let id: string;
           try {
-            jobs.submit(workflowJob(wf, { home: workDir, brainPath, helpers: helperSettings() }));
+            id = jobs.submit(workflowJob(wf, { home: workDir, brainPath, helpers: helperSettings() }));
           } catch (err) {
-            jobs.submit({ kind: "workflow", title: wf.name, run: () => Promise.reject(err) });
+            id = jobs.submit({ kind: "workflow", title: wf.name, run: () => Promise.reject(err) });
           }
+          scheduled.add(id);
         },
       })
     : undefined;
+
+  // A scheduled job that ended, told to the model (config `announceScheduled`) so it can
+  // mention it. Why not a tool result like start_helper's: no call of the model's started
+  // it. Low priority: a short text turn of its own, only while a chat is going and the
+  // model is idle (no turn in flight); otherwise it waits for the next quiet moment.
+  function flushNotices() {
+    if (!notices.length || closed || paused || offline || switching || summary || turn || !chat.length) return;
+    const notice = startTurn();
+    notice.awaiting = 1;
+    try {
+      modelSession.sendText(notices.splice(0).join("\n"));
+    } catch {
+      notice.awaiting = 0;
+      finishTurnIfOver();
+    }
+  }
 
   // ---- settings that change while running ---------------------------------
   function setMode(next: SafetyMode) {
@@ -404,6 +443,8 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     if (finished.reply.trim()) chat.push({ role: "model", text: finished.reply.trim() });
     finished.done(finished.events);
     armIdleTimer();
+    // A scheduled job that ended mid-turn is told now, once the model is free.
+    queueMicrotask(flushNotices);
   }
 
   // A spoken turn has no sendText to open it, so the model's first word about
@@ -665,10 +706,13 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     setup: {
       needed: () => !existsSync(configPath),
       async apply(saved) {
+        const before = config;
         applyConfig(saved);
         emit({ type: "setup.saved", configPath, config: saved });
-        // A fresh connection, so the next words use the new voice and tone.
-        if (!busy() && !closed) await newChat();
+        // A fresh connection, so the next words use the new voice and tone. Only for what
+        // is set per connection: a helper switch (the Agents tab) keeps the chat going.
+        const perConnection = before.voice !== saved.voice || before.tone !== saved.tone || before.brainPath !== saved.brainPath;
+        if (perConnection && !busy() && !closed) await newChat();
       },
     },
     newChat,
