@@ -21,9 +21,15 @@ import remember from "../../tools/remember.ts";
 import runCommand from "../../tools/run-command.ts";
 import searchBrain from "../../tools/search-brain.ts";
 import startHelper from "../../tools/start-helper.ts";
+// Workflows and quick files (src/workflows).
+import createWorkflow from "../../tools/create-workflow.ts";
+import deleteWorkflow from "../../tools/delete-workflow.ts";
+import listWorkflows from "../../tools/list-workflows.ts";
+import runWorkflow from "../../tools/run-workflow.ts";
+import writeFile from "../../tools/write-file.ts";
 
 export const bundledTools: Tool[] = [
   actInApp, cancelJob, draw, editCanvas, findOnScreen, listWindows, look, markScreen, open, readFile, remember, runCommand,
   searchBrain, startHelper,
-  addConnection,
+  addConnection, createWorkflow, deleteWorkflow, listWorkflows, runWorkflow, writeFile,
 ];

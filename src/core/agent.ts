@@ -40,6 +40,8 @@ import { nextMode, type SafetyMode, type SafetyOverrides } from "./safety.ts";
 import type { Tool } from "./tool.ts";
 import { createToolCalls } from "./tool-calls.ts";
 import { systemInstruction } from "./tone.ts";
+import { catalog, workflowJob } from "../workflows/index.ts";
+import { startScheduler } from "../workflows/scheduler.ts";
 import { newTurn, turnIsOver, type Turn } from "./turn.ts";
 import type { Eyes } from "../screen/eyes.ts";
 import type { Hands } from "../screen/hands.ts";
@@ -106,6 +108,11 @@ export interface SessionOptions {
    * apps through them. Unset: those tools say computer control is not available here.
    */
   hands?: Hands;
+  /**
+   * Run scheduled workflows (src/workflows/scheduler.ts) from `workDir`, Jett's home, while
+   * the session is open. Unset: no scheduler (tests). The app sets `{}`.
+   */
+  schedule?: { tickMs?: number; now?: () => Date };
 }
 
 /** What `onAudio` hears: a chunk of the model's voice, or "drop what you queued" (interrupted). */
@@ -310,15 +317,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       workDir,
       brainPath,
       brainFolders: config.brainFolders,
-      helpers: {
-        ...options.helpers,
-        geminiCli: config.helpers.geminiCli,
-        codex: config.helpers.codex,
-        claudeCode: config.helpers.claudeCode,
-        defaultHelper: config.defaultHelper,
-        mcpServers: config.mcpServers,
-        worktrees: config.worktrees,
-      },
+      helpers: helperSettings(),
       connections: { add: (name: string, server: McpServer) => applyConfig(saveConnection(configPath, name, server).config) },
       screen: screen && {
         look: () => screen.look(),
@@ -331,6 +330,32 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     canvas,
   });
   const { approvals } = toolCalls;
+  function helperSettings() {
+    return {
+      ...options.helpers,
+      geminiCli: config.helpers.geminiCli,
+      codex: config.helpers.codex,
+      claudeCode: config.helpers.claudeCode,
+      defaultHelper: config.defaultHelper,
+      mcpServers: config.mcpServers,
+      worktrees: config.worktrees,
+    };
+  }
+  // Scheduled workflows go straight to the jobs runner: no gate, no approval (Eric's call).
+  // A helper that is off still shows up, as a failed job with the fix.
+  const scheduler = options.schedule
+    ? startScheduler({
+        home: workDir,
+        ...options.schedule,
+        submit(wf) {
+          try {
+            jobs.submit(workflowJob(wf, { home: workDir, brainPath, helpers: helperSettings() }));
+          } catch (err) {
+            jobs.submit({ kind: "workflow", title: wf.name, run: () => Promise.reject(err) });
+          }
+        },
+      })
+    : undefined;
 
   // ---- settings that change while running ---------------------------------
   function setMode(next: SafetyMode) {
@@ -499,7 +524,8 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     return options.model.connect((event) => mine === connection && onModelEvent(event), {
       tools: tools.map(({ name, description, parameters }) => ({ name, description, parameters })),
       voice: config.voice,
-      systemInstruction: systemInstruction(config.tone, { brainPath }),
+      // The workflows and skills as they are now: a new chat picks up new ones.
+      systemInstruction: systemInstruction(config.tone, { brainPath, catalog: catalog(workDir) }),
     });
   }
   let modelSession = await connectModel();
@@ -655,6 +681,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     // call) and a failure is just a "failed" job, never an error for the next chat.
     async close() {
       follow?.stop();
+      scheduler?.stop();
       closed = true;
       let notePath: string | null = null;
       try {
