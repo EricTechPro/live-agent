@@ -6,7 +6,7 @@
 // Risk class "read": it changes nothing on disk. Like every tool it runs
 // NON_BLOCKING, so the voice keeps talking while the window draws.
 // Idea from Roamies (AGPL): idea only, no code.
-import { CARD_SIZES, COLORS, MARK_KINDS, MAX_BEATS, MAX_CARDS, MAX_MARKS_PER_BEAT, parseBeats } from "../src/core/canvas.ts";
+import { CARD_SIZES, COLORS, MARK_KINDS, MODEL_SHAPES, MAX_BEATS, MAX_CARDS, MAX_MARKS_PER_BEAT, parseBeats } from "../src/core/canvas.ts";
 import { defineTool } from "../src/core/tool.ts";
 
 const num = (description: string) => ({ type: "number", description });
@@ -35,6 +35,7 @@ const markSchema = {
         "bars: items with label and value (and an optional unit) for a quick comparison. " +
         "table: columns (2 to 4 headers) and items whose cells are the row's values. " +
         "diagram: Mermaid source for a structure with branches. " +
+        "model: a slowly turning 3D shape (shape, plus atoms/bonds, points or heights; labels pinned at x,y,z). " +
         "INK (to point things out): circle, underline, check, cross, box, step: put on a card id, and item (1 = first) to mark one line of it. " +
         "arrow: on = the card it starts at, to_card = the card it points at, label optional. " +
         "Only for a loose sketch with no card: x,y on the 1000 x 600 board as rough hints (box: x,y,w,h; circle: x,y,r; arrow/line: from,to; text: x,y,text).",
@@ -60,6 +61,24 @@ const markSchema = {
     unit: { type: "string", description: "bars: unit after each value, e.g. %, ms." },
     columns: { type: "array", items: { type: "string" }, description: "table: 2 to 4 column headers." },
     source: { type: "string", description: "diagram: Mermaid source, e.g. 'flowchart LR' with short labels, about 15 nodes at most." },
+    shape: { type: "string", enum: [...MODEL_SHAPES], description: "model: the 3D shape. planet = sphere with a ring; cell = a soft blob; molecule needs atoms." },
+    atoms: {
+      type: "array",
+      description: "model molecule: 2 to 24 atoms, x/y/z from -1 to 1, r 0.05 to 0.6 (size), label e.g. 'O'.",
+      items: { type: "object", properties: { x: num("-1 to 1"), y: num("-1 to 1"), z: num("-1 to 1"), r: num("Atom size, 0.05 to 0.6"), label: { type: "string" } }, required: ["x", "y", "z"] },
+    },
+    bonds: {
+      type: "array",
+      description: "model molecule: bonds between atoms by number (1 = first atom).",
+      items: { type: "object", properties: { a: { type: "integer" }, b: { type: "integer" } }, required: ["a", "b"] },
+    },
+    points: { type: "array", description: "model points: 3 to 64 dots in space.", items: { type: "object", properties: { x: num("-1 to 1"), y: num("-1 to 1"), z: num("-1 to 1") }, required: ["x", "y", "z"] } },
+    heights: { type: "array", items: { type: "number" }, description: "model heightmap: a square grid of heights 0 to 1, row by row (16 = 4 x 4, up to 256)." },
+    labels: {
+      type: "array",
+      description: "model: up to 4 labels pinned to points of the shape; they turn with it.",
+      items: { type: "object", properties: { text: { type: "string" }, x: num("-1 to 1"), y: num("-1 to 1 (up)"), z: num("-1 to 1") }, required: ["text", "x", "y", "z"] },
+    },
     on: { type: "string", description: "Ink: the card id this mark sits on (or an arrow starts at)." },
     item: { type: "integer", description: "Ink on a card: which item it marks, 1 = first." },
     to_card: { type: "string", description: "arrow / line: the card id it points at." },

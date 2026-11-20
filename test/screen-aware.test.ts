@@ -131,10 +131,11 @@ describe("circling while holding Ctrl+Option", () => {
     const { eyes, shots } = fakeEyes();
     const session = await startSession({ model, tools: [], eyes, chatEndNote: false });
     session.onEvent((e) => seen.push(e.type));
+    session.sendAudio(loud(), 16000); // "what's this?" while circling
 
     // Keys still held: the window saw the ink close.
     expect(await session.screen!.circle(circlePath)).toEqual({ circled: true });
-    expect(inputs.map((i) => i.type)).toEqual(["image"]);
+    expect(inputs.filter((i) => i.type !== "audio").map((i) => i.type)).toEqual(["image"]);
     // The loop's box (150..250, 110..190) padded by 48 and grown to 320 x 220, kept on screen.
     expect(shots).toEqual([{ rect: { x: 40, y: 40, w: 320, h: 220 }, ink: [circlePath] }]);
 
@@ -145,8 +146,9 @@ describe("circling while holding Ctrl+Option", () => {
     // The label waits until the frame has had its 1.5 s to land.
     expect(performance.now() - releasedAt).toBeGreaterThan(1400);
     expect(shots).toHaveLength(1); // not captured twice
-    expect(inputs.map((i) => i.type)).toEqual(["image", "text"]);
-    const text = (inputs[1] as { text: string }).text;
+    const sent = inputs.filter((i) => i.type !== "audio");
+    expect(sent.map((i) => i.type)).toEqual(["image", "text"]);
+    const text = (sent[1] as { text: string }).text;
     expect(text).toStartWith("[Circled: the image just sent is the region the user just circled (at the top left of the screen)");
     expect(text).toContain("Answer about what is inside the circle");
     expect(text).toContain("(210, 160)");
@@ -163,10 +165,11 @@ describe("circling while holding Ctrl+Option", () => {
     const inputs: ModelInput[] = [];
     const { eyes, shots } = fakeEyes();
     const session = await startSession({ model: scriptedModel([[{ type: "text", text: "ok" }]], { inputs }), tools: [], eyes, chatEndNote: false, screenFrameGapMs: 0 });
+    session.sendAudio(loud(), 16000);
     const out = await session.screen!.release({ stroke: circlePath, cursor: { x: 210, y: 160 }, holdMs: 1800 });
     expect(out).toMatchObject({ sent: true, circled: true });
     expect(shots).toHaveLength(1);
-    expect(inputs.map((i) => i.type)).toEqual(["image", "text"]);
+    expect(inputs.filter((i) => i.type !== "audio").map((i) => i.type)).toEqual(["image", "text"]);
     await session.close();
   });
 
@@ -202,6 +205,82 @@ describe("circling while holding Ctrl+Option", () => {
     const text = (inputs.at(-1) as { text: string }).text;
     expect(text).toContain('front app Google Chrome, window "Pigs - Wikipedia"');
     expect(text).toContain("cursor at (900, 300)");
+    await session.close();
+  });
+});
+
+// Ticket 44: a circle and the words about it are one turn, even when they come apart.
+describe("a circle pairs with the next thing said", () => {
+  const texts = (inputs: ModelInput[]) => inputs.flatMap((i) => (i.type === "text" ? [i.text] : []));
+  const quietHold = { stroke: circlePath, cursor: { x: 210, y: 160 }, holdMs: 1800 };
+
+  test("circled in silence: nothing is asked yet; the next hold's words carry the circle", async () => {
+    const inputs: ModelInput[] = [];
+    const model = scriptedModel([[], [{ type: "text", text: "That's a pig." }]], { inputs });
+    const session = await startSession({ model, tools: [], eyes: fakeEyes().eyes, chatEndNote: false, screenFrameGapMs: 0, screenAskMs: 10_000 });
+
+    const first = await session.screen!.release(quietHold);
+    expect(first).toEqual({ sent: false, circled: true, waiting: true });
+    expect(texts(inputs)).toEqual([]); // the image went in, no words yet
+
+    session.sendAudio(loud(), 16000); // "what's this?" on the next hold, no new circle
+    const second = await session.screen!.release({ stroke: [{ x: 900, y: 300 }], cursor: { x: 900, y: 300 }, holdMs: 1200 });
+    expect(second).toMatchObject({ sent: true, circled: true });
+    const [label] = texts(inputs);
+    expect(label).toStartWith("[Circled:");
+    expect(label).not.toContain("Google Chrome"); // the circle, not the context line
+    await session.close();
+  });
+
+  test("circled, then typed: the typed words go in with the circle's label", async () => {
+    const inputs: ModelInput[] = [];
+    const model = scriptedModel([[{ type: "text", text: "That's a pig." }]], { inputs });
+    const session = await startSession({ model, tools: [], eyes: fakeEyes().eyes, chatEndNote: false, screenFrameGapMs: 0, screenAskMs: 10_000 });
+    await session.screen!.release(quietHold);
+
+    const events = await session.sendText("what's this?");
+
+    const [sent] = texts(inputs);
+    expect(sent).toStartWith("[Circled:");
+    expect(sent).toEndWith("\nwhat's this?");
+    expect(events.find((e) => e.type === "transcript" && e.role === "model")).toMatchObject({ text: "That's a pig." });
+    // Used once: the next typed turn is back to the [Screen: ...] line.
+    await session.sendText("thanks").catch(() => {});
+    await session.close();
+  });
+
+  test("circled and nothing said for a while: Jett asks what about it, in one line", async () => {
+    const inputs: ModelInput[] = [];
+    const heard: string[] = [];
+    const model = scriptedModel([[{ type: "text", text: "What about this?" }]], { inputs });
+    const session = await startSession({ model, tools: [], eyes: fakeEyes().eyes, chatEndNote: false, screenFrameGapMs: 0, screenAskMs: 40 });
+    session.onEvent((e) => e.type === "transcript" && e.role === "model" && heard.push(e.text));
+
+    await session.screen!.release(quietHold);
+    await Bun.sleep(120);
+
+    const [ask] = texts(inputs);
+    expect(ask).toStartWith("[Circled:");
+    expect(ask).toContain('"What about this?"');
+    expect(heard).toEqual(["What about this?"]);
+    // The words that follow are about that circle; it is not asked twice.
+    await Bun.sleep(80);
+    expect(texts(inputs)).toHaveLength(1);
+    await session.close();
+  });
+
+  test("circled, then spoke with the mic open (no keys): the circle is answered, not asked about", async () => {
+    const inputs: ModelInput[] = [];
+    const model = scriptedModel([[{ type: "text", text: "That's a pig." }]], { inputs });
+    const session = await startSession({ model, tools: [], eyes: fakeEyes().eyes, chatEndNote: false, screenFrameGapMs: 0, screenAskMs: 40 });
+
+    await session.screen!.release(quietHold);
+    session.sendAudio(loud(), 16000); // the question, said after letting go
+    await Bun.sleep(120);
+
+    const [label] = texts(inputs);
+    expect(label).toStartWith("[Circled:");
+    expect(label).not.toContain("What about this?");
     await session.close();
   });
 });

@@ -11,7 +11,7 @@
 // (`core-restarting`, then `core-ready`). Only after RESTART_DELAYS_MS run out in a row
 // is it `core-down`; the window's Retry calls `restart_core`.
 use serde::Serialize;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager, RunEvent};
@@ -287,7 +287,7 @@ fn cover_main_screen(window: &tauri::WebviewWindow) -> tauri::Result<()> {
 struct OverlayPoll {
     /// The cursor inside the window in CSS (logical) pixels, or None when it is outside.
     point: Option<(f64, f64)>,
-    /// Ctrl+Option held (and no Cmd or Shift): push to talk.
+    /// The draw keys held (Ctrl+Option by default, and no other modifier): push to talk.
     talk_keys: bool,
     /// The left mouse button is down right now (ticket 40): a drag ends when it is not,
     /// even if WebKit never delivered the pointer up.
@@ -314,6 +314,8 @@ extern "C" {
     /// Is this mouse button down right now (0 = left)? The same answer as
     /// NSEvent.pressedMouseButtons, without Objective-C, and it needs no permission.
     fn CGEventSourceButtonState(state_id: i32, button: u32) -> bool;
+    /// Is this key down right now (a macOS virtual key code)? Needs no permission either.
+    fn CGEventSourceKeyState(state_id: i32, key: u16) -> bool;
 }
 
 #[cfg(target_os = "macos")]
@@ -326,14 +328,57 @@ fn left_button_down() -> bool {
     false
 }
 
+const SHIFT: u64 = 0x2_0000;
+const CONTROL: u64 = 0x4_0000;
+const OPTION: u64 = 0x8_0000;
+const COMMAND: u64 = 0x10_0000;
+/// No key with the modifiers (a modifier-only hold).
+const NO_KEY: u64 = u64::MAX;
+
+/// The draw keys (ticket 45, `drawHotkey` in the config): modifier flags that must be held
+/// (the other three up), and one key's macOS key code, or NO_KEY. The page sets them.
+static DRAW_MODS: AtomicU64 = AtomicU64::new(CONTROL | OPTION);
+static DRAW_KEY: AtomicU64 = AtomicU64::new(NO_KEY);
+
+/// macOS virtual key codes (kVK_ANSI_*) for a-z and 0-9.
+fn key_code(key: &str) -> Option<u64> {
+    const LETTERS: [u64; 26] = [0, 11, 8, 2, 14, 3, 5, 4, 34, 38, 40, 37, 46, 45, 31, 35, 12, 15, 1, 17, 32, 9, 13, 7, 16, 6];
+    const DIGITS: [u64; 10] = [29, 18, 19, 20, 21, 23, 22, 26, 28, 25];
+    let c = key.chars().next()?;
+    match c {
+        'a'..='z' => Some(LETTERS[(c as u8 - b'a') as usize]),
+        '0'..='9' => Some(DIGITS[(c as u8 - b'0') as usize]),
+        _ => None,
+    }
+}
+
+/// The page tells Rust the draw keys: `mods` from ctrl, option, cmd, shift; `key` one letter or digit.
+#[tauri::command]
+fn set_draw_hotkey(mods: Vec<String>, key: Option<String>) {
+    let flags = mods.iter().fold(0, |f, m| {
+        f | match m.as_str() {
+            "ctrl" => CONTROL,
+            "option" => OPTION,
+            "cmd" => COMMAND,
+            "shift" => SHIFT,
+            _ => 0,
+        }
+    });
+    if flags.count_ones() < 2 {
+        return;
+    }
+    DRAW_MODS.store(flags, Ordering::Relaxed);
+    DRAW_KEY.store(key.as_deref().and_then(key_code).unwrap_or(NO_KEY), Ordering::Relaxed);
+}
+
 #[cfg(target_os = "macos")]
 fn talk_keys_held() -> bool {
-    const SHIFT: u64 = 0x2_0000;
-    const CONTROL: u64 = 0x4_0000;
-    const OPTION: u64 = 0x8_0000;
-    const COMMAND: u64 = 0x10_0000;
-    let flags = unsafe { CGEventSourceFlagsState(0) };
-    flags & CONTROL != 0 && flags & OPTION != 0 && flags & (SHIFT | COMMAND) == 0
+    let flags = unsafe { CGEventSourceFlagsState(0) } & (SHIFT | CONTROL | OPTION | COMMAND);
+    if flags != DRAW_MODS.load(Ordering::Relaxed) {
+        return false;
+    }
+    let key = DRAW_KEY.load(Ordering::Relaxed);
+    key == NO_KEY || unsafe { CGEventSourceKeyState(0, key as u16) }
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -541,7 +586,7 @@ pub fn run() {
         })
         .manage(TrayToggle(Mutex::new(None)))
         .manage(PrevApp(Mutex::new(None)))
-        .invoke_handler(tauri::generate_handler![core_status, restart_core, open_key_page, reveal_log, overlay_poll, set_click_through, set_tray_shown, quick_type_focus, screen::pointer_global, screen::open_screen_settings, screen::overlay_origin, screen::open_accessibility_settings])
+        .invoke_handler(tauri::generate_handler![core_status, restart_core, open_key_page, reveal_log, overlay_poll, set_click_through, set_tray_shown, quick_type_focus, set_draw_hotkey, screen::pointer_global, screen::open_screen_settings, screen::overlay_origin, screen::open_accessibility_settings])
         .setup(|app| {
             // No Dock icon: Jett lives in the menu bar and floats over everything.
             #[cfg(target_os = "macos")]

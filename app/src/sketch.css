@@ -78,6 +78,11 @@
 .sketch-card svg .nodeLabel, .sketch-card svg .edgeLabel { font-family: "Martian Mono", ui-monospace, monospace !important; }
 /* Image cards: the picture fits the body at its own shape. */
 .sketch-card-img { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; user-select: none; }
+/* Ticket 42: pictures and 3D models in teal dots; a click on a picture swaps to the original. */
+.sketch-card-dots { position: absolute; inset: 0; display: block; }
+.sketch-card[data-view="dots"] .sketch-card-img { position: absolute; opacity: 0; }
+.sketch-card[data-view="photo"] .sketch-card-dots { opacity: 0; }
+.sketch-card-dots, .sketch-card[data-view] .sketch-card-img { transition: opacity .2s ease-out; }
 .sketch-card-note, .sketch-card-error { margin: 0; font: 400 11px/1.45 "Martian Mono", ui-monospace, monospace; }
 .sketch-card-note { color: #8ab8b0; }
 .sketch-card-error { color: #ff8a7a; }

@@ -218,6 +218,11 @@ export function quickTypeFocus(on: boolean): Promise<void> {
   return invoke<void>("quick_type_focus", { on });
 }
 
+/** The hold-to-draw keys (ticket 45): Rust's poll reports them held as `talkKeys`. */
+export function setDrawHotkey(mods: string[], key?: string): Promise<void> {
+  return invoke<void>("set_draw_hotkey", { mods, key: key ?? null });
+}
+
 /** The menu-bar "Shortcuts" item (ticket 38). */
 export function onShowShortcuts(cb: () => void) {
   return listen("show-shortcuts", () => cb());

@@ -14,9 +14,9 @@
 // 1000 x 600 board as rough hints. Hints are clamped onto the board, never
 // refused: the layout pass moves things anyway.
 import { z } from "zod";
-import { CARD_KINDS, isCard } from "./card-kinds.ts";
+import { CARD_KINDS, isCard, MODEL_SHAPES } from "./card-kinds.ts";
 
-export { CARD_KINDS, isCard, MAX_CARDS, type CardKind } from "./card-kinds.ts";
+export { CARD_KINDS, isCard, MAX_CARDS, MODEL_SHAPES, type CardKind, type ModelShape } from "./card-kinds.ts";
 
 export const BOARD = { width: 1000, height: 600 } as const;
 
@@ -99,6 +99,36 @@ const image = z.object({
   card_size,
 });
 
+// A turning 3D model (ticket 42), drawn in the dot-matrix dither by the window
+// (app/src/model3d.ts). The model picks a built-in shape; molecule, points and heightmap carry
+// their own data. Coordinates are model space, -1 to 1 (clamped, like board hints).
+const unit = z.number().finite().transform((v) => Math.min(1, Math.max(-1, v)));
+const v3 = { x: unit, y: unit, z: unit };
+const model = z.object({
+  kind: z.literal("model"), id, title,
+  shape: z.enum(MODEL_SHAPES, { message: `shape is one of ${MODEL_SHAPES.join(", ")}` }),
+  atoms: z.array(z.object({ ...v3, r: z.number().min(0.05).max(0.6).optional(), label: words(12).optional() })).max(24).optional(),
+  bonds: z.array(z.object({ a: z.number().int().min(1), b: z.number().int().min(1) })).max(40).optional(),
+  points: z.array(z.object(v3)).max(64).optional(),
+  heights: z.array(z.number().finite().min(0).max(1)).max(256).optional(),
+  labels: z.array(z.object({ text: words(24), ...v3 })).max(4).optional(),
+  color,
+  card_size,
+}).superRefine((m, ctx) => {
+  const atoms = m.atoms?.length ?? 0;
+  if (m.shape === "molecule" && atoms < 2) ctx.addIssue({ code: "custom", path: ["atoms"], message: "a molecule needs at least 2 atoms" });
+  m.bonds?.forEach((b, i) => {
+    if (b.a > atoms || b.b > atoms || b.a === b.b)
+      ctx.addIssue({ code: "custom", path: ["bonds", i], message: `bond ${b.a}-${b.b}: a and b are two different atom numbers, 1 to ${atoms}` });
+  });
+  if (m.shape === "points" && (m.points?.length ?? 0) < 3) ctx.addIssue({ code: "custom", path: ["points"], message: "points needs at least 3 points" });
+  if (m.shape === "heightmap") {
+    const n = m.heights?.length ?? 0;
+    const side = Math.round(Math.sqrt(n));
+    if (n < 4 || side * side !== n) ctx.addIssue({ code: "custom", path: ["heights"], message: "heights is a square grid, row by row: 4, 9, 16 ... 256 values from 0 to 1" });
+  }
+});
+
 // ---- screen marks (slice 4): on real UI, placed by code, never by the model ---------
 //
 // The model names a target in `mark_screen` (words or a description); the core finds it
@@ -118,7 +148,7 @@ const NEEDS_SPOT: Record<string, string[]> = {
 };
 
 const mark = z
-  .discriminatedUnion("kind", [box, text, arrow, line, circle, underline, check, cross, step, diagram, image, timeline, list, flow, bars, table, spot])
+  .discriminatedUnion("kind", [box, text, arrow, line, circle, underline, check, cross, step, diagram, image, model, timeline, list, flow, bars, table, spot])
   .superRefine((m, ctx) => {
     // A free mark needs a place: a card to sit on, or board hints.
     const r = m as Record<string, unknown>;

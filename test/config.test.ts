@@ -30,6 +30,7 @@ describe("config file", () => {
       defaultHelper: "codex",
       announceScheduled: true,
       mcpServers: {},
+      drawHotkey: "ctrl+option",
     });
   });
 
@@ -55,6 +56,7 @@ describe("config file", () => {
       defaultHelper: "codex",
       announceScheduled: true,
       mcpServers: {},
+      drawHotkey: "ctrl+option",
     });
   });
 

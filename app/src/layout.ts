@@ -232,7 +232,7 @@ function arrowPrims(from: Pt, to: Pt, rand: Rand, width = 3): Prim[] {
 
 // ---- card kinds ---------------------------------------------------------------------
 
-type CardMark = Extract<Mark, { kind: "timeline" | "list" | "flow" | "bars" | "table" | "diagram" | "image" }>;
+type CardMark = Extract<Mark, { kind: "timeline" | "list" | "flow" | "bars" | "table" | "diagram" | "image" | "model" }>;
 const { bar: BAR, pad: PAD } = CHROME;
 
 /** One card's content, laid out from its data. Card-local px. */
@@ -414,6 +414,12 @@ export function layoutCard(m: CardMark, charW = CHAR_W, displayW = DISPLAY_W, di
       const h = top + bh + PAD;
       const body = { x: PAD, y: top, w: bw, h: bh };
       return { ...base, w, h, prims: [], items: [body], body };
+    }
+
+    case "model": {
+      // A turning 3D model in dots (card-view draws it): one fixed body, about the reference's 260 x 210 card.
+      const body = { x: PAD, y: top, w: 240, h: 170 };
+      return { ...base, w: body.w + PAD * 2, h: top + body.h + PAD, prims: [], items: [body], body };
     }
 
     case "image": {

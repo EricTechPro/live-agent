@@ -467,6 +467,11 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
         const titled = s.start <= now && stepAt(units.get(card.id)!.plan, s, now).index >= 3;
         bodies.push({ id: card.id, source: mark.source, title: mark.title, box: toScreen(card.body, card), shown: titled });
       }
+      if (mark?.kind === "model" && card.body) {
+        const titled = s.start <= now && stepAt(units.get(card.id)!.plan, s, now).index >= 3;
+        const { shape, atoms, bonds, points, heights, labels } = mark;
+        bodies.push({ id: card.id, source: "", model: { shape, atoms, bonds, points, heights, labels }, title: mark.title, box: toScreen(card.body, card), shown: titled });
+      }
       if (mark?.kind === "image" && card.body) {
         const titled = s.start <= now && stepAt(units.get(card.id)!.plan, s, now).index >= 3;
         bodies.push({ id: card.id, source: "", image: { src: mark.src }, title: mark.title, box: toScreen(card.body, card), shown: titled });
