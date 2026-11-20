@@ -109,16 +109,20 @@ export function mountCards(board: HTMLElement) {
           card = { el, source: "", render: 0 };
           cards.set(item.id, card);
         }
-        if (card.source !== item.source) {
-          card.source = item.source;
-          void render(card, item.source);
+        // An image card: its picture (a data: URL from the core), or a loading note until it lands.
+        const source = item.image ? `image:${item.image.src ?? ""}` : item.source;
+        if (card.source !== source) {
+          card.source = source;
+          if (item.image) showImage(card, item.image.src, item.title);
+          else void render(card, item.source);
         }
         const { el } = card;
         el.style.left = `${item.box.x}px`;
         el.style.top = `${item.box.y}px`;
         el.style.width = `${item.box.w}px`;
         el.style.height = `${item.box.h}px`;
-        el.setAttribute("aria-label", item.title ? `Diagram: ${item.title}` : "Diagram");
+        const what = item.image ? "Picture" : "Diagram";
+        el.setAttribute("aria-label", item.title ? `${what}: ${item.title}` : what);
         // The diagram fades in once its card has opened and titled.
         el.dataset.shown = String(item.shown);
       }
@@ -133,9 +137,34 @@ export function mountCards(board: HTMLElement) {
   };
 }
 
+/** An image card's picture: fills the body at its own shape; no src yet = loading. */
+function showImage(card: Card, src: string | undefined, title?: string) {
+  card.render = ++renders;
+  if (!src) {
+    card.el.dataset.state = "drawing";
+    card.el.replaceChildren(Object.assign(document.createElement("p"), { className: "sketch-card-note", textContent: "Getting the picture…" }));
+    return;
+  }
+  card.el.dataset.state = "ok";
+  card.el.replaceChildren(Object.assign(document.createElement("img"), { className: "sketch-card-img", src, alt: title ?? "", draggable: false }));
+}
+
+/** A picture's natural size in px, once it decodes; undefined if it does not. */
+export function imageSize(src: string): Promise<{ w: number; h: number } | undefined> {
+  const img = new Image();
+  img.src = src;
+  return img.decode().then(
+    () => (img.naturalWidth && img.naturalHeight ? { w: img.naturalWidth, h: img.naturalHeight } : undefined),
+    () => undefined,
+  );
+}
+
 export interface DiagramBody {
   id: string;
+  /** Mermaid source (diagram cards); empty for image cards. */
   source: string;
+  /** Set for an image card. */
+  image?: { src?: string };
   title?: string;
   /** Screen px. */
   box: { x: number; y: number; w: number; h: number };

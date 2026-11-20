@@ -330,3 +330,15 @@ test("many random overlapping calls: no overlap, ever (fuzz)", () => {
     for (const c of out.cards) expect(toScreen({ x: 0, y: 0, w: c.w, h: c.h }, c)).toEqual(c.rect);
   }
 });
+
+test("an image card fits its picture's shape in 480 x 340, with the caption and credit under it", () => {
+  const mark = { kind: "image", id: "p1", title: "Animal cell", caption: "Unlabeled Animal Cell", credit: "Wikimedia Commons · Conrad 7 · CC0" } as never;
+  const loading = layoutCard(mark);
+  expect(loading.body).toMatchObject({ w: 453, h: 340 }); // 4:3 until the picture is measured
+  const wide = layoutCard(mark, undefined, undefined, { w: 2000, h: 1000 });
+  expect(wide.body).toMatchObject({ w: 480, h: 240 });
+  const words = wide.prims.map((o) => o.prim).filter((p) => p.t === "text");
+  expect(words.map((p) => (p as { lines: string[] }).lines.join(" "))).toEqual(["Unlabeled Animal Cell", "Wikimedia Commons · Conrad 7 · CC0"]);
+  for (const p of words) expect((p as { box: Rect }).box.y).toBeGreaterThanOrEqual(wide.body!.y + wide.body!.h);
+  expect(wide.h).toBeGreaterThan(wide.body!.y + wide.body!.h);
+});

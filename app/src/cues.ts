@@ -36,6 +36,8 @@ export function actionLabel(name: string, args: Record<string, unknown>, lang: L
     }
     case "draw":
       return zh ? "在画…" : "Drawing…";
+    case "show_image":
+      return args.mode === "generate" ? (zh ? "在画图…" : "Making a picture…") : zh ? "在找图片…" : "Finding a picture…";
     case "edit_canvas":
       return zh ? "在改图…" : "Changing the drawing…";
     case "cancel_job":

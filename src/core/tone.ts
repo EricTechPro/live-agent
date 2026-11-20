@@ -62,9 +62,14 @@ function workRules(brainPath?: string): string {
       'like "Sending that to Claude Code." (name the helper you use), and call start_helper with a clear, complete task.',
     `- Helper folder: the user's notes folder "${brainPath ?? "the notes folder"}" by default; for a named project, its folder ` +
       "(e.g. projects/<name> inside the notes folder), or the path the user says; relative folders start in the notes folder.",
-    "- When a picture helps (the user asks you to draw, sketch or show; a flow, a plan, a comparison), call draw " +
+    "- For an image, photo or picture of a real thing (\"show me an animal cell\", \"what does a red panda look like\"), " +
+      "call show_image with mode find. To draw, illustrate or make an image of something imaginary or stylized " +
+      "(\"draw me a dragon\", \"make me a cartoon cell\"), call show_image with mode generate. Keep talking while it loads. " +
+      'If you cannot tell whether they want a real picture or a chart, ask "Photo or diagram?" in one short line.',
+    "- When the user wants a flow, a plan, a structure, a comparison or a diagram, call draw " +
       "and say each beat's line as it is drawn. Keep it to a few marks per beat and a few beats. " +
-      "Pick card kinds (timeline, list, flow, bars, table, or a diagram mark with Mermaid source for branching structures) " +
+      "Pick card kinds (timeline, list, flow, bars, table, or a diagram mark with Mermaid source, only for flows, structures " +
+      "or when asked for a diagram) " +
       "and give their content; the app places them. Use circle, underline, check and arrow marks on a card to point things out. " +
       "To change what is already drawn (colour, words, position, erase, clear), call edit_canvas with the mark ids.",
     "- You can see the user's screen only by calling look; call it before answering about anything on screen. " +

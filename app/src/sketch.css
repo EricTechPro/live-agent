@@ -76,6 +76,8 @@
 .sketch-card svg .node rect, .sketch-card svg .node polygon, .sketch-card svg .node circle { stroke-width: 1.5px !important; filter: drop-shadow(0 0 4px rgba(120, 255, 226, .45)); }
 .sketch-card svg .flowchart-link, .sketch-card svg .edgePath path { stroke-width: 2.5px !important; filter: drop-shadow(0 0 3px rgba(120, 255, 226, .6)); }
 .sketch-card svg .nodeLabel, .sketch-card svg .edgeLabel { font-family: "Martian Mono", ui-monospace, monospace !important; }
+/* Image cards: the picture fits the body at its own shape. */
+.sketch-card-img { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; user-select: none; }
 .sketch-card-note, .sketch-card-error { margin: 0; font: 400 11px/1.45 "Martian Mono", ui-monospace, monospace; }
 .sketch-card-note { color: #8ab8b0; }
 .sketch-card-error { color: #ff8a7a; }

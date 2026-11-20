@@ -86,6 +86,19 @@ const diagram = z.object({
   card_size,
 });
 
+// A picture (show_image): a found photo or a generated image, as a data: URL from the core
+// (the window's CSP takes only data: images). No src yet: the card shows it is loading.
+// Made by show_image only, never by draw.
+const IMAGE_SRC = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
+const image = z.object({
+  kind: z.literal("image"), id, title,
+  src: z.string().max(6_000_000).regex(IMAGE_SRC, "src is a png, jpeg or webp data: URL").optional(),
+  caption: words(120).optional(),
+  credit: words(200).optional(),
+  color,
+  card_size,
+});
+
 // ---- screen marks (slice 4): on real UI, placed by code, never by the model ---------
 //
 // The model names a target in `mark_screen` (words or a description); the core finds it
@@ -105,7 +118,7 @@ const NEEDS_SPOT: Record<string, string[]> = {
 };
 
 const mark = z
-  .discriminatedUnion("kind", [box, text, arrow, line, circle, underline, check, cross, step, diagram, timeline, list, flow, bars, table, spot])
+  .discriminatedUnion("kind", [box, text, arrow, line, circle, underline, check, cross, step, diagram, image, timeline, list, flow, bars, table, spot])
   .superRefine((m, ctx) => {
     // A free mark needs a place: a card to sit on, or board hints.
     const r = m as Record<string, unknown>;
@@ -121,7 +134,8 @@ const mark = z
   });
 
 export const INK_KINDS = ["box", "text", "arrow", "line", "circle", "underline", "check", "cross", "step"] as const;
-export const MARK_KINDS = [...CARD_KINDS, ...INK_KINDS] as const;
+/** What draw may make: every card but image (show_image makes those), and ink. */
+export const MARK_KINDS = [...CARD_KINDS.filter((k) => k !== "image"), ...INK_KINDS];
 export const MAX_BEATS = 8;
 export const MAX_MARKS_PER_BEAT = 12;
 

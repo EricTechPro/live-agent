@@ -45,6 +45,7 @@ import { startScheduler } from "../workflows/scheduler.ts";
 import { newTurn, turnIsOver, type Turn } from "./turn.ts";
 import type { Eyes } from "../screen/eyes.ts";
 import type { Hands } from "../screen/hands.ts";
+import type { Images } from "../images.ts";
 import { createScreen, type ReleaseInput, type Screen } from "../screen/service.ts";
 import { createFollow, type Follow } from "../screen/follow.ts";
 import { createLocator, type Ground } from "../screen/locator.ts";
@@ -108,6 +109,8 @@ export interface SessionOptions {
    * apps through them. Unset: those tools say computer control is not available here.
    */
   hands?: Hands;
+  /** Pictures for show_image (src/images.ts): find a photo, or make one. Unset: no pictures. */
+  images?: Images;
   /**
    * Run scheduled workflows (src/workflows/scheduler.ts) from `workDir`, Jett's home, while
    * the session is open. Unset: no scheduler (tests). The app sets `{}`.
@@ -347,6 +350,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         pin: (ids, front) => follow?.pin(ids, front),
       },
       hands: options.hands,
+      images: options.images,
     }),
     closing: () => closed,
     canvas,

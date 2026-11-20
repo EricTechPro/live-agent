@@ -14,7 +14,7 @@
 // "Clear all · N" chip, the caption bar and Mermaid bodies (card-view.ts).
 // There is no board pan or zoom: each card zooms on its own.
 // Idea from Roamies (AGPL): idea only, our own code.
-import { mountCards, type DiagramBody } from "./card-view.ts";
+import { imageSize, mountCards, type DiagramBody } from "./card-view.ts";
 import type { CoreClient } from "./core-client.ts";
 import { BOTTOM_FREE, CHROME, layoutScene, MARGIN, toScreen, ZOOM, type Layout, type Owned, type PlacedCard, type Prim, type Rect, type Tone } from "./layout.ts";
 import { easeInOut, handDrawn, stepAt, typed, unitPlan, type UnitPlan } from "./motion.ts";
@@ -280,7 +280,14 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
     // Diagram cards: measure the rendered Mermaid, then lay the card out to fit it.
     const drawnMarks = event.type === "canvas.beat" ? event.marks : event.type === "canvas.edit" ? [event.mark] : [];
     for (const m of drawnMarks)
-      if (m.kind === "diagram")
+      if (m.kind === "image" && m.src)
+        // Image cards take their picture's shape once it decodes (same map: natural sizes by card id).
+        void imageSize(m.src).then((size) => {
+          if (!size) return;
+          diagrams.set(m.id, size);
+          relayout();
+        });
+      else if (m.kind === "diagram")
         void cardsLayer.sizeOf(m.source).then((size) => {
           if (!size) return;
           diagrams.set(m.id, size);
@@ -459,6 +466,10 @@ export function mountSketch(core: Pick<CoreClient, "onEvent">, host: HTMLElement
       if (mark?.kind === "diagram" && card.body) {
         const titled = s.start <= now && stepAt(units.get(card.id)!.plan, s, now).index >= 3;
         bodies.push({ id: card.id, source: mark.source, title: mark.title, box: toScreen(card.body, card), shown: titled });
+      }
+      if (mark?.kind === "image" && card.body) {
+        const titled = s.start <= now && stepAt(units.get(card.id)!.plan, s, now).index >= 3;
+        bodies.push({ id: card.id, source: "", image: { src: mark.src }, title: mark.title, box: toScreen(card.body, card), shown: titled });
       }
     }
     for (const [id, cu] of cardUis) {

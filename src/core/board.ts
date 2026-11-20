@@ -32,6 +32,12 @@ export interface Board {
   draw(callId: string, beats: Beat[]): void;
   /** Edits first, then erases. Throws (and changes nothing) on an unknown id or a bad edit. */
   change(callId: string, change: CanvasChange): { edited: string[]; erased: string[] };
+  /**
+   * Swap a mark on the canvas for a new one (same id): a `canvas.edit`. A picture that
+   * finished loading fills its card this way. False (and nothing emitted) when the id is
+   * gone: erased, or a new chat cleared the board while it loaded.
+   */
+  replace(callId: string, mark: Mark): boolean;
   /** A chunk of the model's spoken reply (its output transcript). */
   heard(text: string): void;
   interrupted(): void;
@@ -118,6 +124,13 @@ export function createBoard(emit: (event: AgentEvent) => void): Board {
       for (const id of erased) marks.delete(id);
       if (erased.length || all) emit({ type: "canvas.erase", id: callId, ids: erased, all });
       return { edited: changed.map((c) => c.mark.id), erased };
+    },
+
+    replace(callId, mark) {
+      if (!marks.has(mark.id)) return false;
+      marks.set(mark.id, mark);
+      emit({ type: "canvas.edit", id: callId, change: {}, mark });
+      return true;
     },
 
     heard(text) {

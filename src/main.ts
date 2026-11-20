@@ -28,6 +28,7 @@ import pkg from "../package.json" with { type: "json" };
 import { findEyesBin, helperEyes } from "./screen/eyes.ts";
 import { helperHands } from "./screen/hands.ts";
 import { geminiGround } from "./screen/grounding.ts";
+import { createImages } from "./images.ts";
 
 // The installed app sets LIVE_AGENT_HOME (~/Desktop/live-agent): work from there and
 // read the key from its .env, because opened from Finder there is no terminal (src/home.ts).
@@ -94,6 +95,8 @@ const startOnce = () => startApp({
   hands,
   // Finding things on screen, last tier: one Gemini Flash call on a fresh screenshot (key read when it runs).
   ground: (shot, describe) => geminiGround({ apiKey: geminiApiKey() ?? "" })(shot, describe),
+  // show_image: photos from Wikimedia Commons, pictures from a Gemini image model (key read when it runs).
+  images: createImages({ apiKey: () => geminiApiKey() }),
   // Scheduled workflows in <home>/.agents/workflows run while the app is open (src/workflows).
   schedule: {},
 });

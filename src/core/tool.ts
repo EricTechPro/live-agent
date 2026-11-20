@@ -16,7 +16,8 @@
 import type { BrainFolders, McpServer } from "../config/index.ts";
 import type { HelperPaths } from "../helpers/cli-job.ts";
 import type { CanvasChange } from "./board.ts";
-import type { Beat } from "./canvas.ts";
+import type { Beat, Mark } from "./canvas.ts";
+import type { Images } from "../images.ts";
 import type { Jobs } from "./jobs.ts";
 import type { FrontWindow } from "../screen/eyes.ts";
 import type { Hands } from "../screen/hands.ts";
@@ -46,7 +47,11 @@ export interface ToolContext {
     ids(): string[];
     draw(beats: Beat[]): void;
     change(change: CanvasChange): { edited: string[]; erased: string[] };
+    /** Swap a mark for a new one with the same id (`canvas.edit`). False when it is gone. */
+    replace(mark: Mark): boolean;
   };
+  /** Pictures for show_image (src/images.ts). Missing when the session has none (tests). */
+  images?: Images;
   /**
    * The orchestrator (src/core/jobs.ts). A job submitted from a tool call is
    * tied to that call: the core tells the model when the job ends.

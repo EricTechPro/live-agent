@@ -232,7 +232,7 @@ function arrowPrims(from: Pt, to: Pt, rand: Rand, width = 3): Prim[] {
 
 // ---- card kinds ---------------------------------------------------------------------
 
-type CardMark = Extract<Mark, { kind: "timeline" | "list" | "flow" | "bars" | "table" | "diagram" }>;
+type CardMark = Extract<Mark, { kind: "timeline" | "list" | "flow" | "bars" | "table" | "diagram" | "image" }>;
 const { bar: BAR, pad: PAD } = CHROME;
 
 /** One card's content, laid out from its data. Card-local px. */
@@ -414,6 +414,25 @@ export function layoutCard(m: CardMark, charW = CHAR_W, displayW = DISPLAY_W, di
       const h = top + bh + PAD;
       const body = { x: PAD, y: top, w: bw, h: bh };
       return { ...base, w, h, prims: [], items: [body], body };
+    }
+
+    case "image": {
+      // The picture fits in at most 480 x 340 at its own shape (card-view measures it; 4:3
+      // until then), then the caption and the credit line under it.
+      const natural = diagram ?? { w: 4, h: 3 };
+      const k = Math.min(480 / natural.w, 340 / natural.h);
+      const bw = Math.max(200, Math.round(natural.w * k));
+      const bh = Math.max(80, Math.round(natural.h * k));
+      const w = bw + PAD * 2;
+      const body = { x: PAD, y: top, w: bw, h: bh };
+      let y = top + bh + 8;
+      for (const [words, size] of [[m.caption, 11], [m.credit, 10]] as const) {
+        if (!words) continue;
+        const t = textAt(words, PAD, y, bw, charW, { size, tone: "dim", maxLines: 2 });
+        prims.push(t);
+        y += t.box.h + 2;
+      }
+      return { ...base, w, h: (prims.length ? y - 2 : top + bh) + PAD, prims: own(m.id, prims), items: [body], body };
     }
   }
 }

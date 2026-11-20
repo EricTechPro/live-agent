@@ -149,6 +149,7 @@ export function createToolCalls(deps: ToolCallsDeps): ToolCalls {
         ids: () => deps.canvas.ids(),
         draw: (beats) => deps.canvas.draw(call.id, beats),
         change: (change) => deps.canvas.change(call.id, change),
+        replace: (mark) => deps.canvas.replace(call.id, mark),
       },
       jobs: {
         submit(spec) {
