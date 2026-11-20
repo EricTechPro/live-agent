@@ -6,6 +6,7 @@
 // never touches wiki/ or projects/), so a per-tool override
 // `"remember": "allow"` is a safe choice for Ask me users who want no question.
 import { saveRawNote } from "../src/brain/index.ts";
+import { addFact, listFacts } from "../src/brain/memory.ts";
 import { defineTool } from "../src/core/tool.ts";
 
 export default defineTool<{ text: string; title?: string }>({
@@ -23,9 +24,12 @@ export default defineTool<{ text: string; title?: string }>({
     },
     required: ["text"],
   },
-  async run({ text, title }, { brainPath, brainFolders, brainWrote }) {
+  async run({ text, title }, { brainPath, brainFolders, brainWrote, emit }) {
     const path = await saveRawNote(brainPath, { title: title?.trim() || "Remember", text }, brainFolders);
     brainWrote(path);
+    // One line in "What I remember" (the Brain tab), so it can be forgotten later.
+    await addFact(brainPath, { text, path });
+    emit?.({ type: "memory", facts: await listFacts(brainPath) });
     return { saved: path };
   },
 });

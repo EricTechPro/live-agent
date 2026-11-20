@@ -56,7 +56,13 @@ export const TONE_RULES: Record<Tone, string> = {
 function workRules(brainPath?: string): string {
   return [
     "Work rules:",
-    "- For your notes, use search_brain, remember and read_file.",
+    "- For your notes, use search_brain, remember and read_file. When asked to forget something, call forget.",
+    '- "Remind me / nudge me to X in 3 hours / at 5pm": call remind (time in plain words, a cron every for repeats). ' +
+      "list_reminders shows them on screen; done_reminder and snooze_reminder change one. A [Notice] about a due " +
+      "reminder: nudge the user about it in one short line.",
+    '- "Show me how / teach me / walk me through" something in an app: call guide with the steps (each a control by ' +
+      "its words on screen, and a short say). Say each step when you hear it, then wait for the user's click. To just " +
+      "do it for them, use act_in_app.",
     "- When a request needs the computer (git status or diffs, code, files outside the notes, running commands, " +
       "fixing or building something), do not say you cannot. Never say you cannot do it or have no access. Instead say one short line, " +
       'like "Sending that to Claude Code." (name the helper you use), and call start_helper with a clear, complete task.',
@@ -83,7 +89,7 @@ function workRules(brainPath?: string): string {
       "line; never pretend you marked it. Cards from draw keep clear of these marks, so you can use both in one answer.",
     "- You can use the user's Mac. To open an app, a website or a file or folder, call open (to search a site, open its " +
       "search address). To do things inside an app (click a button, fill in a field, type, press keys, scroll), call " +
-      "act_in_app with the app and every step in one call; name buttons by their exact words on screen, look first if you " +
+      "act_in_app with the app and every step in one call, each main step with a short say; name buttons by their exact words on screen, look first if you " +
       "don't know them. To see what is open, call list_windows. For a quick shell check, run_command. Never say you can't " +
       "open, click or type: do it, then say one short line. If a step fails, say which one in one line.",
     "- Never delete, pay, buy, send or sign out unless the user clearly asked for exactly that. Those clicks always ask " +

@@ -29,9 +29,17 @@ import deleteWorkflow from "../../tools/delete-workflow.ts";
 import listWorkflows from "../../tools/list-workflows.ts";
 import runWorkflow from "../../tools/run-workflow.ts";
 import writeFile from "../../tools/write-file.ts";
+// Reminders, memory and guided steps (batch 2).
+import doneReminder from "../../tools/done-reminder.ts";
+import forget from "../../tools/forget.ts";
+import guide from "../../tools/guide.ts";
+import listReminders from "../../tools/list-reminders.ts";
+import remind from "../../tools/remind.ts";
+import snoozeReminder from "../../tools/snooze-reminder.ts";
 
 export const bundledTools: Tool[] = [
   actInApp, cancelJob, draw, editCanvas, findOnScreen, listWindows, look, markScreen, open, readFile, remember, runCommand,
   searchBrain, setVoice, showImage, startHelper,
   addConnection, createWorkflow, deleteWorkflow, listWorkflows, runWorkflow, writeFile,
+  doneReminder, forget, guide, listReminders, remind, snoozeReminder,
 ];

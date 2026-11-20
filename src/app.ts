@@ -36,6 +36,11 @@
 //   POST /chat/new -> { ok }: end this chat (note + tidy job) and start the next
 //   POST /pause    -> { paused } in and out: Jett stops speaking and hearing, the chat stays
 //   POST /reply/stop -> { ok }: Esc in the window, stop the reply being spoken (an `interrupted`)
+//   POST /duck     -> { on } in, { ok }: push to talk held or let go; other sounds go quiet (config duckWhileTalking)
+//   GET  /reminders -> { items }: the open reminders, soonest first
+//   POST /reminders/done -> { id } in, { items } out: tick one off on the Reminders card
+//   GET  /memory   -> { facts }: what Jett remembers (the Brain tab)
+//   POST /memory/forget -> { id } in, { facts } out: forget one (its raw note goes too)
 //   POST /reconnect -> { ok }: no network (a `connection` reconnecting event): try again now
 //   GET  /brain/tree -> the brain's three parts as a file tree (markdown only, junk folders skipped)
 //   GET  /brain/file?path=wiki/x.md -> { path, text }: one note, read only. 400 for anything
@@ -236,6 +241,33 @@ export async function startApp(options: AppOptions): Promise<App> {
       "POST /reconnect"({ session }) {
         session.reconnectNow();
         return json({ ok: true });
+      },
+
+      async "POST /duck"({ session }, req) {
+        const { on } = await readBody(req);
+        if (typeof on !== "boolean") return json({ error: "send { on: true | false }" }, 400);
+        await session.duck(on);
+        return json({ ok: true });
+      },
+
+      async "GET /reminders"({ session }) {
+        return json({ items: await session.reminders.list() });
+      },
+
+      async "POST /reminders/done"({ session }, req) {
+        const { id } = await readBody(req);
+        if (typeof id !== "string" || !id) return json({ error: "send { id }" }, 400);
+        return session.reminders.done(id).then((items) => json({ items }), (err) => json({ error: errorMessage(err) }, 404));
+      },
+
+      async "GET /memory"({ session }) {
+        return json({ facts: await session.memory.list() });
+      },
+
+      async "POST /memory/forget"({ session }, req) {
+        const { id } = await readBody(req);
+        if (typeof id !== "string" || !id) return json({ error: "send { id }" }, 400);
+        return session.memory.forget(id).then((facts) => json({ facts }), (err) => json({ error: errorMessage(err) }, 404));
       },
 
       // Esc in the window (ticket 37): stop the reply being spoken; the call stays on.

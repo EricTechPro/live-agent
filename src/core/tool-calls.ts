@@ -56,6 +56,8 @@ export interface ToolCalls {
   forgetConnection(reason: string): void;
   /** Calls waiting for the user's yes. */
   approvals: Approvals;
+  /** Esc: abort every running call's signal (a long act_in_app or guide stops between steps). */
+  abortRunning(): void;
 }
 
 export function createToolCalls(deps: ToolCallsDeps): ToolCalls {
@@ -64,6 +66,8 @@ export function createToolCalls(deps: ToolCallsDeps): ToolCalls {
   const live = new Map<string, ToolCall>();
   // Calls the model took back: their late answers are not shown or sent.
   const cancelled = new Set<string>();
+  // Running calls' abort switches (ToolContext.signal), by call id.
+  const aborts = new Map<string, AbortController>();
 
   // A job tied to the call that started it. Why wait for `answered`: a job can
   // end before the tool's first answer has gone out, and the model must hear
@@ -136,8 +140,18 @@ export function createToolCalls(deps: ToolCallsDeps): ToolCalls {
     const owner = deps.turn();
     if (owner) owner.running++;
     const watch: Watch = { call, open: 0, answered: false, ended: [] };
+    const abort = new AbortController();
+    aborts.set(call.id, abort);
     const context: ToolContext = {
       ...deps.context(),
+      signal: abort.signal,
+      emit(event) {
+        deps.emit(event.type === "act.step" ? { ...event, id: call.id } : event);
+      },
+      // An early answer: more follow (willContinue), so the model speaks it and waits for the rest.
+      tell(output) {
+        respond(call, "ok", { output }, { willContinue: true });
+      },
       useNotes(paths) {
         for (const path of paths) deps.turn()?.notes.add(path);
       },
@@ -177,6 +191,7 @@ export function createToolCalls(deps: ToolCallsDeps): ToolCalls {
         (err: unknown) => respond(call, "error", { error: errorMessage(err) }),
       )
       .finally(() => {
+        aborts.delete(call.id);
         if (!owner || owner !== deps.turn()) return;
         owner.running--;
         deps.turnMayEnd();
@@ -185,6 +200,10 @@ export function createToolCalls(deps: ToolCallsDeps): ToolCalls {
 
   return {
     approvals,
+
+    abortRunning() {
+      for (const abort of aborts.values()) abort.abort();
+    },
 
     onCall(call) {
       live.set(call.id, call);
@@ -241,6 +260,7 @@ export function createToolCalls(deps: ToolCallsDeps): ToolCalls {
         const call = live.get(id);
         if (!call) continue;
         approvals.drop(id);
+        aborts.get(id)?.abort();
         live.delete(id);
         cancelled.add(id);
         deps.emit({ type: "tool.result", id, name: call.name, status: "cancelled" });

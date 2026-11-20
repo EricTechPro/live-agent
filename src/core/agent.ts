@@ -42,6 +42,9 @@ import { createToolCalls } from "./tool-calls.ts";
 import { systemInstruction } from "./tone.ts";
 import { catalog, workflowJob } from "../workflows/index.ts";
 import { startScheduler } from "../workflows/scheduler.ts";
+import { doneReminder, dueReminders, openReminders, type Reminder } from "../reminders.ts";
+import { forgetFact, listFacts, type Fact } from "../brain/memory.ts";
+import type { Duck } from "../duck.ts";
 import { newTurn, turnIsOver, type Turn } from "./turn.ts";
 import type { Eyes } from "../screen/eyes.ts";
 import type { Hands } from "../screen/hands.ts";
@@ -116,6 +119,14 @@ export interface SessionOptions {
    * the session is open. Unset: no scheduler (tests). The app sets `{}`.
    */
   schedule?: { tickMs?: number; now?: () => Date };
+  /** Turns the Mac down while push to talk is held (src/duck.ts, config `duckWhileTalking`). Unset: never. */
+  duck?: Duck;
+}
+
+/** The model's note about reminders that are due now: say them, briefly. */
+export function reminderNotice(due: { text: string }[]): string {
+  const what = due.map((r) => `"${r.text}"`).join(", ");
+  return `[Notice, not from the user] Reminder due now: ${what}. Nudge the user about it in one short spoken sentence.`;
 }
 
 /** What `onAudio` hears: a chunk of the model's voice, or "drop what you queued" (interrupted). */
@@ -173,6 +184,12 @@ export interface AgentSession {
    * stream. The call and the mic stay on.
    */
   stopReply(): void;
+  /** Push to talk held (true) or let go: other sounds on the Mac go quiet while held (config `duckWhileTalking`). */
+  duck(on: boolean): Promise<void>;
+  /** The Reminders card: the open ones, and ticking one off (emits `reminders`). */
+  reminders: { list(): Promise<Reminder[]>; done(id: string): Promise<Reminder[]> };
+  /** The Brain tab's Memory list, and its Forget (emits `memory`). */
+  memory: { list(): Promise<Fact[]>; forget(id: string): Promise<Fact[]> };
   /** No network (ticket 40): try to reach the model now instead of after the backoff (the window's Retry). */
   reconnectNow(): void;
   /**
@@ -348,6 +365,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         look: () => screen.look(),
         find: (target) => locate!(target),
         pin: (ids, front) => follow?.pin(ids, front),
+        ...(options.eyes?.watch ? { watch: options.eyes.watch.bind(options.eyes) } : {}),
       },
       hands: options.hands,
       images: options.images,
@@ -382,15 +400,33 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
           }
           scheduled.add(id);
         },
+        onMinute: (at) => void fireReminders(at),
       })
     : undefined;
+
+  // Reminders due now (src/reminders.ts): the card opens, and the model nudges out loud,
+  // even before anything was said in this chat.
+  let nudgeWaiting = false;
+  async function fireReminders(at: Date) {
+    try {
+      const due = await dueReminders(brainPath, at);
+      if (!due.length || closed) return;
+      emit({ type: "reminders", items: await openReminders(brainPath), show: true, due: due.map((r) => r.id) });
+      notices.push(reminderNotice(due));
+      nudgeWaiting = true;
+      flushNotices();
+    } catch (err) {
+      emit({ type: "error", message: `reminders: ${errorMessage(err)}` });
+    }
+  }
 
   // A scheduled job that ended, told to the model (config `announceScheduled`) so it can
   // mention it. Why not a tool result like start_helper's: no call of the model's started
   // it. Low priority: a short text turn of its own, only while a chat is going and the
   // model is idle (no turn in flight); otherwise it waits for the next quiet moment.
   function flushNotices() {
-    if (!notices.length || closed || paused || offline || switching || summary || turn || !chat.length) return;
+    if (!notices.length || closed || paused || offline || switching || summary || turn || (!chat.length && !nudgeWaiting)) return;
+    nudgeWaiting = false;
     const notice = startTurn();
     notice.awaiting = 1;
     try {
@@ -693,6 +729,28 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
       emit({ type: "paused", paused: on });
     },
     paused: () => paused,
+    async duck(on) {
+      if (!options.duck) return;
+      await options.duck.set(on && config.duckWhileTalking);
+    },
+    reminders: {
+      list: () => openReminders(brainPath),
+      async done(id) {
+        await doneReminder(brainPath, id);
+        const items = await openReminders(brainPath);
+        emit({ type: "reminders", items });
+        return items;
+      },
+    },
+    memory: {
+      list: () => listFacts(brainPath),
+      async forget(id) {
+        await forgetFact(brainPath, id);
+        const facts = await listFacts(brainPath);
+        emit({ type: "memory", facts });
+        return facts;
+      },
+    },
     reconnectNow() {
       modelSession.retryNow?.();
     },
@@ -706,6 +764,8 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     },
     stopReply() {
       silenced = true;
+      // Esc also stops a long act_in_app or guide between steps.
+      toolCalls.abortRunning();
       playAudio({ type: "clear" });
       emit({ type: "interrupted" });
       canvas.interrupted();
@@ -748,6 +808,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     // cancels it: it runs on with no model session (the tidy model is its own
     // call) and a failure is just a "failed" job, never an error for the next chat.
     async close() {
+      await options.duck?.set(false);
       follow?.stop();
       scheduler?.stop();
       closed = true;

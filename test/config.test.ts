@@ -29,6 +29,7 @@ describe("config file", () => {
       brainFolders: { raw: "raw", wiki: "wiki", projects: "projects" },
       defaultHelper: "codex",
       announceScheduled: true,
+      duckWhileTalking: true,
       mcpServers: {},
     });
   });
@@ -54,6 +55,7 @@ describe("config file", () => {
       brainFolders: { raw: "raw", wiki: "wiki", projects: "projects" },
       defaultHelper: "codex",
       announceScheduled: true,
+      duckWhileTalking: true,
       mcpServers: {},
     });
   });
