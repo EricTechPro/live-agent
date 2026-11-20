@@ -480,18 +480,3 @@ button.job-summary:focus-visible { outline: 2px solid var(--ink); outline-offset
 
 /* The popover covers the cues; its Chat view shows the same words. */
 .overlay[data-layer="center"] .cues { display: none; }
-
-/* Ticket 43: the ghost orb on a circled spot, with the answer in a bubble beside it. */
-.ink-ghost { position: fixed; inset: 0; pointer-events: none; z-index: 2147482999; opacity: 0; transition: opacity .3s var(--ease, ease-out); }
-.ink-ghost[data-on="true"] { opacity: 1; }
-.ink-ghost[hidden] { display: none; }
-.ink-ghost-orb { position: absolute; }
-.ink-ghost-bubble {
-  position: absolute; margin: 0; padding: 7px 11px; box-sizing: border-box; min-height: 30px;
-  background: rgba(4, 22, 21, .92); border: 2px solid var(--led, #78ffe2); color: #e6fffa;
-  font: 400 13px/1.35 var(--mono, ui-monospace, monospace);
-  clip-path: polygon(0 3px, 3px 3px, 3px 0, calc(100% - 3px) 0, calc(100% - 3px) 3px, 100% 3px, 100% calc(100% - 3px), calc(100% - 3px) calc(100% - 3px), calc(100% - 3px) 100%, 3px 100%, 3px calc(100% - 3px), 0 calc(100% - 3px));
-  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
-}
-.ink-ghost-bubble:empty { min-width: 40px; }
-@media (prefers-reduced-motion: reduce) { .ink-ghost { transition: none; } }

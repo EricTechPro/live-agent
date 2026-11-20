@@ -1,7 +1,7 @@
 // Discoverable shortcuts (ticket 38): the Shortcuts card, and the orb's quiet look.
 import { expect, test } from "bun:test";
 import { callButton, showsWords } from "../app/src/call-state.ts";
-import { isNewChatKey, SHORTCUTS } from "../app/src/shortcuts.ts";
+import { isNewChatKey, SHORTCUTS, shortcutsFor } from "../app/src/shortcuts.ts";
 import { WORDS } from "../app/src/lang.ts";
 
 test("no hint labels: words under the orb only when you have to act", () => {
@@ -36,4 +36,11 @@ test("New chat (ticket 39): Cmd+N, and the toast's words", () => {
   expect(k("m", { metaKey: true })).toBe(false);
   expect(WORDS.en.newChat).toBe("New chat");
   expect(WORDS.zh.newChat).toBe("新对话");
+});
+
+test("the Shortcuts card shows the configured draw key, not a hard-coded ⌃⌥ (ticket 45)", () => {
+  expect(shortcutsFor("en").find((s) => s.what === "Push to talk")?.keys).toBe("Hold ⌃⌥");
+  expect(shortcutsFor("en", "ctrl+shift+d").find((s) => s.what === "Push to talk")?.keys).toBe("Hold ⌃⇧D");
+  expect(shortcutsFor("zh", "option+cmd").find((s) => s.what === "按住说话")?.keys).toBe("按住 ⌥⌘");
+  expect(shortcutsFor("en", "cmd+option").map((s) => s.keys)).toContain("⌃⌥S"); // the others stay
 });

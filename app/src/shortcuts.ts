@@ -1,4 +1,5 @@
 // Every shortcut in one place (ticket 38): the Shortcuts card lists these. Pure data.
+import { DEFAULT_DRAW_HOTKEY, formatHotkey } from "../../src/config/hotkey.ts";
 import type { Lang } from "./lang.ts";
 
 export interface Shortcut {
@@ -32,6 +33,12 @@ export const SHORTCUTS: Record<Lang, Shortcut[]> = {
     { keys: "双击光球", what: "最小化" },
   ],
 };
+
+/** The list with the configured draw key (ticket 45, `drawHotkey`) in place of the default ⌃⌥. */
+export function shortcutsFor(lang: Lang, drawHotkey = DEFAULT_DRAW_HOTKEY): Shortcut[] {
+  const hold = { en: "Hold ", zh: "按住 " }[lang];
+  return SHORTCUTS[lang].map((s) => (s.keys === `${hold}⌃⌥` ? { ...s, keys: hold + formatHotkey(drawHotkey) } : s));
+}
 
 /** The card's title. */
 export const SHORTCUTS_TITLE: Record<Lang, string> = { en: "Shortcuts", zh: "快捷键" };

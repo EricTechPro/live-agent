@@ -1,6 +1,6 @@
 // The circle gesture's look (ticket 43), pure so it is tested apart from the canvas
 // (screen-ink.ts draws it): the stroke style, Chaikin smoothing, the listening pill at the
-// pointer, and where the ghost orb and its answer bubble go on the circled spot.
+// pointer, and the circled spot the real orb travels beside (app/src/travel.ts).
 // Idea from Roamies (AGPL) and the feel of ScreenBrush: ideas only, no code.
 import type { Pt } from "../../src/screen/geometry.ts";
 
@@ -27,21 +27,9 @@ export function pillRect(at: Pt): { x: number; y: number; w: number; h: number }
   return { x: at.x + 8, y: at.y - 8 - 14, w: 36, h: 14 };
 }
 
-/** The middle of a drawn loop: the centre of its bounds (a lopsided run-up doesn't pull it). */
-export function loopCentre(loop: Pt[]): Pt {
+/** The bounds of a drawn loop: the orb travels beside this box, so it never covers the circled thing. */
+export function loopBounds(loop: Pt[]): { x: number; y: number; w: number; h: number } {
   const xs = loop.map((p) => p.x), ys = loop.map((p) => p.y);
-  return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 };
-}
-
-/** Ghost orb size (pt) and the gap from its edge to the bubble. */
-export const GHOST = { size: 96, gap: 18 } as const;
-
-/** The ghost orb's box on the circle's centre, and its bubble beside it: right, or left when the right has no room. */
-export function ghostPlace(centre: Pt, view: { width: number; height: number }, bubbleW: number) {
-  const r = GHOST.size / 2;
-  const orb = { x: centre.x - r, y: centre.y - r, w: GHOST.size, h: GHOST.size };
-  const side: "left" | "right" = centre.x + r + GHOST.gap + bubbleW > view.width - 12 ? "left" : "right";
-  const x = side === "right" ? centre.x + r + GHOST.gap : Math.max(12, centre.x - r - GHOST.gap - bubbleW);
-  const y = Math.max(12, Math.min(view.height - 60, centre.y - 18));
-  return { orb, side, bubble: { x, y } };
+  const x = Math.min(...xs), y = Math.min(...ys);
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
 }

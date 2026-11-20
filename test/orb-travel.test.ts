@@ -2,7 +2,7 @@
 // thinking dots, the Reminders card's sections.
 import { expect, test } from "bun:test";
 import { addWork, cuesFor, DONE_HOLD_MS, noWork, type Work } from "../app/src/cues.ts";
-import { addAct, BUBBLE_W, GAP, travelSpot, type Act } from "../app/src/travel.ts";
+import { addAct, addCircleEvent, BUBBLE_W, circled, CIRCLE_ANSWER_MS, CIRCLE_HOLD_MS, GAP, travelSpot, type Act } from "../app/src/travel.ts";
 import { reminderSections } from "../app/src/reminder-rows.ts";
 import { CAN_DO, TRY_ME } from "../app/src/wizard-flow.ts";
 import type { AgentEvent } from "../src/core/events.ts";
@@ -74,4 +74,22 @@ test("setup ends with what Jett can do and a turn to try", () => {
   expect(CAN_DO.length).toBeGreaterThanOrEqual(5);
   expect(CAN_DO.map((c) => c.what).join(" ")).toContain("Remind");
   expect(TRY_ME).toContain("draw");
+});
+
+test("after a circle the real orb goes beside the spot on the first answer words and home after the hold", () => {
+  const box = { x: 400, y: 300, w: 80, h: 60 };
+  const model: AgentEvent = { type: "transcript", role: "model", text: "That's" };
+  let spot = circled(box, 1000);
+  expect(spot.shown).toBeUndefined();
+  expect(addCircleEvent(spot, { type: "transcript", role: "user", text: "what's this" }, 1100)).toBe(spot);
+  spot = addCircleEvent(spot, model, 1200);
+  expect(spot).toEqual({ shown: box });
+  spot = addCircleEvent(spot, { type: "turn.done", reply: "" }, 1300);
+  expect(spot).toEqual({ shown: box, ending: true });
+  expect(CIRCLE_HOLD_MS).toBe(3500);
+  // More words before the hold runs out keep it there.
+  expect(addCircleEvent(spot, model, 1400)).toEqual({ shown: box });
+  // An answer long after the circle is not about it; a new chat clears it.
+  expect(addCircleEvent(circled(box, 0), model, CIRCLE_ANSWER_MS + 1)).toEqual({});
+  expect(addCircleEvent({ shown: box }, { type: "chat.started" }, 0)).toEqual({});
 });

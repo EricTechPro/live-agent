@@ -5,19 +5,16 @@
 // While talking (the draw keys held, Ctrl+Option by default), the pointer path is drawn on a
 // see-through layer, no clicking: a smoothed mint line with a dark edge (ink-stroke.ts), and the
 // listening pill rides the pointer. It stays while you talk and fades 0.5 s after release.
-// When Jett answers a circle, a ghost orb in dots forms on the circled spot with the answer in
-// a bubble beside it (ticket 43).
+// When Jett answers a circle, the real orb travels beside the circled spot with its answer
+// bubble (main.ts `updateTravel`, travel.ts `addCircleEvent`), and goes home ~3.5 s after.
 // The moment the ink closes, the path goes to the core (POST /screen/circle), which checks the
 // loop with the same code (src/screen/geometry.ts) and sends the circled crop to the model.
 // On release, POST /screen/release adds the words for the turn.
 import { invoke } from "@tauri-apps/api/core";
 import type { AgentEvent } from "../../src/core/events.ts";
-import { joinText } from "../../src/core/join-text.ts";
 import { findLoop, type Pt } from "../../src/screen/geometry.ts";
-import { ditherCells } from "./dither.ts";
-import { paintCells } from "./dither-paint.ts";
-import { GHOST, INK, ghostPlace, loopCentre, pillRect, smooth } from "./ink-stroke.ts";
-import { modelSdf, renderModel } from "./model3d.ts";
+import { INK, loopBounds, pillRect, smooth } from "./ink-stroke.ts";
+import { addCircleEvent, circled, CIRCLE_HOLD_MS, type CircleSpot } from "./travel.ts";
 
 type CoreInfo = { url: string; launchToken: string };
 type Pointer = { x: number; y: number; originX: number; originY: number };
@@ -40,12 +37,10 @@ export interface ScreenInk {
 export interface ScreenInkOptions {
   /** The mic level now, 0..1: the pointer pill's bars bounce with it. */
   level?: () => number;
+  /** The orb goes beside this circled box (global points) while it answers, or home (undefined). */
+  onSpot?: (rect: { x: number; y: number; w: number; h: number } | undefined) => void;
 }
 
-/** How long after the loop closes an answer still counts as about it (ms). */
-const ANSWER_WINDOW_MS = 25_000;
-/** The ghost orb stays this long after the answer ends (ms). */
-const GHOST_HOLD_MS = 3500;
 
 export function createScreenInk(info: CoreInfo, options: ScreenInkOptions = {}): ScreenInk {
   const auth = { Authorization: `Bearer ${info.launchToken}`, "Content-Type": "application/json" };
@@ -124,8 +119,8 @@ export function createScreenInk(info: CoreInfo, options: ScreenInkOptions = {}):
     const loop = !closed && stroke.length >= 8 ? findLoop(stroke) : undefined;
     if (loop) {
       closed = true;
-      // An answer from here on is about this circle: the ghost orb lands on it.
-      answerFor = { centre: loopCentre(loop), until: Date.now() + ANSWER_WINDOW_MS };
+      // An answer from here on is about this circle: the orb goes beside it.
+      setSpot(circled(loopBounds(loop), Date.now()));
       // Send the crop now, while the question is still being spoken, so it is in before it ends.
       void fetch(`${info.url}/screen/circle`, { method: "POST", headers: auth, body: JSON.stringify({ stroke }) }).catch(() => {});
     }
@@ -134,8 +129,7 @@ export function createScreenInk(info: CoreInfo, options: ScreenInkOptions = {}):
 
   function start() {
     clearTimeout(fadeTimer);
-    hideGhost(true);
-    answerFor = undefined;
+    setSpot({});
     stroke = [];
     closed = false;
     startedAt = performance.now();
@@ -160,86 +154,17 @@ export function createScreenInk(info: CoreInfo, options: ScreenInkOptions = {}):
     fadeTimer = setTimeout(draw, INK.fadeMs);
   }
 
-  // ---- the ghost orb: the answer to a circle, on the circled spot (ticket 43) ----
-  let answerFor: { centre: Pt; until: number } | undefined;
-  const ghost = document.createElement("div");
-  ghost.className = "ink-ghost";
-  ghost.hidden = true;
-  const ghostDots = Object.assign(document.createElement("canvas"), { className: "ink-ghost-orb" });
-  ghostDots.setAttribute("aria-hidden", "true");
-  const bubble = Object.assign(document.createElement("p"), { className: "ink-ghost-bubble" });
-  bubble.setAttribute("aria-live", "polite");
-  ghost.append(ghostDots, bubble);
-  document.body.appendChild(ghost);
-  const BUBBLE_W = 320;
-  let ghostText = "";
-  let ghostAt = 0;
-  let ghostFrame = 0;
-  let ghostTimer: ReturnType<typeof setTimeout> | undefined;
-  const sphere = modelSdf({ shape: "sphere" });
-  const DOTS = 24;
-  const DOT = GHOST.size / DOTS;
-
-  function showGhost(centre: Pt) {
-    const local = { x: centre.x - origin.x, y: centre.y - origin.y };
-    const place = ghostPlace(local, { width: innerWidth, height: innerHeight }, BUBBLE_W);
-    Object.assign(ghostDots.style, { left: `${place.orb.x}px`, top: `${place.orb.y}px`, width: `${GHOST.size}px`, height: `${GHOST.size}px` });
-    Object.assign(bubble.style, { left: `${place.bubble.x}px`, top: `${place.bubble.y}px`, maxWidth: `${BUBBLE_W}px` });
-    bubble.dataset.side = place.side;
-    ghostText = "";
-    bubble.textContent = "";
-    ghostAt = performance.now();
-    ghost.hidden = false;
-    ghost.dataset.on = "true";
-    cancelAnimationFrame(ghostFrame);
-    ghostFrame = requestAnimationFrame(paintGhost);
+  // ---- the answer to a circle: the real orb beside the circled spot (tickets 43/44) ----
+  let spot: CircleSpot = {};
+  let homeTimer: ReturnType<typeof setTimeout> | undefined;
+  function setSpot(next: CircleSpot) {
+    const was = spot;
+    spot = next;
+    if (next.shown !== was.shown) options.onSpot?.(next.shown);
+    if (next.ending && !was.ending) homeTimer = setTimeout(() => setSpot({}), CIRCLE_HOLD_MS);
+    else if (!next.ending) clearTimeout(homeTimer);
   }
-
-  /** Dots fly in to a see-through sphere (the circled thing shows between them), then shimmer. */
-  function paintGhost(now: number) {
-    const dpr = window.devicePixelRatio || 1;
-    const px = Math.round(GHOST.size * dpr);
-    if (ghostDots.width !== px) ghostDots.width = ghostDots.height = px;
-    const g = ghostDots.getContext("2d")!;
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.clearRect(0, 0, GHOST.size, GHOST.size);
-    const t = (now - ghostAt) / 1000;
-    const lum = renderModel(sphere, DOTS, DOTS, t * 0.6, 0.3);
-    // A soft shimmer while it speaks: brightness ripples out from the middle.
-    for (let i = 0; i < lum.length; i++)
-      if (lum[i]) lum[i] = Math.min(1, lum[i]! * (0.9 + 0.15 * Math.sin(t * 6 - Math.hypot((i % DOTS) - DOTS / 2, Math.floor(i / DOTS) - DOTS / 2) * 0.7)));
-    g.globalAlpha = 0.75;
-    paintCells(g, ditherCells(lum, DOTS, DOTS), DOT, 0, 0, Math.min(1, t / 0.5));
-    if (!ghost.hidden) ghostFrame = requestAnimationFrame(paintGhost);
-  }
-
-  function hideGhost(now = false) {
-    clearTimeout(ghostTimer);
-    if (ghost.hidden) return;
-    ghost.dataset.on = "false";
-    const done = () => {
-      ghost.hidden = true;
-      cancelAnimationFrame(ghostFrame);
-    };
-    if (now) done();
-    else ghostTimer = setTimeout(done, 300);
-  }
-
-  function onAnswer(event: AgentEvent) {
-    if (event.type === "transcript" && event.role === "model") {
-      if (ghost.hidden && answerFor && Date.now() < answerFor.until) {
-        showGhost(answerFor.centre);
-        answerFor = undefined;
-      }
-      if (ghost.hidden) return;
-      clearTimeout(ghostTimer);
-      ghostText = joinText(ghostText, event.text);
-      bubble.textContent = ghostText;
-    } else if (event.type === "turn.done" && !ghost.hidden && ghostText) {
-      clearTimeout(ghostTimer);
-      ghostTimer = setTimeout(() => hideGhost(), GHOST_HOLD_MS);
-    }
-  }
+  const onAnswer = (event: AgentEvent) => setSpot(addCircleEvent(spot, event, Date.now()));
 
   // ---- Screen Recording off: say so plainly, with the button that fixes it ----
   let notice: HTMLElement | undefined;

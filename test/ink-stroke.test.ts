@@ -1,7 +1,7 @@
 // The circle gesture's look (ticket 43): a smoothed mint stroke with a dark edge, the listening
-// pill riding the pointer, and where the ghost orb and its bubble land after the answer. Pure.
+// pill riding the pointer, and the circled box the real orb travels beside. Pure.
 import { expect, test } from "bun:test";
-import { INK, ghostPlace, loopCentre, pillRect, smooth } from "../app/src/ink-stroke.ts";
+import { INK, loopBounds, pillRect, smooth } from "../app/src/ink-stroke.ts";
 
 test("the stroke is mint over a 1 pt darker teal edge, no glow", () => {
   expect(INK).toMatchObject({ core: "#6ff0dc", edge: "#1f9f90", width: 4.5, glow: 0, fadeMs: 500 });
@@ -26,15 +26,11 @@ test("the listening pill sits about 8 pt up and right of the pointer tip", () =>
   expect(r).toMatchObject({ w: 36, h: 14 });
 });
 
-test("the ghost orb lands on the circle's centre; its bubble goes right, or left near the right edge", () => {
+test("the circled box is the loop's bounds, so the orb can sit beside it, not on it", () => {
   const loop = Array.from({ length: 12 }, (_, k) => ({ x: 300 + 50 * Math.cos((k / 12) * 2 * Math.PI), y: 200 + 40 * Math.sin((k / 12) * 2 * Math.PI) }));
-  const c = loopCentre(loop);
-  expect(c.x).toBeCloseTo(300, 0);
-  expect(c.y).toBeCloseTo(200, 0);
-  const right = ghostPlace(c, { width: 1440, height: 900 }, 320);
-  expect(right.side).toBe("right");
-  expect(right.bubble.x).toBeGreaterThan(c.x);
-  const left = ghostPlace({ x: 1300, y: 200 }, { width: 1440, height: 900 }, 320);
-  expect(left.side).toBe("left");
-  expect(left.bubble.x + 320).toBeLessThan(1300);
+  const b = loopBounds(loop);
+  expect(b.x).toBeCloseTo(250, 0);
+  expect(b.y).toBeCloseTo(160, 0);
+  expect(b.w).toBeCloseTo(100, 0);
+  expect(b.h).toBeCloseTo(80, 0);
 });

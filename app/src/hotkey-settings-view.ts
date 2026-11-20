@@ -6,7 +6,8 @@ import type { Config } from "../../src/config/index.ts";
 import { DEFAULT_DRAW_HOTKEY, comboFrom, formatHotkey, hotkeyConflict, parseHotkey } from "../../src/config/hotkey.ts";
 import { getSetup, inTauri, saveSetup, setDrawHotkey, type CoreClient } from "./core-client.ts";
 
-export function mountHotkeySettings(core: CoreClient, root: HTMLElement) {
+/** `onChange`: the configured draw key, at start and after each save (the Shortcuts card shows it). */
+export function mountHotkeySettings(core: CoreClient, root: HTMLElement, onChange?: (drawHotkey: string) => void) {
   let config: Config | undefined;
   let recording = false;
   let best = "";
@@ -32,6 +33,7 @@ export function mountHotkeySettings(core: CoreClient, root: HTMLElement) {
   }
 
   function tellRust(combo: string) {
+    onChange?.(combo);
     const h = parseHotkey(combo);
     if (h && inTauri()) void setDrawHotkey(h.mods, h.key).catch(() => {});
   }

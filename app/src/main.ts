@@ -17,7 +17,8 @@ import {
   revealLog, setClickThrough, setTrayShown, waitForCore, type CoreClient, type CoreInfo,
 } from "./core-client.ts";
 import { waveFor, QUIET } from "./orb-wave.ts";
-import { isNewChatKey, SHORTCUTS, SHORTCUTS_TITLE } from "./shortcuts.ts";
+import { isNewChatKey, shortcutsFor, SHORTCUTS_TITLE } from "./shortcuts.ts";
+import { DEFAULT_DRAW_HOTKEY, formatHotkey } from "../../src/config/hotkey.ts";
 import { addWork, cuesFor, DONE_HOLD_MS, noWork, type Work } from "./cues.ts";
 import { addAct, travelSpot, type Act } from "./travel.ts";
 import { toLocal } from "./screen-origin.ts";
@@ -78,6 +79,8 @@ const ORB_KEY = "jett.orb";
 const view = () => ({ width: innerWidth, height: innerHeight });
 const dockSize = () => ({ width: dock.offsetWidth, height: dock.offsetHeight });
 let orbAt: Point = { x: 0, y: 0 };
+/** The configured hold-to-draw key (ticket 45); hotkey-settings-view.ts reports it. */
+let drawHotkey = DEFAULT_DRAW_HOTKEY;
 function storedSpot() {
   try {
     return parseSaved(localStorage.getItem(ORB_KEY));
@@ -314,10 +317,13 @@ addEventListener("resize", () => {
 // ---- the orb travels to where it works (gap #1): act_in_app and guide steps ----
 /** The act step on screen now (travel.ts `addAct`); the orb is home when there is none. */
 let act: Act | undefined;
+/** After a circle (tickets 43/44): the circled box (global points) the orb answers beside. */
+let circleSpot: { x: number; y: number; w: number; h: number } | undefined;
 /** Where the orb is while it works away from home, and which side its cues hang on. */
 let travel: { at: Point; side: "left" | "right" } | undefined;
 function updateTravel() {
-  const target = act?.rect && !mini ? toLocal(act.rect) : undefined;
+  const spot = act?.rect ?? circleSpot;
+  const target = spot && !mini ? toLocal(spot) : undefined;
   if (target) {
     const d = dock.getBoundingClientRect();
     const o = orbEl.getBoundingClientRect();
@@ -529,7 +535,7 @@ function showShortcuts(on: boolean) {
     setLayer("close");
     $("shortcuts-title").textContent = SHORTCUTS_TITLE[lang];
     $("shortcuts-list").replaceChildren(
-      ...SHORTCUTS[lang].flatMap((s) => {
+      ...shortcutsFor(lang, drawHotkey).flatMap((s) => {
         const dt = document.createElement("dt");
         dt.append(Object.assign(document.createElement("kbd"), { textContent: s.keys }));
         return [dt, Object.assign(document.createElement("dd"), { textContent: s.what })];
@@ -616,7 +622,7 @@ function render() {
     pillCallBtn.classList.toggle("start", callAct === "start");
     pillCallBtn.setAttribute("aria-pressed", String(callAct === "unmute"));
     pillCallBtn.dataset.tip = BUTTON_TIPS[lang][callAct];
-    pillCallBtn.dataset.key = callAct === "start" ? "⌃⌥" : "";
+    pillCallBtn.dataset.key = callAct === "start" ? formatHotkey(drawHotkey) : "";
     pillCallBtn.setAttribute("aria-label", BUTTON_TIPS[lang][callAct]);
     tips.refresh(pillCallBtn);
   }
@@ -1254,7 +1260,10 @@ async function boot() {
   }
   coreRef = core;
   if (inTauri()) {
-    screenInk = createScreenInk(core.info, { level: () => micLevel });
+    screenInk = createScreenInk(core.info, {
+      level: () => micLevel,
+      onSpot: (rect) => ((circleSpot = rect), updateTravel()),
+    });
     core.onEvent((event) => screenInk?.onEvent(event));
   }
   // The shell restarts a core that dies (onCoreRestarting above); core-down means it gave up.
@@ -1308,7 +1317,10 @@ async function boot() {
   });
   mountStatusBar(core, $("status"));
   mountHelperSettings(core, $("helper-settings"));
-  mountHotkeySettings(core, $("hotkey-settings"));
+  mountHotkeySettings(core, $("hotkey-settings"), (combo) => {
+    drawHotkey = combo;
+    if (!shortcutsEl.hidden) showShortcuts(true);
+  });
   mountModePill(core, $<HTMLButtonElement>("mode-pill"), $<HTMLUListElement>("mode-menu"));
   mountApprovals(core, approvalsEl);
   const reader = mountBrainView(core, {
