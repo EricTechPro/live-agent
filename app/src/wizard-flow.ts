@@ -39,6 +39,19 @@ export const STEP_LINES: Record<StepName, string> = {
   test: "Last one. Say hi!",
 };
 
+/** The last step, "Here's what I can do": one line per thing, each a thing to say. */
+export const CAN_DO: { what: string; say: string }[] = [
+  { what: "Answer from your notes", say: "What did I note about…?" },
+  { what: "Draw timelines, lists and flows", say: "Draw the history of the Moon landing." },
+  { what: "Show real pictures", say: "Show me a red panda." },
+  { what: "Point at things on your screen", say: "Where's the Export button?" },
+  { what: "Click and type in your apps", say: "Open Notes and start a new note." },
+  { what: "Show you how, step by step", say: "Show me how to export this." },
+  { what: "Remind you", say: "Nudge me in 3 hours to go to the gym." },
+];
+/** "Try me out": the first turn sent when the wizard closes, so Jett shows off at once. */
+export const TRY_ME = "Hi Jett! Show me what you can do: draw a short timeline of the Moon landing.";
+
 /** Each step's pixel icon on the stage, so the orb shows where you are. */
 export const STEP_ICONS: Record<StepName | "end", string> = {
   welcome: "wave",

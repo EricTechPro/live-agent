@@ -13,11 +13,14 @@
 //   POST /reply/stop  Esc: stop the reply being spoken (ticket 37)
 //   GET  /brain/tree, /brain/file?path=   the sidebar's brain tree and the read-only file view (ticket 23)
 //   GET  /brain/chats  the sidebar's past chats (ticket 24)
+//   POST /duck  push to talk held / let go; POST /reminders/done  the Reminders card's ring
+//   GET  /memory, POST /memory/forget  the Brain tab's "What I remember"
 // Every call carries the per-launch token. Each command gets one small method
 // here, so the rest of the window never builds URLs.
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AgentEvent } from "../../src/core/events.ts";
+import type { Fact } from "../../src/brain/memory.ts";
 import type { SafetyMode } from "../../src/core/safety.ts";
 import type { Config } from "../../src/config/index.ts";
 import type { SetupAnswers } from "../../src/setup/index.ts";
@@ -68,6 +71,13 @@ export interface CoreClient {
   brainFile(path: string): Promise<{ path: string; text: string; truncated?: boolean }>;
   /** Past chats, newest first: the chat-end notes in raw (ticket 24). */
   pastChats(): Promise<PastChat[]>;
+  /** Push to talk held or let go: the core turns the Mac's other sounds down meanwhile. */
+  duck(on: boolean): Promise<void>;
+  /** The Reminders card's ring checkbox: tick one off. The card follows the `reminders` event. */
+  doneReminder(id: string): Promise<void>;
+  /** "What I remember" (the Brain tab), and its Forget. */
+  memory(): Promise<Fact[]>;
+  forget(id: string): Promise<Fact[]>;
 }
 
 type CoreStatus = { state: "starting" | "ready" | "restarting" | "down"; info?: CoreInfo; reason?: string; attempt?: number; retryInMs?: number };
@@ -189,7 +199,7 @@ export function revealLog(): Promise<void> {
  * (null when it is outside), whether Ctrl+Option is held (push to talk), and whether the
  * left mouse button is down (ticket 40: a drag ends when it is not).
  */
-export function overlayPoll(): Promise<{ point: [number, number] | null; talkKeys: boolean; mouseDown: boolean }> {
+export function overlayPoll(): Promise<{ point: [number, number] | null; talkKeys: boolean; mouseDown: boolean; escape?: boolean }> {
   return invoke("overlay_poll");
 }
 
@@ -314,5 +324,13 @@ export function connectCore(info: CoreInfo): CoreClient {
     brainTree: () => setupCall<BrainTree>(info, "/brain/tree"),
     brainFile: (path) => setupCall(info, `/brain/file?path=${encodeURIComponent(path)}`),
     pastChats: async () => (await setupCall<{ chats: PastChat[] }>(info, "/brain/chats")).chats,
+    async duck(on) {
+      await setupCall(info, "/duck", { on });
+    },
+    async doneReminder(id) {
+      await setupCall(info, "/reminders/done", { id });
+    },
+    memory: async () => (await setupCall<{ facts: Fact[] }>(info, "/memory")).facts,
+    forget: async (id) => (await setupCall<{ facts: Fact[] }>(info, "/memory/forget", { id })).facts,
   };
 }

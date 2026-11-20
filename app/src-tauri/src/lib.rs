@@ -292,6 +292,9 @@ struct OverlayPoll {
     /// The left mouse button is down right now (ticket 40): a drag ends when it is not,
     /// even if WebKit never delivered the pointer up.
     mouse_down: bool,
+    /// Esc is down right now: stops a reply, an act_in_app or a guide while another app has
+    /// the keyboard. Without Input Monitoring macOS may always say no; Esc in Jett still works.
+    escape: bool,
 }
 
 fn cursor_in(window: &tauri::WebviewWindow) -> Option<(f64, f64)> {
@@ -314,6 +317,18 @@ extern "C" {
     /// Is this mouse button down right now (0 = left)? The same answer as
     /// NSEvent.pressedMouseButtons, without Objective-C, and it needs no permission.
     fn CGEventSourceButtonState(state_id: i32, button: u32) -> bool;
+    /// Is this key down right now (53 = Escape)?
+    fn CGEventSourceKeyState(state_id: i32, key: u16) -> bool;
+}
+
+#[cfg(target_os = "macos")]
+fn escape_down() -> bool {
+    unsafe { CGEventSourceKeyState(0, 53) }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn escape_down() -> bool {
+    false
 }
 
 #[cfg(target_os = "macos")]
@@ -343,7 +358,7 @@ fn talk_keys_held() -> bool {
 
 #[tauri::command]
 fn overlay_poll(window: tauri::WebviewWindow) -> OverlayPoll {
-    OverlayPoll { point: cursor_in(&window), talk_keys: talk_keys_held(), mouse_down: left_button_down() }
+    OverlayPoll { point: cursor_in(&window), talk_keys: talk_keys_held(), mouse_down: left_button_down(), escape: escape_down() }
 }
 
 /// Click-through on (clicks reach the apps below) or off (the window takes the mouse).

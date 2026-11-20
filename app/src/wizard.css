@@ -144,3 +144,6 @@
   #wizard h1 { font-size: 26px; }
 }
 @media (prefers-reduced-motion: reduce) { #wizard *, #wizard *::before { animation: none !important; transition: none !important; } }
+/* "Here's what I can do" (the last step): one line per thing, with something to say. */
+.can-do { list-style: none; margin: 10px 0 14px; padding: 10px 12px; display: grid; gap: 5px; }
+.can-do li::before { content: "▸ "; color: var(--led); }
