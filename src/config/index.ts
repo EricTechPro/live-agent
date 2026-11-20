@@ -7,6 +7,7 @@
 // keywords, so the documented defaults and the real ones can never drift.
 import { existsSync, readFileSync } from "node:fs";
 import schema from "./config.schema.json" with { type: "json" };
+import { hotkeyConflict } from "./hotkey.ts";
 
 export type SafetyMode = "ask-me" | "auto-edits" | "bypass";
 export type Verdict = "allow" | "ask" | "block";
@@ -37,6 +38,8 @@ export interface Config {
   announceScheduled: boolean;
   /** App connections every helper job gets (src/helpers/mcp.ts). */
   mcpServers: Record<string, McpServer>;
+  /** The keys held to talk and circle on screen (src/config/hotkey.ts). Default "ctrl+option". */
+  drawHotkey: string;
 }
 
 /** One MCP server: a local `command` (with args and env) or a remote `url`. Values may use ${VAR}. */
@@ -110,7 +113,10 @@ export function loadConfig(path: string = defaultConfigPath()): Config {
  * uses this to check answers before it writes the file.
  */
 export function checkConfig(raw: unknown): Config {
-  return fill(schema as SchemaNode, raw, "") as Config;
+  const config = fill(schema as SchemaNode, raw, "") as Config;
+  const clash = hotkeyConflict(config.drawHotkey);
+  if (clash) throw new ConfigError(`drawHotkey: ${clash}`);
+  return config;
 }
 
 /** A config file that cannot be used. The message names the bad field. */

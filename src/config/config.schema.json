@@ -153,6 +153,13 @@
       "type": "boolean",
       "default": true
     },
+    "drawHotkey": {
+      "description": "The keys you hold to talk and circle things on the screen: two modifiers or more (ctrl, option, cmd, shift) joined by +, plus at most one letter or digit. Not ctrl+option+t (quick type) or ctrl+option+s (show / hide).",
+      "type": "string",
+      "default": "ctrl+option",
+      "pattern": "^(ctrl|option|cmd|shift)(\\+(ctrl|option|cmd|shift))+(\\+[a-z0-9])?$",
+      "patternMessage": "must be two modifiers or more (ctrl, option, cmd, shift) joined by +, plus at most one letter or digit, e.g. ctrl+option"
+    },
     "mcpServers": {
       "description": "App connections (MCP servers) every helper job gets, keyed by name. Same shape as Claude Code and Codex: {command, args, env} for a local server, or {url} for a remote one. Values may use ${VAR} from the .env file, so keys stay out of this file.",
       "type": "object",

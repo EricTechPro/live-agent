@@ -7,6 +7,7 @@
 import { Room, RoomEvent, Track, type Participant } from "livekit-client";
 import { mountBoardAndBar, mountStatusBar } from "./board-view.ts";
 import { mountHelperSettings } from "./helper-settings-view.ts";
+import { mountHotkeySettings } from "./hotkey-settings-view.ts";
 import { mountModePill } from "./mode-pill.ts";
 import { mountApprovals } from "./approvals-view.ts";
 import { mountBrainView } from "./brain-view.ts";
@@ -1215,7 +1216,7 @@ async function boot() {
   }
   coreRef = core;
   if (inTauri()) {
-    screenInk = createScreenInk(core.info);
+    screenInk = createScreenInk(core.info, { level: () => micLevel });
     core.onEvent((event) => screenInk?.onEvent(event));
   }
   // The shell restarts a core that dies (onCoreRestarting above); core-down means it gave up.
@@ -1263,6 +1264,7 @@ async function boot() {
   });
   mountStatusBar(core, $("status"));
   mountHelperSettings(core, $("helper-settings"));
+  mountHotkeySettings(core, $("hotkey-settings"));
   mountModePill(core, $<HTMLButtonElement>("mode-pill"), $<HTMLUListElement>("mode-menu"));
   mountApprovals(core, approvalsEl);
   const reader = mountBrainView(core, {
