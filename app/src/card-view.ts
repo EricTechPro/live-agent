@@ -8,6 +8,10 @@
 // click handlers from model-written source. A parse error shows in the card,
 // with the source under it; it never breaks the window.
 
+import { CELL, ditherCells, photoLum } from "./dither.ts";
+import { paintCells } from "./dither-paint.ts";
+import { modelLabels, modelSdf, projectPoint, renderModel, type ModelSpec } from "./model3d.ts";
+
 type Mermaid = typeof import("mermaid").default;
 let mermaid: Promise<Mermaid> | undefined;
 
@@ -46,7 +50,16 @@ interface Card {
   el: HTMLDivElement;
   source: string;
   render: number;
+  /** A dot-matrix body (image and model cards): told its size and whether it shows; stopped when it goes. */
+  art?: Art;
 }
+
+interface Art {
+  size(w: number, h: number, shown: boolean): void;
+  stop(): void;
+}
+
+const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 let renders = 0;
 
@@ -54,6 +67,17 @@ export function mountCards(board: HTMLElement) {
   const layer = Object.assign(document.createElement("div"), { className: "sketch-cards" });
   board.append(layer);
   const cards = new Map<string, Card>();
+  // A click on a picture card's body shows the original photo, and a second click the dots
+  // again. The card frame above takes the mouse, so the hit is checked by position.
+  board.ownerDocument.addEventListener("click", (e) => {
+    for (const card of cards.values()) {
+      const view = card.el.dataset.view;
+      if (view !== "dots" && view !== "photo") continue;
+      const r = card.el.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) continue;
+      card.el.dataset.view = view === "dots" ? "photo" : "dots";
+    }
+  });
 
   async function render(card: Card, source: string) {
     const n = (card.render = ++renders);
@@ -110,10 +134,13 @@ export function mountCards(board: HTMLElement) {
           cards.set(item.id, card);
         }
         // An image card: its picture (a data: URL from the core), or a loading note until it lands.
-        const source = item.image ? `image:${item.image.src ?? ""}` : item.source;
+        const source = item.image ? `image:${item.image.src ?? ""}` : item.model ? `model:${JSON.stringify(item.model)}` : item.source;
         if (card.source !== source) {
           card.source = source;
+          card.art?.stop();
+          card.art = undefined;
           if (item.image) showImage(card, item.image.src, item.title);
+          else if (item.model) showModel(card, item.model);
           else void render(card, item.source);
         }
         const { el } = card;
@@ -121,7 +148,8 @@ export function mountCards(board: HTMLElement) {
         el.style.top = `${item.box.y}px`;
         el.style.width = `${item.box.w}px`;
         el.style.height = `${item.box.h}px`;
-        const what = item.image ? "Picture" : "Diagram";
+        card.art?.size(item.box.w, item.box.h, item.shown);
+        const what = item.image ? "Picture" : item.model ? "3D model" : "Diagram";
         el.setAttribute("aria-label", item.title ? `${what}: ${item.title}` : what);
         // The diagram fades in once its card has opened and titled.
         el.dataset.shown = String(item.shown);
@@ -130,6 +158,7 @@ export function mountCards(board: HTMLElement) {
         if (live.has(id)) continue;
         cards.delete(id);
         card.render = -1;
+        card.art?.stop();
         card.el.dataset.shown = "false";
         setTimeout(() => card.el.remove(), 300);
       }
@@ -137,16 +166,163 @@ export function mountCards(board: HTMLElement) {
   };
 }
 
-/** An image card's picture: fills the body at its own shape; no src yet = loading. */
+/**
+ * An image card's picture, re-drawn as teal dots (dither.ts): fades in from sparse dots, and a
+ * click on the card shows the original photo (and back). No src yet = loading.
+ */
 function showImage(card: Card, src: string | undefined, title?: string) {
   card.render = ++renders;
+  delete card.el.dataset.view;
   if (!src) {
     card.el.dataset.state = "drawing";
     card.el.replaceChildren(Object.assign(document.createElement("p"), { className: "sketch-card-note", textContent: "Getting the picture…" }));
     return;
   }
   card.el.dataset.state = "ok";
-  card.el.replaceChildren(Object.assign(document.createElement("img"), { className: "sketch-card-img", src, alt: title ?? "", draggable: false }));
+  card.el.dataset.view = "dots";
+  const img = Object.assign(document.createElement("img"), { className: "sketch-card-img", src, alt: title ?? "", draggable: false });
+  const canvas = Object.assign(document.createElement("canvas"), { className: "sketch-card-dots" });
+  canvas.setAttribute("aria-hidden", "true");
+  card.el.replaceChildren(canvas, img);
+  card.art = photoArt(canvas, img);
+}
+
+/** The photo as dots at the body's size; the reveal starts the first time the card shows. */
+function photoArt(canvas: HTMLCanvasElement, img: HTMLImageElement): Art {
+  let box = { w: 0, h: 0 };
+  let ready = false;
+  let shownAt: number | undefined;
+  let frame = 0;
+  let cells: ReturnType<typeof ditherCells> = [];
+  let at = { x: 0, y: 0 };
+  const REVEAL_MS = 900;
+
+  function grid() {
+    if (!ready || !box.w || !box.h) return;
+    const cols = Math.floor(box.w / CELL), rows = Math.floor(box.h / CELL);
+    // The picture fits the grid at its own shape, centred.
+    const k = Math.min(cols / img.naturalWidth, rows / img.naturalHeight);
+    const iw = Math.max(1, Math.round(img.naturalWidth * k)), ih = Math.max(1, Math.round(img.naturalHeight * k));
+    const small = Object.assign(document.createElement("canvas"), { width: iw, height: ih });
+    const sctx = small.getContext("2d", { willReadFrequently: true })!;
+    sctx.imageSmoothingQuality = "high";
+    sctx.drawImage(img, 0, 0, iw, ih);
+    cells = ditherCells(photoLum(sctx.getImageData(0, 0, iw, ih).data, iw, ih), iw, ih);
+    at = { x: Math.floor((box.w - iw * CELL) / 2), y: Math.floor((box.h - ih * CELL) / 2) };
+  }
+
+  function paint() {
+    frame = 0;
+    const dpr = devicePixelRatio || 1;
+    if (canvas.width !== Math.round(box.w * dpr) || canvas.height !== Math.round(box.h * dpr)) {
+      canvas.width = Math.round(box.w * dpr);
+      canvas.height = Math.round(box.h * dpr);
+      canvas.style.width = `${box.w}px`;
+      canvas.style.height = `${box.h}px`;
+    }
+    const ctx = canvas.getContext("2d")!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, box.w, box.h);
+    if (shownAt === undefined) return;
+    const p = reducedMotion() ? 1 : (performance.now() - shownAt) / REVEAL_MS;
+    paintCells(ctx, cells, CELL, at.x, at.y, p);
+    if (p < 1) frame = requestAnimationFrame(paint);
+  }
+
+  img.decode().then(
+    () => {
+      ready = true;
+      grid();
+      paint();
+    },
+    () => {},
+  );
+  return {
+    size(w, h, shown) {
+      const resized = w !== box.w || h !== box.h;
+      box = { w, h };
+      if (shown && shownAt === undefined && ready) shownAt = performance.now();
+      if (resized) grid();
+      if ((resized || shownAt !== undefined) && !frame) paint();
+    },
+    stop() {
+      cancelAnimationFrame(frame);
+      ready = false;
+    },
+  };
+}
+
+/** Degrees a second a model card turns: slow, like a display stand. */
+const TURN = (15 * Math.PI) / 180;
+const MODEL_FPS = 24;
+const BUILD_MS = 750;
+
+/** A model card: the shape in teal dots, built up from sparse dots, then turning slowly with its labels. */
+function showModel(card: Card, spec: ModelSpec) {
+  card.render = ++renders;
+  card.el.dataset.state = "ok";
+  card.el.dataset.view = "model";
+  const canvas = Object.assign(document.createElement("canvas"), { className: "sketch-card-dots" });
+  canvas.setAttribute("aria-hidden", "true");
+  card.el.replaceChildren(canvas);
+  const sdf = modelSdf(spec);
+  const labels = modelLabels(spec);
+  let box = { w: 0, h: 0 };
+  let shownAt: number | undefined;
+  let frame = 0;
+  let last = 0;
+
+  function tick(now: number) {
+    frame = requestAnimationFrame(tick);
+    if (shownAt === undefined || now - last < 1000 / MODEL_FPS) return;
+    last = now;
+    const still = reducedMotion();
+    const t = (now - shownAt) / 1000;
+    const cols = Math.floor(box.w / CELL), rows = Math.floor(box.h / CELL);
+    if (cols < 4 || rows < 4) return;
+    const yaw = 0.6 + (still ? 0 : t * TURN);
+    const pitch = 0.24 + (still ? 0 : 0.05 * Math.sin(t * 0.9));
+    const p = still ? 1 : (now - shownAt) / BUILD_MS;
+    const dpr = devicePixelRatio || 1;
+    if (canvas.width !== Math.round(box.w * dpr) || canvas.height !== Math.round(box.h * dpr)) {
+      canvas.width = Math.round(box.w * dpr);
+      canvas.height = Math.round(box.h * dpr);
+      canvas.style.width = `${box.w}px`;
+      canvas.style.height = `${box.h}px`;
+    }
+    const ctx = canvas.getContext("2d")!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, box.w, box.h);
+    const ox = Math.floor((box.w - cols * CELL) / 2), oy = Math.floor((box.h - rows * CELL) / 2);
+    paintCells(ctx, ditherCells(renderModel(sdf, cols, rows, yaw, pitch), cols, rows), CELL, ox, oy, p);
+    // Labels: bold white mono with a dark edge, pinned to their 3D point; in once it is built.
+    const a = Math.max(0, Math.min(1, (p - 0.8) / 0.4));
+    if (!a) return;
+    ctx.font = '700 10px "Martian Mono", ui-monospace, monospace';
+    ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    for (const l of labels) {
+      const at = projectPoint(l, yaw, pitch, cols, rows);
+      const x = Math.min(box.w - ctx.measureText(l.text).width - 2, Math.max(2, ox + at.x * CELL + 3)), y = oy + at.y * CELL;
+      ctx.globalAlpha = a * (at.front ? 1 : 0.55);
+      ctx.strokeStyle = "#031414";
+      ctx.lineWidth = 3;
+      ctx.strokeText(l.text, x, y);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(l.text, x, y);
+    }
+    ctx.globalAlpha = 1;
+  }
+  frame = requestAnimationFrame(tick);
+  card.art = {
+    size(w, h, shown) {
+      box = { w, h };
+      if (shown && shownAt === undefined) shownAt = performance.now();
+    },
+    stop() {
+      cancelAnimationFrame(frame);
+    },
+  };
 }
 
 /** A picture's natural size in px, once it decodes; undefined if it does not. */
@@ -165,6 +341,8 @@ export interface DiagramBody {
   source: string;
   /** Set for an image card. */
   image?: { src?: string };
+  /** Set for a model card (ticket 42): the shape and its data. */
+  model?: ModelSpec;
   title?: string;
   /** Screen px. */
   box: { x: number; y: number; w: number; h: number };

@@ -342,3 +342,10 @@ test("an image card fits its picture's shape in 480 x 340, with the caption and 
   for (const p of words) expect((p as { box: Rect }).box.y).toBeGreaterThanOrEqual(wide.body!.y + wide.body!.h);
   expect(wide.h).toBeGreaterThan(wide.body!.y + wide.body!.h);
 });
+
+test("a model card (ticket 42) opens at one fixed body for its turning dots", () => {
+  const card = layoutCard({ kind: "model", id: "p1", title: "anatomy", shape: "planet" } as never);
+  expect(card.body).toMatchObject({ w: 240, h: 170 });
+  expect(card.title).toBe("anatomy");
+  expect(card.w).toBeGreaterThan(240);
+});

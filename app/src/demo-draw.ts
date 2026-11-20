@@ -96,6 +96,39 @@ const more: typeof beats = [
   },
 ];
 
+// ?scene=pixels (tickets 42): a photo re-drawn in teal dots and two turning 3D models.
+/** A stand-in "photo" made here (no network): a black hole's glowing ring on black. */
+function blackHolePhoto(): string {
+  const c = Object.assign(document.createElement("canvas"), { width: 320, height: 240 });
+  const g = c.getContext("2d")!;
+  g.fillStyle = "#000";
+  g.fillRect(0, 0, 320, 240);
+  const ring = g.createRadialGradient(160, 120, 30, 160, 120, 90);
+  ring.addColorStop(0, "rgba(0,0,0,1)");
+  ring.addColorStop(0.35, "rgba(255,170,60,1)");
+  ring.addColorStop(0.55, "rgba(200,80,20,.8)");
+  ring.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = ring;
+  g.fillRect(0, 0, 320, 240);
+  g.fillStyle = "rgba(255,230,180,.9)";
+  g.beginPath();
+  g.ellipse(170, 150, 62, 22, 0.2, 0, Math.PI); // the bright lower arc
+  g.fill();
+  return c.toDataURL("image/png");
+}
+const pixels: typeof beats = [
+  { say: "Here is a real black hole's shadow.", marks: [{ kind: "image", id: "p1", title: "photo", src: blackHolePhoto(), caption: "A real black hole shadow", credit: "Wikipedia" }] },
+  { say: "And its anatomy, turning slowly.", marks: [{ kind: "model", id: "p2", title: "anatomy", shape: "planet", labels: [{ text: "Singularity", x: 0.15, y: 0.15, z: -0.3 }] }] },
+  {
+    say: "A water molecule looks like this.",
+    marks: [{
+      kind: "model", id: "p3", title: "water", shape: "molecule",
+      atoms: [{ x: 0, y: 0.2, z: 0, r: 0.4, label: "O" }, { x: -0.7, y: -0.35, z: 0, r: 0.25, label: "H" }, { x: 0.7, y: -0.35, z: 0, r: 0.25, label: "H" }],
+      bonds: [{ a: 1, b: 2 }, { a: 1, b: 3 }],
+    }],
+  },
+];
+
 type Listener = (e: AgentEvent) => void;
 const listeners: Listener[] = [];
 const emit = (e: AgentEvent) => listeners.forEach((l) => l(e));
@@ -115,7 +148,8 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   if (e.key === "Escape" && sketch.openCount()) sketch.clearAll();
 });
 
-const scene = new URLSearchParams(location.search).get("scene") === "more" ? more : beats;
+const scenes: Record<string, typeof beats> = { more, pixels };
+const scene = scenes[new URLSearchParams(location.search).get("scene") ?? ""] ?? beats;
 const speed = Number(new URLSearchParams(location.search).get("speed") ?? "1") || 1;
 async function play() {
   await document.fonts.ready;

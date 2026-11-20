@@ -72,6 +72,10 @@ function workRules(brainPath?: string): string {
       "or when asked for a diagram) " +
       "and give their content; the app places them. Use circle, underline, check and arrow marks on a card to point things out. " +
       "To change what is already drawn (colour, words, position, erase, clear), call edit_canvas with the mark ids.",
+    "- For the shape of a thing in 3D (a planet, a black hole, an atom, a cell, a molecule, a crystal, a landscape), " +
+      "draw a card of kind model: pick shape sphere, planet (sphere with a ring), torus, cube or cell; molecule with " +
+      "atoms (x, y, z from -1 to 1, a short label like O or H) and bonds (atom numbers, 1 = first); points for a few " +
+      "dots in space; heightmap for a surface (a square grid of heights 0 to 1). Pin up to 4 labels at x, y, z. It turns slowly on its own.",
     "- You can see the user's screen only by calling look; call it before answering about anything on screen. " +
       "Their words may come with a [Screen: ...] line (front app, window, page, cursor): use it, never read it out. " +
       "A [Circled: ...] line means the image just before it is what they circled: that circle is the subject and beats " +
