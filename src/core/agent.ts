@@ -99,6 +99,8 @@ export interface SessionOptions {
   eyes?: Eyes;
   /** Least gap between a circled crop and its label (ms, src/screen/service.ts). Tests set 0. */
   screenFrameGapMs?: number;
+  /** A circle drawn in silence waits this long for words before Jett asks about it (ms). Default 4000. */
+  screenAskMs?: number;
   /**
    * The locator's last tier (src/screen/grounding.ts): a vision call that boxes a described
    * element on a screenshot. Unset: only Accessibility and OCR find things.
@@ -312,6 +314,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         sendText: (text) => modelSession.sendText(text),
         spokeSince: (since) => lastVoiceAt >= since,
         frameGapMs: options.screenFrameGapMs,
+        askMs: options.screenAskMs,
       })
     : undefined;
   // Finding real UI elements (slice 3): Accessibility, then OCR, then grounding.
@@ -675,6 +678,9 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
         }
         typed.awaiting++;
         if (!screen) return modelSession.sendText(text);
+        // A circle waiting for its words: these are them (the circle beats the app and window).
+        const circled = screen.takeCircle();
+        if (circled) return modelSession.sendText(`${circled}\n${text}`);
         // Screen awareness: the typed words go in with the front app and window as context.
         // Capped, so a slow lookup never holds a turn up.
         const note = Promise.race([screen.note().catch(() => ""), Bun.sleep(1000).then(() => "")]);
@@ -749,6 +755,7 @@ export async function startSession(options: SessionOptions): Promise<AgentSessio
     // call) and a failure is just a "failed" job, never an error for the next chat.
     async close() {
       follow?.stop();
+      screen?.dispose();
       scheduler?.stop();
       closed = true;
       let notePath: string | null = null;

@@ -2,8 +2,11 @@
 //
 //   look()         the `look` tool: one screenshot of the main display into the Live session
 //   note(cursor)   the text every user turn carries: front app, window title, URL, cursor
-//   release(...)   Ctrl+Option let go: a closed loop drawn while holding it becomes a crop
+//   release(...)   the draw keys let go: a closed loop drawn while holding them becomes a crop
 //                  (with the ink on it) plus "I circled something at the top left"
+//   takeCircle()   a circle drawn in silence waits for the next words (ticket 44): the next
+//                  hold, typed turn or open-mic speech carries it; ~4 s of nothing and Jett
+//                  asks "What about this?"
 //
 // Images go in as Live video frames (sendImage); the words go in as text. Nothing is
 // captured unless the model asks or the user circles: no stream, no background capture.
@@ -28,6 +31,8 @@ export interface ScreenDeps {
    * is seen (a real run said "I can't see that clearly" with no gap, named the photo with 2 s).
    */
   frameGapMs?: number;
+  /** A circle drawn in silence waits this long for words before Jett asks about it (ms). Default 4000. */
+  askMs?: number;
 }
 
 export interface ReleaseInput {
@@ -48,7 +53,11 @@ export interface Screen {
    * this was never called.
    */
   circle(stroke: Pt[]): Promise<{ circled: boolean }>;
-  release(input: ReleaseInput): Promise<{ sent: boolean; circled: boolean; text?: string }>;
+  release(input: ReleaseInput): Promise<{ sent: boolean; circled: boolean; text?: string; waiting?: boolean }>;
+  /** The label of a circle still waiting for words, used once (a typed turn carries it). */
+  takeCircle(): string | undefined;
+  /** Stop the wait timer (the session is closing). */
+  dispose(): void;
   permission(): Promise<boolean>;
   requestPermission(): Promise<boolean>;
 }
@@ -60,6 +69,11 @@ export function circleLabel(where: string, cursor?: Pt): string {
     `[Circled: the image just sent is the region the user just circled (${where.replace(/^I circled something /, "").replace(/\.$/, "")}), ` +
     `with their teal pen mark on it. Answer about what is inside the circle, not about the app or window.${at}]`
   );
+}
+
+/** A circle with no words after it: the model asks, in one line, what the user wants to know. */
+export function circleAsk(label: string): string {
+  return label.replace(/\]$/, ' They have not said anything yet: ask in one short line what they want to know about it, like "What about this?"]');
 }
 
 /** "[Screen: Google Chrome, window "Pricing", https://x.com · cursor at (812, 440)]" */
@@ -95,6 +109,28 @@ export function createScreen(deps: ScreenDeps): Screen {
   // The circle sent in the hold now going on: when, and the sentence saying where.
   let sent: { at: number; where: string; imageAt: number; done: Promise<void> } | undefined;
   const frameGapMs = deps.frameGapMs ?? 1500;
+  const askMs = deps.askMs ?? 4000;
+
+  // A circle drawn in silence, waiting for the words about it.
+  let waiting: { label: string; at: number; timer: ReturnType<typeof setTimeout> } | undefined;
+  function takeCircle(): string | undefined {
+    if (!waiting) return undefined;
+    clearTimeout(waiting.timer);
+    const { label } = waiting;
+    waiting = undefined;
+    return label;
+  }
+  function holdForWords(label: string) {
+    takeCircle();
+    const at = Date.now();
+    const timer = setTimeout(() => {
+      if (waiting?.timer !== timer) return;
+      waiting = undefined;
+      // Spoke with the mic open since letting go: that was the question. Else ask.
+      deps.sendText(deps.spokeSince(at) ? label : circleAsk(label));
+    }, askMs);
+    waiting = { label, at, timer };
+  }
 
   function circle(stroke: Pt[]): Promise<{ circled: boolean }> {
     const loop = findLoop(stroke);
@@ -144,16 +180,30 @@ export function createScreen(deps: ScreenDeps): Screen {
         if (wait > 0) await Bun.sleep(wait);
         // A circle turn carries only the circle's label: app and window would pull the answer away.
         const text = circleLabel(mine.where, cursor);
+        if (!deps.spokeSince(holdStart)) {
+          // Circled in silence: the words about it come next (or Jett asks).
+          holdForWords(text);
+          return { sent: false, circled: true, waiting: true };
+        }
+        takeCircle();
         deps.sendText(text);
         return { sent: true, circled: true, text };
       }
       if (!deps.spokeSince(holdStart)) return { sent: false, circled: false };
+      // These words are about the circle still waiting for them.
+      const label = takeCircle();
+      if (label) {
+        deps.sendText(label);
+        return { sent: true, circled: true, text: label };
+      }
       const text = contextLine(await state(), cursor);
       if (!text) return { sent: false, circled: false };
       deps.sendText(text);
       return { sent: true, circled: false, text };
     },
 
+    takeCircle,
+    dispose: () => void takeCircle(),
     permission: () => eyes.permission(),
     requestPermission: () => eyes.requestPermission(),
   };
