@@ -29,6 +29,8 @@ import { findEyesBin, helperEyes } from "./screen/eyes.ts";
 import { helperHands } from "./screen/hands.ts";
 import { geminiGround } from "./screen/grounding.ts";
 import { createImages } from "./images.ts";
+import { createDuck, macVolume } from "./duck.ts";
+import { join } from "node:path";
 
 // The installed app sets LIVE_AGENT_HOME (~/Desktop/live-agent): work from there and
 // read the key from its .env, because opened from Finder there is no terminal (src/home.ts).
@@ -66,6 +68,10 @@ const eyes = eyesBin ? helperEyes({ bin: eyesBin, excludePids: jettPids }) : und
 // Jett's hands (computer control): the same helper clicks, types and focuses apps.
 const hands = eyesBin ? helperHands({ bin: eyesBin, excludePids: jettPids }) : undefined;
 if (process.platform === "darwin" && !eyesBin) console.error("live-agent: no jett-eyes helper: Jett can't see the screen (run app/scripts/build-eyes.sh)");
+// Quiet Mac while push to talk is held (config duckWhileTalking). A level a crash left
+// behind is put back first, before anything else can duck.
+const duck = process.platform === "darwin" ? createDuck({ volume: macVolume(), stateFile: join(home ?? process.cwd(), ".duck.json") }) : undefined;
+await duck?.recover();
 // Ticket 40: a network failure while starting (the Mac just woke, Wi-Fi not back yet)
 // must not end the core. The model adapter already retries on its own; this is the
 // net under it: try the whole start again with backoff instead of exiting.
@@ -93,6 +99,7 @@ const startOnce = () => startApp({
   chatIdleMs: 10 * 60_000,
   eyes,
   hands,
+  duck,
   // Finding things on screen, last tier: one Gemini Flash call on a fresh screenshot (key read when it runs).
   ground: (shot, describe) => geminiGround({ apiKey: geminiApiKey() ?? "" })(shot, describe),
   // show_image: photos from Wikimedia Commons, pictures from a Gemini image model (key read when it runs).

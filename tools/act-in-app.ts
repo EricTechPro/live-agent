@@ -14,27 +14,38 @@ import { errorMessage } from "../src/errors.ts";
 import { defineTool, type ToolContext } from "../src/core/tool.ts";
 import { AccessibilityOffError, appName, type Hands } from "../src/screen/hands.ts";
 import { readTarget, targetProps } from "./find-on-screen.ts";
+import type { Found } from "../src/screen/locator.ts";
+import type { Rect } from "../src/screen/geometry.ts";
 
 const MAX_STEPS = 30;
 /** A moment for the UI to catch up after a click, key or focus, before the next step looks. */
 const SETTLE_MS = 150;
 const LAUNCH_WAIT_MS = 10_000;
 
+/**
+ * The orb's trip (gap #1): it flies to the step's target, the bubble says `say` for `leadMs`
+ * before the step acts, and it holds `holdMs` after the last one. Tests set these to 0.
+ */
+export const actTiming = { leadMs: 1600, travelMs: 220, holdMs: 400 };
+
 const point = { x: z.number(), y: z.number() };
+/** A step's one line for the bubble, said before it acts ("Scale is on the right, setting it to 200"). */
+const say = { say: z.string().trim().min(1).max(160).optional() };
 const stepSchema = z.discriminatedUnion("do", [
-  z.object({ do: z.literal("click_text"), text: z.string().optional(), describe: z.string().optional(), near: z.string().optional(), nth: z.number().optional() }),
-  z.object({ do: z.literal("click_at"), ...point, right: z.boolean().optional(), count: z.number().int().min(1).max(3).optional() }),
-  z.object({ do: z.literal("type"), text: z.string().min(1).max(2000) }),
-  z.object({ do: z.literal("key"), key: z.string().trim().min(1).max(40) }),
+  z.object({ do: z.literal("click_text"), text: z.string().optional(), describe: z.string().optional(), near: z.string().optional(), nth: z.number().optional(), ...say }),
+  z.object({ do: z.literal("click_at"), ...point, right: z.boolean().optional(), count: z.number().int().min(1).max(3).optional(), ...say }),
+  z.object({ do: z.literal("type"), text: z.string().min(1).max(2000), ...say }),
+  z.object({ do: z.literal("key"), key: z.string().trim().min(1).max(40), ...say }),
   z.object({
+    ...say,
     do: z.literal("scroll"),
     direction: z.enum(["up", "down", "left", "right"]),
     amount: z.number().int().min(1).max(50).optional(),
     x: z.number().optional(),
     y: z.number().optional(),
   }),
-  z.object({ do: z.literal("wait"), seconds: z.number().min(0).max(10) }),
-  z.object({ do: z.literal("focus"), app: z.string().trim().min(1) }),
+  z.object({ do: z.literal("wait"), seconds: z.number().min(0).max(10), ...say }),
+  z.object({ do: z.literal("focus"), app: z.string().trim().min(1), ...say }),
 ]);
 type Step = z.infer<typeof stepSchema>;
 const argsSchema = z.object({ app: z.string().trim().min(1).optional(), steps: z.array(stepSchema).min(1).max(MAX_STEPS) });
@@ -82,16 +93,27 @@ async function bringUp(hands: Hands, app: string): Promise<{ launched: boolean }
   return { launched };
 }
 
-async function doStep(step: Step, hands: Hands, screen: ToolContext["screen"]): Promise<Record<string, unknown>> {
+/** Where the orb goes for a step (global points): the control it clicks, the point, or nowhere new. */
+async function aim(step: Step, screen: ToolContext["screen"]): Promise<Found | Rect | undefined> {
+  if (step.do === "click_text") {
+    if (!step.text?.trim() && !step.describe?.trim()) throw new Error("give text (its words on screen) or describe");
+    if (!screen?.find) throw new Error("finding things on screen is not available here");
+    return screen.find(readTarget(step));
+  }
+  if (step.do === "click_at" || (step.do === "scroll" && step.x !== undefined && step.y !== undefined)) {
+    return { x: step.x! - 12, y: step.y! - 12, w: 24, h: 24 };
+  }
+  return undefined;
+}
+
+async function doStep(step: Step, hands: Hands, found: Found | Rect | undefined): Promise<Record<string, unknown>> {
   switch (step.do) {
     case "click_text": {
-      if (!step.text?.trim() && !step.describe?.trim()) throw new Error("give text (its words on screen) or describe");
-      if (!screen?.find) throw new Error("finding things on screen is not available here");
-      const found = await screen.find(readTarget(step));
-      const r = found.rect;
-      const pressed = await hands.press({ x: r.x + r.w / 2, y: r.y + r.h / 2 }, found.front?.pid);
+      const hit = found as Found;
+      const r = hit.rect;
+      const pressed = await hands.press({ x: r.x + r.w / 2, y: r.y + r.h / 2 }, hit.front?.pid);
       await Bun.sleep(SETTLE_MS);
-      return { clicked: found.label ?? step.text ?? step.describe, via: pressed.via };
+      return { clicked: hit.label ?? step.text ?? step.describe, via: pressed.via };
     }
     case "click_at":
       await hands.clickAt({ x: step.x, y: step.y }, { ...(step.right ? { right: true } : {}), ...(step.count ? { count: step.count } : {}) });
@@ -129,7 +151,8 @@ export default defineTool<Record<string, unknown>>({
     "direction, amount}; {do:'click_at', x, y} screen points, last resort; {do:'wait', seconds}; {do:'focus', app}. " +
     "To go to a website, use open instead. Never delete, pay, buy, send or sign out unless the user clearly asked for " +
     "exactly that; those clicks always ask the user first, so just call it and the app asks them. If a step fails you " +
-    "hear which one: say so in one line, or look and try other words.",
+    "hear which one: say so in one line, or look and try other words. Give the main steps a say: one short line shown " +
+    "by the orb just before it acts ('Scale is on the right panel, so I'll set it to 200').",
   risk: "act",
   parameters: {
     type: "object",
@@ -152,6 +175,7 @@ export default defineTool<Record<string, unknown>>({
             amount: { type: "integer", description: "scroll: lines (default 5)." },
             seconds: { type: "number", description: "wait: at most 10." },
             app: { type: "string", description: "focus: the app to bring to the front." },
+            say: { type: "string", description: "One short line about this step, shown before it acts." },
           },
           required: ["do"],
         },
@@ -159,7 +183,7 @@ export default defineTool<Record<string, unknown>>({
     },
     required: ["steps"],
   },
-  async run(args, { hands, screen }) {
+  async run(args, { hands, screen, emit, signal }) {
     if (!hands) throw new Error("Acting in other apps is not available here (macOS with Jett's screen helper only).");
     const parsed = argsSchema.safeParse(args);
     if (!parsed.success) {
@@ -172,14 +196,30 @@ export default defineTool<Record<string, unknown>>({
     const done: Record<string, unknown>[] = [];
     let launched = false;
     if (app) launched = (await bringUp(hands, app)).launched;
+    const of = steps.length;
+    const where = app ? { app: appName(app) } : {};
+    let rect: Rect | undefined;
     for (const [i, step] of steps.entries()) {
+      const show = { tool: "act_in_app" as const, ...where, step: i + 1, of, ...(step.say ? { say: step.say } : {}) };
       try {
-        done.push(await doStep(step, hands, screen));
+        if (signal?.aborted) throw new Error("stopped by the user");
+        const found = await aim(step, screen);
+        const moved = found ? ("rect" in found ? found.rect : found) : undefined;
+        rect = moved ?? rect;
+        emit?.({ type: "act.step", ...show, ...(rect ? { rect } : {}), state: "start" });
+        // The bubble leads the action; a trip with no words just lets the orb land first.
+        const lead = step.say ? actTiming.leadMs : moved ? actTiming.travelMs : 0;
+        if (lead) await Bun.sleep(lead);
+        if (signal?.aborted) throw new Error("stopped by the user");
+        done.push(await doStep(step, hands, found));
+        emit?.({ type: "act.step", ...show, ...(rect ? { rect } : {}), state: "done" });
       } catch (err) {
+        emit?.({ type: "act.step", ...show, ...(rect ? { rect } : {}), state: "failed" });
         const before = done.length ? ` Done before it: ${steps.slice(0, i).map(name).join(", ")}.` : " Nothing else was done.";
         throw new Error(`step ${i + 1} (${name(step)}) failed: ${errorMessage(err)}.${before}`);
       }
     }
+    if (rect && actTiming.holdMs) await Bun.sleep(actTiming.holdMs);
     return {
       ...(app ? { app, ...(launched ? { launched: true } : {}) } : {}),
       done,

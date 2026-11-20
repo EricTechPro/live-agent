@@ -36,6 +36,8 @@ export interface Config {
   defaultHelper: "codex" | "claude-code" | "gemini-cli";
   /** Tell the model when a scheduled workflow ends during a chat, so it can mention it. */
   announceScheduled: boolean;
+  /** Turn the Mac's other sounds down while push to talk is held (src/duck.ts). */
+  duckWhileTalking: boolean;
   /** App connections every helper job gets (src/helpers/mcp.ts). */
   mcpServers: Record<string, McpServer>;
   /** The keys held to talk and circle on screen (src/config/hotkey.ts). Default "ctrl+option". */

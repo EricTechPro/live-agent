@@ -29,6 +29,7 @@ describe("config file", () => {
       brainFolders: { raw: "raw", wiki: "wiki", projects: "projects" },
       defaultHelper: "codex",
       announceScheduled: true,
+      duckWhileTalking: true,
       mcpServers: {},
       drawHotkey: "ctrl+option",
     });
@@ -55,6 +56,7 @@ describe("config file", () => {
       brainFolders: { raw: "raw", wiki: "wiki", projects: "projects" },
       defaultHelper: "codex",
       announceScheduled: true,
+      duckWhileTalking: true,
       mcpServers: {},
       drawHotkey: "ctrl+option",
     });

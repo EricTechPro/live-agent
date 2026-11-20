@@ -54,29 +54,53 @@ export function actionLabel(name: string, args: Record<string, unknown>, lang: L
       return zh ? "在看开着什么…" : "Checking what's open…";
     case "run_command":
       return zh ? "在跑命令…" : "Running a command…";
+    case "remind":
+      return zh ? "在存提醒…" : "Saving a reminder…";
+    case "list_reminders":
+      return zh ? "在看提醒…" : "Checking your reminders…";
+    case "done_reminder":
+    case "snooze_reminder":
+      return zh ? "在改提醒…" : "Updating a reminder…";
+    case "forget":
+      return zh ? "在忘掉…" : "Forgetting it…";
+    case "guide":
+      return args.stop ? (zh ? "在停止…" : "Stopping…") : zh ? "在教你…" : "Showing you how…";
     default:
       return `${name.replace(/_/g, " ")}…`;
   }
 }
 
-/** The tool calls running now (by id), newest last, so the pill names the latest. */
+/**
+ * The tool calls running now (by id), newest last, so the pill names the latest. `done`: the
+ * last one that finished, held as a ✓ (or ✗) for DONE_HOLD_MS before the pill goes.
+ */
 export interface Work {
   running: { id: string; label: string }[];
+  done?: { label: string; ok: boolean; at: number };
 }
 export const noWork: Work = { running: [] };
+/** How long the pill shows ✓ "Working in CapCut" after the call is done. */
+export const DONE_HOLD_MS = 900;
 
 const DONE = new Set(["ok", "error", "blocked", "declined", "cancelled"]);
 
-export function addWork(w: Work, event: AgentEvent, lang: Lang = "en"): Work {
+export function addWork(w: Work, event: AgentEvent, lang: Lang = "en", now = 0): Work {
   switch (event.type) {
     case "tool.call":
-      return { running: [...w.running.filter((r) => r.id !== event.id), { id: event.id, label: actionLabel(event.name, event.args, lang) }] };
-    case "tool.result":
-      return DONE.has(event.status) && w.running.some((r) => r.id === event.id) ? { running: w.running.filter((r) => r.id !== event.id) } : w;
-    case "turn.done":
+      return { ...w, running: [...w.running.filter((r) => r.id !== event.id), { id: event.id, label: actionLabel(event.name, event.args, lang) }] };
+    case "tool.result": {
+      const was = w.running.find((r) => r.id === event.id);
+      if (!DONE.has(event.status) || !was) return w;
+      // A call the model took back (or the user said no to) just goes: no tick for it.
+      const tick = event.status === "ok" || event.status === "error" ? { done: { label: was.label.replace(/…$/, ""), ok: event.status === "ok", at: now } } : {};
+      return { running: w.running.filter((r) => r.id !== event.id), ...tick };
+    }
     case "interrupted":
     case "chat.started":
-      return w.running.length ? noWork : w;
+      return w.running.length || w.done ? noWork : w;
+    case "turn.done":
+      // The tick stays for its moment even when the turn ends right after the call.
+      return w.running.length ? { running: [], ...(w.done ? { done: w.done } : {}) } : w;
     default:
       return w;
   }
@@ -89,6 +113,12 @@ export interface CueInputs {
   look: CallLook;
   /** The latest running action's label, if any (`addWork`). */
   working?: string;
+  /** The last finished action (`Work.done`), shown as ✓ / ✗ for DONE_HOLD_MS after `at`. */
+  done?: Work["done"];
+  /** performance.now(), for the ✓'s hold. */
+  now?: number;
+  /** An act step's line (`act.step` say): the bubble says it before the step acts. */
+  narrate?: string;
   /** The captions showing now (captions.ts `shownCaptions`). */
   caption: { user?: string; model?: string };
   /** A drawing is on screen. */
@@ -96,16 +126,20 @@ export interface CueInputs {
 }
 
 export interface Cues {
-  pill?: { kind: "listen"; text?: string } | { kind: "work"; text: string };
+  /** listen: equaliser; work: spinner; done: ✓ (ok) or ✗; think: a row of dots with a marquee. */
+  pill?: { kind: "listen"; text?: string } | { kind: "work"; text: string } | { kind: "done"; text: string; ok: boolean } | { kind: "think" };
   bubble?: { text: string; long: boolean };
   /** Show the words in the bottom caption bar (a drawing is on screen). */
   bar: boolean;
 }
 
-export function cuesFor({ look, working, caption, drawing }: CueInputs): Cues {
+export function cuesFor({ look, working, done, now = 0, narrate, caption, drawing }: CueInputs): Cues {
   const cues: Cues = { bar: drawing && !!(caption.user || caption.model) };
   if (working) cues.pill = { kind: "work", text: working };
   else if (look === "listening") cues.pill = drawing ? { kind: "listen" } : { kind: "listen", text: caption.user };
-  if (!drawing && caption.model && look !== "offline") cues.bubble = { text: caption.model, long: caption.model.length > BUBBLE_FOLD };
+  else if (done && now - done.at < DONE_HOLD_MS) cues.pill = { kind: "done", text: done.label, ok: done.ok };
+  else if (look === "thinking") cues.pill = { kind: "think" };
+  if (narrate) cues.bubble = { text: narrate, long: narrate.length > BUBBLE_FOLD };
+  else if (!drawing && caption.model && look !== "offline") cues.bubble = { text: caption.model, long: caption.model.length > BUBBLE_FOLD };
   return cues;
 }

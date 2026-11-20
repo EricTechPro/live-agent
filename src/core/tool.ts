@@ -22,6 +22,11 @@ import type { Jobs } from "./jobs.ts";
 import type { FrontWindow } from "../screen/eyes.ts";
 import type { Hands } from "../screen/hands.ts";
 import type { Found, Target } from "../screen/locator.ts";
+import type { WatchEvent } from "../screen/eyes.ts";
+import type { EventOf } from "./events.ts";
+
+/** What a tool may put on the stream itself (`emit`): its call id is added for act steps. */
+export type ToolEvent = Omit<EventOf<"act.step">, "id"> | EventOf<"reminders"> | EventOf<"memory">;
 
 /** `act`: clicks, types or opens things in other apps (computer control). */
 export type RiskClass = "read" | "edit" | "command" | "helper" | "act";
@@ -50,6 +55,21 @@ export interface ToolContext {
     /** Swap a mark for a new one with the same id (`canvas.edit`). False when it is gone. */
     replace(mark: Mark): boolean;
   };
+  /**
+   * Put a tool event on the stream (an act step, the reminders, the memory list).
+   * Missing in hand-built contexts.
+   */
+  emit?(event: ToolEvent): void;
+  /**
+   * Aborted when the call is taken back or the user presses Esc (stopReply): a long tool
+   * (act_in_app, guide) stops between steps.
+   */
+  signal?: AbortSignal;
+  /**
+   * Tell the model more about this call before the tool is done (more answers follow).
+   * The model speaks about it, e.g. guide's next step. Missing in hand-built contexts.
+   */
+  tell?(output: Record<string, unknown>): void;
   /** Pictures for show_image (src/images.ts). Missing when the session has none (tests). */
   images?: Images;
   /**
@@ -78,6 +98,8 @@ export interface ToolContext {
     find?(target: Target): Promise<Found>;
     /** Pin screen marks to the window they were found in: they are erased when it changes. */
     pin?(ids: string[], front: FrontWindow | null): void;
+    /** Follow clicks, scrolls and front window changes (guide waits for clicks). Returns stop. */
+    watch?(on: (event: WatchEvent) => void): () => void;
   };
   /**
    * Jett's hands (src/screen/hands.ts): open apps and links, click, type, press keys, scroll

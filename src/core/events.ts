@@ -13,6 +13,8 @@ import type { SafetyMode, Verdict } from "./safety.ts";
 import type { RiskClass } from "./tool.ts";
 import type { Rect, ShotMap } from "../screen/geometry.ts";
 import type { FrontWindow } from "../screen/eyes.ts";
+import type { Reminder } from "../reminders.ts";
+import type { Fact } from "../brain/memory.ts";
 
 export type AgentEvent =
   /** Something said in the chat. Model text arrives in chunks: join them in order. */
@@ -134,6 +136,30 @@ export type AgentEvent =
    * `tokensUsed` the chat's total so far. A new chat starts again at 0.
    */
   | { type: "chat.usage"; model?: string; contextTokens: number; contextWindow?: number; tokensUsed: number }
+  /**
+   * One step of `act_in_app` or `guide` (call `id`): the orb goes to `rect` (global points)
+   * and the bubble shows `say`. act_in_app: `start` (about 1.5 s before it acts), then `done`
+   * or `failed`. guide: `waiting` (the target is ringed, Jett waits for the user's click),
+   * then `done`. The orb goes home when the call's `tool.result` arrives.
+   */
+  | {
+      type: "act.step";
+      id: string;
+      tool: "act_in_app" | "guide";
+      app?: string;
+      step: number;
+      of: number;
+      say?: string;
+      rect?: Rect;
+      state: "start" | "done" | "failed" | "waiting";
+    }
+  /**
+   * The open reminders changed (src/reminders.ts), soonest first. `show`: open the Reminders
+   * card. `due`: these ids are due now (a spoken nudge follows, and the card opens).
+   */
+  | { type: "reminders"; items: Reminder[]; show?: boolean; due?: string[] }
+  /** What Jett remembers changed (`remember`, `forget`, the Brain tab's Forget). */
+  | { type: "memory"; facts: Fact[] }
   /** The model finished its reply. `reply` is the whole reply, joined for you. */
   | { type: "turn.done"; reply: string }
   /** Something went wrong in the session. The session may still be usable. */

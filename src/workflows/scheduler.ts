@@ -16,18 +16,21 @@ import { listWorkflows, type Workflow } from "./index.ts";
 export interface SchedulerOptions {
   home: string;
   submit(wf: Workflow): void;
+  /** Called once per new minute too (reminders, src/reminders.ts). */
+  onMinute?(at: Date): void;
   /** Default 30 s. */
   tickMs?: number;
   now?: () => Date;
 }
 
-export function startScheduler({ home, submit, tickMs = 30_000, now = () => new Date() }: SchedulerOptions) {
+export function startScheduler({ home, submit, onMinute, tickMs = 30_000, now = () => new Date() }: SchedulerOptions) {
   let lastMinute = "";
   function tick() {
     const at = now();
     const minute = `${at.toDateString()} ${at.getHours()}:${at.getMinutes()}`;
     if (minute === lastMinute) return;
     lastMinute = minute;
+    onMinute?.(at);
     for (const wf of listWorkflows(home)) {
       if (wf.error || wf.trigger === "manual" || !cronMatches(parseCron(wf.trigger), at)) continue;
       submit(wf);

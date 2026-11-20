@@ -1,0 +1,61 @@
+/* Batch 2 (gap scan, Roamies ideas, our own look): the orb's trip to where it works, the
+   pill's ✓ and thinking dots, the Reminders card and "What I remember". */
+
+/* The orb, its bubble and pill fly to the control in one short ease (travel.ts). */
+.dock.traveling { transition: left .16s cubic-bezier(.2, .8, .2, 1), top .16s cubic-bezier(.2, .8, .2, 1); }
+.cues.traveling { transition: left .16s cubic-bezier(.2, .8, .2, 1), top .16s cubic-bezier(.2, .8, .2, 1); }
+.dock.traveling .controls, .dock.traveling .orb-label, .dock.traveling .dock-top { visibility: hidden; }
+
+/* ✓ done (held a moment) or ✗ failed. */
+.tick { display: none; width: 13px; text-align: center; font: 700 12px/1 var(--mono); }
+.cue-pill[data-kind="done"] .tick { display: inline-block; }
+.cue-pill[data-kind="done"] .tick::before { content: "✓"; color: var(--led); }
+.cue-pill[data-kind="done"][data-ok="false"] .tick::before { content: "✗"; color: #ff8a6a; }
+.cue-pill[data-kind="done"] { animation: pill-out .25s ease-in .65s both; }
+@keyframes pill-out { to { opacity: 0; } }
+
+/* Thinking: dim dots with a bright one walking left to right. */
+.dots { display: none; gap: 3px; align-items: center; }
+.dots i { width: 4px; height: 4px; border-radius: 1px; background: rgba(196, 160, 255, .35); animation: dot-walk .84s steps(1) infinite; }
+.dots i:nth-child(2) { animation-delay: .12s; } .dots i:nth-child(3) { animation-delay: .24s; } .dots i:nth-child(4) { animation-delay: .36s; }
+.dots i:nth-child(5) { animation-delay: .48s; } .dots i:nth-child(6) { animation-delay: .6s; } .dots i:nth-child(7) { animation-delay: .72s; }
+@keyframes dot-walk { 0%, 14% { background: rgb(226, 210, 255); box-shadow: 0 0 6px rgba(196, 160, 255, .8); } 15%, 100% { background: rgba(196, 160, 255, .35); box-shadow: none; } }
+.cue-pill[data-kind="think"] .dots { display: inline-flex; }
+.cue-pill[data-kind="think"] { padding: 0 12px; border-color: rgba(196, 160, 255, .4); }
+@media (prefers-reduced-motion: reduce) { .dots i { animation: none; } }
+
+/* ---- the Reminders card: same chrome as the drawing's cards ---- */
+.rem-card {
+  position: fixed; left: 50px; top: 35px; width: 300px; z-index: 3; color: #dcfff6;
+  background: rgba(3, 20, 20, .92); border: 1.5px solid #78ffe2; box-shadow: 0 0 8px rgba(120, 255, 226, .35), 0 10px 30px rgba(0, 0, 0, .4);
+  clip-path: polygon(4px 0, calc(100% - 4px) 0, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 0 calc(100% - 4px), 0 4px);
+  font: 400 13px/1.4 "Martian Mono", ui-monospace, monospace; animation: sketch-fade .25s ease-out;
+}
+.rem-head { position: relative; height: 22px; display: flex; align-items: center; justify-content: center; border-bottom: 1px solid rgba(120, 255, 226, .25); }
+.rem-dots { position: absolute; left: 8px; top: 9px; width: 4px; height: 4px; background: #78ffe2; box-shadow: 7px 0 0 rgba(120, 255, 226, .4); }
+.rem-title { margin: 0; font: 400 11px/1 "Martian Mono", ui-monospace, monospace; color: rgba(120, 255, 226, .8); }
+.rem-x { position: absolute; right: 2px; top: 0; width: 22px; height: 21px; padding: 0; border: 0; background: transparent; color: #dcfff6; font: 400 15px/1 var(--mono); cursor: pointer; }
+.rem-x:hover, .rem-x:focus-visible { background: rgba(120, 255, 226, .16); outline: none; }
+.rem-body { padding: 8px 12px 12px; }
+.rem-section + .rem-section { margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(120, 255, 226, .35); }
+.rem-section-title { margin: 0 0 4px; font: 400 13px/1.3 "Martian Mono", ui-monospace, monospace; color: #fff; }
+.rem-count { color: rgba(220, 255, 246, .5); font-size: 11px; }
+.rem-list { list-style: none; margin: 0; padding: 0; }
+.rem-row { display: grid; grid-template-columns: 18px 1fr auto; gap: 8px; align-items: start; padding: 3px 0; }
+.rem-ring { width: 13px; height: 13px; margin-top: 3px; padding: 0; border: 2px solid #78ffe2; border-radius: 50%; background: transparent; cursor: pointer; }
+.rem-ring:hover, .rem-ring:focus-visible { background: rgba(120, 255, 226, .3); outline: none; }
+.rem-row[data-done="true"] .rem-ring { background: #78ffe2; }
+.rem-row[data-done="true"] .rem-text { text-decoration: line-through; opacity: .5; }
+.rem-time { color: rgba(120, 255, 226, .65); font-size: 11.5px; white-space: nowrap; margin-top: 1px; }
+.rem-row[data-overdue="true"] .rem-time { color: #ffd36a; }
+.rem-empty { margin: 2px 0; color: rgba(220, 255, 246, .55); font-size: 12px; }
+
+/* ---- "What I remember" in the Brain tab ---- */
+.mem-count { color: var(--ink-3); font-weight: 400; letter-spacing: 0; }
+.mem-list { list-style: none; margin: 0 0 14px; padding: 0; }
+.mem-list:empty { margin-bottom: 0; }
+.mem-row { display: flex; align-items: baseline; gap: 10px; padding: 4px 0; border-bottom: 1px solid rgba(120, 255, 226, .08); }
+.mem-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
+.mem-forget { flex: none; padding: 0; border: 0; background: transparent; color: rgba(255, 138, 106, .75); font: 500 11px/1.2 var(--mono); cursor: pointer; }
+.mem-forget:hover, .mem-forget:focus-visible { color: #ff8a6a; text-decoration: underline; outline: none; }
+.mem-forget:disabled { opacity: .4; cursor: default; }

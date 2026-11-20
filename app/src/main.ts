@@ -18,7 +18,11 @@ import {
 } from "./core-client.ts";
 import { waveFor, QUIET } from "./orb-wave.ts";
 import { isNewChatKey, SHORTCUTS, SHORTCUTS_TITLE } from "./shortcuts.ts";
-import { addWork, cuesFor, noWork, type Work } from "./cues.ts";
+import { addWork, cuesFor, DONE_HOLD_MS, noWork, type Work } from "./cues.ts";
+import { addAct, travelSpot, type Act } from "./travel.ts";
+import { toLocal } from "./screen-origin.ts";
+import { mountReminders } from "./reminders-card.ts";
+import { mountMemoryView } from "./memory-view.ts";
 import { mountSketch, type SketchApi } from "./sketch-view.ts";
 import { followFrontWindow, frontWindow, frontWindowAvoid, onFrontWindowMoved } from "./front-window.ts";
 import { mountTooltips, paintIcons, setIcon } from "./tooltip.ts";
@@ -83,8 +87,10 @@ function storedSpot() {
 }
 function moveOrb(at: Point, save = false) {
   orbAt = at;
-  dock.style.left = `${at.x}px`;
-  dock.style.top = `${at.y}px`;
+  // While the orb works away from home (travel), home moves but the orb stays put.
+  const shown = travel?.at ?? at;
+  dock.style.left = `${shown.x}px`;
+  dock.style.top = `${shown.y}px`;
   placeFloaters();
   placeQuick();
   if (save) {
@@ -305,9 +311,30 @@ addEventListener("resize", () => {
   movePill(pillSpot);
 });
 
+// ---- the orb travels to where it works (gap #1): act_in_app and guide steps ----
+/** The act step on screen now (travel.ts `addAct`); the orb is home when there is none. */
+let act: Act | undefined;
+/** Where the orb is while it works away from home, and which side its cues hang on. */
+let travel: { at: Point; side: "left" | "right" } | undefined;
+function updateTravel() {
+  const target = act?.rect && !mini ? toLocal(act.rect) : undefined;
+  if (target) {
+    const d = dock.getBoundingClientRect();
+    const o = orbEl.getBoundingClientRect();
+    travel = travelSpot(target, { x: o.left - d.left, y: o.top - d.top, w: o.width, h: o.height }, dockSize(), view());
+  } else travel = undefined;
+  dock.classList.toggle("traveling", !!travel);
+  $("cues").classList.toggle("traveling", !!travel);
+  const at = travel?.at ?? orbAt;
+  dock.style.left = `${at.x}px`;
+  dock.style.top = `${at.y}px`;
+  placeFloaters();
+}
+
 /** The popover and approval cards sit beside the orb, on the side with room. */
 function placeFloaters() {
-  const orbRect = { ...orbAt, ...dockSize() };
+  const home = travel?.at ?? orbAt;
+  const orbRect = { ...home, ...dockSize() };
   if (!popover.hidden) {
     const at = placePopover(orbRect, { width: popover.offsetWidth, height: popover.offsetHeight }, view());
     popover.style.left = `${at.x}px`;
@@ -322,10 +349,10 @@ function placeFloaters() {
   }
   // The cues hang beside the orb, on the side with room, level with the orb.
   const cuesEl = $("cues");
-  const left = orbAt.x + orbRect.width / 2 > innerWidth / 2;
+  const left = travel ? travel.side === "left" : home.x + orbRect.width / 2 > innerWidth / 2;
   cuesEl.dataset.side = left ? "left" : "right";
-  cuesEl.style.left = `${left ? orbAt.x - 6 : orbAt.x + orbRect.width + 6}px`;
-  cuesEl.style.top = `${orbAt.y + 26 + 56}px`;
+  cuesEl.style.left = `${left ? home.x - 6 : home.x + orbRect.width + 6}px`;
+  cuesEl.style.top = `${home.y + 26 + 56}px`;
   // Drawing cards (drawing v2) lay themselves out on the screen, clear of the orb, its
   // cues and any open popover; they fill columns from the side away from the orb.
   const box = (el: HTMLElement) => {
@@ -396,6 +423,7 @@ showFollow();
  * cursor is, push to talk (hold Ctrl+Option), and following the pointer if chosen.
  */
 let ptt: Ptt = pttIdle;
+let escHeld = false;
 // Screen awareness (slice 2): ink while Ctrl+Option is held (app/src/screen-ink.ts).
 let screenInk: ScreenInk | undefined;
 function startOverlayPoll() {
@@ -423,11 +451,15 @@ function startOverlayPoll() {
       }
       if (h.hideTip) tips.hide();
       updatePillHover(point);
-      if (following && !drag && !mini && layer === "home") {
+      // Esc anywhere (the window seldom has the keyboard): stop the reply, an act or a guide.
+      if (poll.escape && !escHeld && (orb.state === "speaking" || act)) void coreRef?.stopReply().catch(() => {});
+      escHeld = !!poll.escape;
+      if (following && !drag && !mini && !travel && layer === "home") {
         const next = followStep(orbAt, dockSize(), point, view());
         if (next.x !== orbAt.x || next.y !== orbAt.y) moveOrb(next);
       }
-      const take = capture({ point, rects: hitRects(), hold: !!drag || !wizardEl.hidden });
+      // While Jett clicks in another app, the window never takes the mouse: its clicks must land.
+      const take = act?.tool === "act_in_app" ? false : capture({ point, rects: hitRects(), hold: !!drag || !wizardEl.hidden });
       if (through !== !take) {
         through = !take;
         // The cursor left everything Jett shows: no tooltip may stay behind (ticket 39).
@@ -754,6 +786,9 @@ function renderCaptions() {
   const cues = cuesFor({
     look: shown?.look ?? "starting",
     working: work.running.at(-1)?.label,
+    done: work.done,
+    now,
+    narrate: act && act.state !== "done" ? act.say : undefined,
     caption: shownCaptions(captions, now, Infinity),
     drawing,
   });
@@ -764,7 +799,8 @@ function renderCaptions() {
   if (cues.pill) {
     cuePill.dataset.kind = cues.pill.kind;
     // Your newest words matter most: a long line keeps its end.
-    const full = cues.pill.text ?? "";
+    cuePill.dataset.ok = cues.pill.kind === "done" ? String(cues.pill.ok) : "";
+    const full = "text" in cues.pill ? (cues.pill.text ?? "") : "";
     const text = full.length > 38 ? `…${full.slice(-37).trimStart()}` : full;
     if (cuePillText.textContent !== text) cuePillText.textContent = text;
     cuePillText.hidden = !text;
@@ -1096,6 +1132,8 @@ function pushToTalk(on: boolean) {
   }
   dock.classList.toggle("ptt", on);
   pillEl.classList.toggle("ptt", on);
+  // Other sounds on the Mac go quiet while you hold the keys (config duckWhileTalking).
+  void coreRef.duck(on).catch(() => {});
 }
 
 // ---- keys: Space = start / mute, Cmd+. = hang up, Esc closes what is open, else hangs up ----
@@ -1142,8 +1180,8 @@ window.addEventListener("keydown", (e) => {
     if (layer === "center") return setLayer("escape");
     // Cards on screen: Esc closes them all first.
     if (sketch?.openCount()) return sketch.clearAll();
-    // Jett talking: Esc stops the reply. Otherwise, in a call, it hangs up.
-    if (orb.state === "speaking") return void coreRef?.stopReply().catch(() => {});
+    // Jett talking, acting or guiding: Esc stops it. Otherwise, in a call, it hangs up.
+    if (orb.state === "speaking" || act) return void coreRef?.stopReply().catch(() => {});
     if (call === "live" || call === "joining") void endCall();
     return;
   }
@@ -1237,7 +1275,13 @@ async function boot() {
     transcript = addToTranscript(transcript, event);
     renderTranscript();
     captions = addCaption(captions, event, performance.now());
-    work = addWork(work, event, lang);
+    const hadDone = work.done;
+    work = addWork(work, event, lang, performance.now());
+    // The ✓ holds for a moment, then the pill goes on its own.
+    if (work.done && work.done !== hadDone) setTimeout(renderCaptions, DONE_HOLD_MS + 20);
+    const before = act;
+    act = addAct(act, event);
+    if (act?.rect !== before?.rect || !act !== !before) updateTravel();
     if (event.type === "transcript" && event.role === "user") {
       const heard = spokenLang(event.text);
       if (heard && heard !== lang) (lang = heard), render();
@@ -1273,6 +1317,8 @@ async function boot() {
   });
   mountChatView(core, reader, { list: $<HTMLUListElement>("chat-list"), empty: $("chats-empty") });
   sketch = mountSketch(core, stage);
+  mountReminders(core, overlay);
+  mountMemoryView(core, { list: $<HTMLUListElement>("memory-list"), empty: $("memory-empty"), count: $("memory-count") });
   onFrontWindowMoved(placeFloaters);
   followFrontWindow(core);
   placeFloaters();

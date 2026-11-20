@@ -38,6 +38,8 @@ import {
   STEP_ICONS,
   STEP_LINES,
   stepReady,
+  CAN_DO,
+  TRY_ME,
   TONES,
   VOICES,
   wizardSteps,
@@ -564,7 +566,7 @@ export function runWizard(info: CoreInfo, status: SetupStatus, core?: CoreClient
     $("w-nav").hidden = true;
     orb!.icon(STEP_ICONS.end);
     say("All set!", "hype", 1);
-    $("w-open").focus();
+    $("w-try").focus();
   }
   // Leave: "Open Jett", the × or Esc. Whatever was saved stays saved; nothing more is.
   function leave() {
@@ -584,6 +586,19 @@ export function runWizard(info: CoreInfo, status: SetupStatus, core?: CoreClient
   }
   document.addEventListener("keydown", onKey);
   $("w-open").onclick = leave;
+  // "Here's what I can do": the list, and Try me out sends a first turn that draws.
+  $("w-can-do").replaceChildren(
+    ...CAN_DO.map(({ what, say: line }) => {
+      const li = Object.assign(document.createElement("li"), { textContent: what });
+      li.append(Object.assign(document.createElement("span"), { className: "note", textContent: ` "${line}"` }));
+      return li;
+    }),
+  );
+  $("w-try").onclick = () => {
+    const c = client;
+    leave();
+    if (c) setTimeout(() => void c.sendText(TRY_ME).catch(() => {}), 400);
+  };
   $("w-close").onclick = leave;
 
   // ---- start ---------------------------------------------------------------------
