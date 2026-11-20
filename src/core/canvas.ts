@@ -210,10 +210,15 @@ function problems(error: z.ZodError, root: string): string {
 
 /** A relative move on the board, in board units: -1000 to 1000. */
 const delta = z.number().finite().min(-BOARD.width, "dx and dy are -1000 to 1000").max(BOARD.width, "dx and dy are -1000 to 1000");
+// shape / labels: a model card built up in place (a ball, then its disk: shape planet, then labels).
 const edit = z
-  .object({ id, color, label: z.string().trim().min(1).max(80).optional(), x: X.optional(), y: Y.optional(), dx: delta.optional(), dy: delta.optional() })
-  .refine((e) => e.color !== undefined || e.label !== undefined || e.x !== undefined || e.y !== undefined || !!e.dx || !!e.dy, {
-    message: "nothing to change: give a color, label, x, y, dx or dy",
+  .object({
+    id, color, label: z.string().trim().min(1).max(80).optional(), x: X.optional(), y: Y.optional(), dx: delta.optional(), dy: delta.optional(),
+    shape: z.enum(MODEL_SHAPES, { message: `shape is one of ${MODEL_SHAPES.join(", ")}` }).optional(),
+    labels: z.array(z.object({ text: words(24), ...v3 })).max(4).optional(),
+  })
+  .refine((e) => e.color !== undefined || e.label !== undefined || e.x !== undefined || e.y !== undefined || !!e.dx || !!e.dy || !!e.shape || !!e.labels, {
+    message: "nothing to change: give a color, label, x, y, dx, dy, shape or labels",
   })
   .refine((e) => !((e.x !== undefined && e.dx !== undefined) || (e.y !== undefined && e.dy !== undefined)), {
     message: "give x or dx (and y or dy), not both",
@@ -252,6 +257,11 @@ export function applyEdit(m: Mark, change: MarkChange): Mark {
     else if (isCard(m)) next.title = change.label;
     else if (m.kind === "box" || m.kind === "arrow" || m.kind === "step" || m.kind === "spot") next.label = change.label;
     else throw new Error(`${m.id} is a ${m.kind}: it has no label`);
+  }
+  if (change.shape || change.labels) {
+    if (m.kind !== "model") throw new Error(`${m.id} is a ${m.kind}: only a model card has a shape and labels`);
+    if (change.shape) next.shape = change.shape;
+    if (change.labels) next.labels = change.labels;
   }
   const moves = change.x !== undefined || change.y !== undefined || !!change.dx || !!change.dy;
   if (moves) {

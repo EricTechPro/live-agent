@@ -112,7 +112,9 @@ export default defineTool<{ beats: unknown }>({
     `At most ${MAX_CARDS} cards stay up; older ones close. ` +
     "Send beats: each beat is one short line you say plus the marks drawn while you say it. " +
     `Keep it to a few marks per beat (at most ${MAX_MARKS_PER_BEAT}) and at most ${MAX_BEATS} beats. ` +
-    "Give every mark a new id (p1, p2, ...). Say the beats' lines out loud in order; do not read the marks.",
+    "Give every mark a new id (p1, p2, ...). Say the beats' lines out loud in order; do not read the marks. " +
+    "One card per idea: to build an idea up step by step, change its card with edit_canvas (a model's shape or labels, " +
+    "a title) instead of drawing a near-copy. A card that repeats one on screen (same kind and title, or a model of the same shape) updates it.",
   risk: "read",
   parameters: {
     type: "object",
@@ -138,9 +140,15 @@ export default defineTool<{ beats: unknown }>({
     if (spots.length) throw new Error(`Nothing was drawn. ${spots[0]!.id}: to mark something on the real screen, call mark_screen.`);
     const pictures = checked.flatMap((b) => b.marks).filter((m) => m.kind === "image");
     if (pictures.length) throw new Error(`Nothing was drawn. ${pictures[0]!.id}: to show a photo or picture, call show_image.`);
-    canvas.draw(checked);
-    const ids = checked.flatMap((b) => b.marks.map((m) => m.id));
+    const { merged } = canvas.draw(checked);
+    const into = new Map(merged.map((m) => [m.from, m.into]));
+    const ids = [...new Set(checked.flatMap((b) => b.marks.map((m) => into.get(m.id) ?? m.id)))];
     // Every id on the canvas, so later turns can say "make p2 red" (edit_canvas).
-    return { drawn: ids.length, ids, canvas: canvas.ids() };
+    return {
+      drawn: ids.length, ids, canvas: canvas.ids(),
+      ...(merged.length
+        ? { updated: merged, note: `${merged.map((m) => `${m.from} repeated ${m.into}, so ${m.into} was updated`).join("; ")}. Build on one card per idea: edit_canvas it.` }
+        : {}),
+    };
   },
 });

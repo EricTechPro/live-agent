@@ -21,7 +21,7 @@
 .dots i:nth-child(5) { animation-delay: .48s; } .dots i:nth-child(6) { animation-delay: .6s; } .dots i:nth-child(7) { animation-delay: .72s; }
 @keyframes dot-walk { 0%, 14% { background: rgb(226, 210, 255); box-shadow: 0 0 6px rgba(196, 160, 255, .8); } 15%, 100% { background: rgba(196, 160, 255, .35); box-shadow: none; } }
 .cue-pill[data-kind="think"] .dots { display: inline-flex; }
-.cue-pill[data-kind="think"] { padding: 0 12px; border-color: rgba(196, 160, 255, .4); }
+.cue-pill[data-kind="think"] { padding: 0 12px; border-color: rgba(196, 160, 255, .4); color: #e3d8ff; }
 @media (prefers-reduced-motion: reduce) { .dots i { animation: none; } }
 
 /* ---- the Reminders card: same chrome as the drawing's cards ---- */

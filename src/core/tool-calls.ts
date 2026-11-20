@@ -184,7 +184,7 @@ export function createToolCalls(deps: ToolCallsDeps): ToolCalls {
       .then(
         (output) => {
           // A call that started jobs gets more answers later, so this one says "more to come".
-          respond(call, "ok", { output: output ?? null }, watch.open ? { willContinue: true } : {});
+          respond(call, "ok", { output: output ?? null }, watch.open ? { willContinue: true } : tool.quiet ? { scheduling: "silent" } : {});
           watch.answered = true;
           announceEnded(watch);
         },

@@ -792,6 +792,7 @@ function renderCaptions() {
   const cues = cuesFor({
     look: shown?.look ?? "starting",
     working: work.running.at(-1)?.label,
+    topic: work.topic,
     done: work.done,
     now,
     narrate: act && act.state !== "done" ? act.say : undefined,

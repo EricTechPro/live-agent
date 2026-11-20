@@ -67,6 +67,17 @@ describe("Gemini Live connection", () => {
     await session.close();
   });
 
+  test("never pins the reply language: no languageCode, so the model follows the user (and the prompt)", async () => {
+    const live = fakeLive();
+    const session = await startSession({
+      model: geminiLiveModel({ apiKey: "test", connect: live.connect }),
+      config: { ...defaultConfig(), voice: "Kore" },
+      chatEndNote: false,
+    });
+    expect(JSON.stringify(live.sockets[0]!.params.config)).not.toMatch(/languageCode|language_code/);
+    await session.close();
+  });
+
   test("speaks with the voice named in the config", async () => {
     const live = fakeLive();
     const session = await startSession({

@@ -20,6 +20,7 @@ import readFile from "../../tools/read-file.ts";
 import remember from "../../tools/remember.ts";
 import runCommand from "../../tools/run-command.ts";
 import searchBrain from "../../tools/search-brain.ts";
+import setTopic from "../../tools/set-topic.ts";
 import setVoice from "../../tools/set-voice.ts";
 import showImage from "../../tools/show-image.ts";
 import startHelper from "../../tools/start-helper.ts";
@@ -39,7 +40,7 @@ import snoozeReminder from "../../tools/snooze-reminder.ts";
 
 export const bundledTools: Tool[] = [
   actInApp, cancelJob, draw, editCanvas, findOnScreen, listWindows, look, markScreen, open, readFile, remember, runCommand,
-  searchBrain, setVoice, showImage, startHelper,
+  searchBrain, setTopic, setVoice, showImage, startHelper,
   addConnection, createWorkflow, deleteWorkflow, listWorkflows, runWorkflow, writeFile,
   doneReminder, forget, guide, listReminders, remind, snoozeReminder,
 ];

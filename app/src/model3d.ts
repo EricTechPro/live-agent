@@ -113,6 +113,30 @@ export function modelSdf(m: ModelSpec): Sdf {
   }
 }
 
+/** A surface pattern: brightness x 0.6..1 at a model-space point. */
+export type Texture = (x: number, y: number, z: number) => number;
+
+/**
+ * Stripes that turn with the shape (feedback: a plain sphere or ring lit from a fixed light looks
+ * the same at every angle, so the turning card looked frozen). Round shapes get them; a cube,
+ * molecule, points and heightmap already change as they turn.
+ */
+export function modelTexture(m: ModelSpec): Texture | undefined {
+  const band = (a: number, n: number) => (Math.sin(a * n) > 0 ? 1 : 0.6);
+  switch (m.shape) {
+    case "sphere":
+    case "cell":
+      return (x, _y, z) => band(Math.atan2(z, x), 4);
+    case "torus":
+      return (x, _y, z) => band(Math.atan2(z, x), 6);
+    case "planet":
+      // The ball and its disk both swirl round the vertical axis.
+      return (x, y, z) => (Math.hypot(x, y, z) < 0.6 ? band(Math.atan2(z, x), 4) : band(Math.atan2(z, x * 0.97 + y * 0.24), 7));
+    default:
+      return undefined;
+  }
+}
+
 /** Model space -> view space: turn (yaw, round the vertical axis), then tip towards the viewer (pitch). */
 function toView(p: V3, yaw: number, pitch: number): V3 {
   const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
@@ -136,7 +160,7 @@ const LIGHT = (() => {
  * One brightness per dot (cols x rows, row by row): 0 = no surface, else 0.22 (shadow, deep
  * teal) to 1 (lit, near white).
  */
-export function renderModel(sdf: Sdf, cols: number, rows: number, yaw: number, pitch: number): Float32Array {
+export function renderModel(sdf: Sdf, cols: number, rows: number, yaw: number, pitch: number, texture?: Texture): Float32Array {
   const out = new Float32Array(cols * rows);
   const k = (2 * VIEW) / Math.min(cols, rows);
   const dir = toModel({ x: 0, y: 0, z: 1 }, yaw, pitch);
@@ -164,7 +188,7 @@ export function renderModel(sdf: Sdf, cols: number, rows: number, yaw: number, p
       const nx = a - b - c + d, ny = -a - b + c + d, nz = -a + b - c + d;
       const nl = len3(nx, ny, nz) || 1;
       const lambert = Math.max(0, (nx * light.x + ny * light.y + nz * light.z) / nl);
-      out[j * cols + i] = 0.22 + 0.78 * lambert;
+      out[j * cols + i] = 0.22 + 0.78 * lambert * (texture ? texture(px, py, pz) : 1);
     }
   return out;
 }

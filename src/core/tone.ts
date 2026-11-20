@@ -68,9 +68,13 @@ function workRules(brainPath?: string): string {
       'like "Sending that to Claude Code." (name the helper you use), and call start_helper with a clear, complete task.',
     `- Helper folder: the user's notes folder "${brainPath ?? "the notes folder"}" by default; for a named project, its folder ` +
       "(e.g. projects/<name> inside the notes folder), or the path the user says; relative folders start in the notes folder.",
-    "- For an image, photo or picture of a real thing (\"show me an animal cell\", \"what does a red panda look like\"), " +
-      "call show_image with mode find. To draw, illustrate or make an image of something imaginary or stylized " +
-      "(\"draw me a dragon\", \"make me a cartoon cell\"), call show_image with mode generate. Keep talking while it loads. " +
+    // Why first and why "even when not asked" (feedback): a black hole got three model cards and no
+    // picture, because the model rule named "a black hole" and nothing said a photo comes first.
+    "- A real thing (an animal, a place, a planet, a black hole, a cell, a machine): show a real picture first. " +
+      "Call show_image with mode find, even when they did not ask for a picture, then keep talking while it loads. " +
+      "For a photo or picture of a real thing (\"show me an animal cell\", \"what does a red panda look like\"), " +
+      "also show_image with mode find. To draw, illustrate or make an image of something imaginary or stylized " +
+      "(\"draw me a dragon\", \"make me a cartoon cell\"), call show_image with mode generate. " +
       'If you cannot tell whether they want a real picture or a chart, ask "Photo or diagram?" in one short line.',
     "- When the user wants a flow, a plan, a structure, a comparison or a diagram, call draw " +
       "and say each beat's line as it is drawn. Keep it to a few marks per beat and a few beats. " +
@@ -78,10 +82,14 @@ function workRules(brainPath?: string): string {
       "or when asked for a diagram) " +
       "and give their content; the app places them. Use circle, underline, check and arrow marks on a card to point things out. " +
       "To change what is already drawn (colour, words, position, erase, clear), call edit_canvas with the mark ids.",
-    "- For the shape of a thing in 3D (a planet, a black hole, an atom, a cell, a molecule, a crystal, a landscape), " +
-      "draw a card of kind model: pick shape sphere, planet (sphere with a ring), torus, cube or cell; molecule with " +
+    "- After the picture, at most one model card for the shape of a thing in 3D (an atom, a molecule, a crystal, a planet, " +
+      "a black hole, a landscape): kind model, shape sphere, planet (a ball with a ring or disk: a black hole with its " +
+      "accretion disk, Saturn), torus, cube or cell; molecule with " +
       "atoms (x, y, z from -1 to 1, a short label like O or H) and bonds (atom numbers, 1 = first); points for a few " +
-      "dots in space; heightmap for a surface (a square grid of heights 0 to 1). Pin up to 4 labels at x, y, z. It turns slowly on its own.",
+      "dots in space; heightmap for a surface (a square grid of heights 0 to 1). Pin up to 4 labels at x, y, z. It turns slowly on its own. " +
+      "One card per idea: a black hole is one planet card with labels (event horizon, accretion disk), not a ball card " +
+      "and then a disk card. To build it up step by step, edit_canvas the same card (its shape, then its labels); " +
+      "never draw a card that nearly repeats one on screen.",
     "- You can see the user's screen only by calling look; call it before answering about anything on screen. " +
       "Their words may come with a [Screen: ...] line (front app, window, page, cursor): use it, never read it out. " +
       "A [Circled: ...] line means the image just before it is what they circled: that circle is the subject and beats " +
@@ -108,6 +116,9 @@ function workRules(brainPath?: string): string {
     "- You can change your own voice and speaking style. When the user asks for another voice (calmer, brighter, " +
       '"switch to Bright") or a way of speaking (slower, more excited, like a radio host), call set_voice. ' +
       "Never say you cannot change your voice.",
+    "- At the start of each answer that needs work or an explanation (not small talk), call set_topic with what you are " +
+      "thinking about, in 2 to 6 words in the user's language (\"黑洞的结构\", \"black hole structure\"). Do not say it out loud; " +
+      "the user sees it beside you while you talk.",
     "- The safety mode decides if the user is asked first; if the call is declined or blocked, say so in one line.",
   ].join("\n");
 }
@@ -117,10 +128,18 @@ function workRules(brainPath?: string): string {
  * Chinese speech in English, pulled by the English examples above. So the rule names
  * Chinese, covers the drawn lines, and comes last.
  */
+//
+// Feedback (Chinese chat, then "black hole" said in English): Jett went all English. "When they
+// switch languages, switch with them" read one borrowed word as a switch. So the rule is: the
+// language of the user's latest whole sentence, and a borrowed word or name is not a switch.
 const LANGUAGE_RULE =
-  "Language: always answer in the language the user just spoke, whatever language these instructions and examples use. " +
+  "Language: always answer in the language of the user's latest whole sentence (the language the user just spoke), " +
+  "whatever language these instructions and examples use. " +
   "If they speak Chinese (中文), answer in Mandarin Chinese; if English, in English; any other language, in that language. " +
-  "When they switch languages, switch with them. The lines you say while drawing follow the same rule.";
+  "A Chinese sentence with an English word or name in it (\"black hole 是什么？\", \"帮我打开 Notion\") is Chinese: answer in Chinese. " +
+  "Never switch because of one borrowed word, a name or a short English term; switch only when they speak a whole sentence in another language. " +
+  "Everything you show follows the same language: the lines you say while drawing, card titles, items and labels, " +
+  "picture captions and your topic line.";
 
 /** Workflows (src/workflows): saved helper tasks, run by name or on a schedule. */
 const WORKFLOW_RULES = [

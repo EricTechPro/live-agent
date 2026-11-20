@@ -77,6 +77,8 @@ export function actionLabel(name: string, args: Record<string, unknown>, lang: L
 export interface Work {
   running: { id: string; label: string }[];
   done?: { label: string; ok: boolean; at: number };
+  /** What Jett is thinking about (set_topic), shown while it thinks and talks; cleared by your next words. */
+  topic?: string;
 }
 export const noWork: Work = { running: [] };
 /** How long the pill shows ✓ "Working in CapCut" after the call is done. */
@@ -84,23 +86,39 @@ export const DONE_HOLD_MS = 900;
 
 const DONE = new Set(["ok", "error", "blocked", "declined", "cancelled"]);
 
+/** The topic line in the pill: "想：黑洞的结构" / "Thinking: black hole structure". */
+export function topicLabel(topic: string, lang: Lang = "en"): string {
+  return lang === "zh" ? `想：${topic}` : `Thinking: ${topic}`;
+}
+
 export function addWork(w: Work, event: AgentEvent, lang: Lang = "en", now = 0): Work {
   switch (event.type) {
     case "tool.call":
+      // set_topic is not work to tick off: it is the line the pill shows while Jett talks.
+      if (event.name === "set_topic") {
+        const topic = str(event.args.topic);
+        return topic ? { ...w, topic: topicLabel(topic.slice(0, 48), lang) } : w;
+      }
       return { ...w, running: [...w.running.filter((r) => r.id !== event.id), { id: event.id, label: actionLabel(event.name, event.args, lang) }] };
     case "tool.result": {
       const was = w.running.find((r) => r.id === event.id);
       if (!DONE.has(event.status) || !was) return w;
       // A call the model took back (or the user said no to) just goes: no tick for it.
       const tick = event.status === "ok" || event.status === "error" ? { done: { label: was.label.replace(/…$/, ""), ok: event.status === "ok", at: now } } : {};
-      return { running: w.running.filter((r) => r.id !== event.id), ...tick };
+      return { running: w.running.filter((r) => r.id !== event.id), ...tick, ...(w.topic ? { topic: w.topic } : {}) };
     }
     case "interrupted":
     case "chat.started":
-      return w.running.length || w.done ? noWork : w;
+      return w.running.length || w.done || w.topic ? noWork : w;
+    case "transcript": {
+      // Your next question: the old topic goes.
+      if (event.role !== "user" || !w.topic) return w;
+      const { topic: _old, ...rest } = w;
+      return rest;
+    }
     case "turn.done":
       // The tick stays for its moment even when the turn ends right after the call.
-      return w.running.length ? { running: [], ...(w.done ? { done: w.done } : {}) } : w;
+      return w.running.length ? { running: [], ...(w.done ? { done: w.done } : {}), ...(w.topic ? { topic: w.topic } : {}) } : w;
     default:
       return w;
   }
@@ -113,6 +131,8 @@ export interface CueInputs {
   look: CallLook;
   /** The latest running action's label, if any (`addWork`). */
   working?: string;
+  /** What Jett is thinking about (`Work.topic`): the pill shows it while Jett thinks or talks. */
+  topic?: string;
   /** The last finished action (`Work.done`), shown as ✓ / ✗ for DONE_HOLD_MS after `at`. */
   done?: Work["done"];
   /** performance.now(), for the ✓'s hold. */
@@ -127,17 +147,18 @@ export interface CueInputs {
 
 export interface Cues {
   /** listen: equaliser; work: spinner; done: ✓ (ok) or ✗; think: a row of dots with a marquee. */
-  pill?: { kind: "listen"; text?: string } | { kind: "work"; text: string } | { kind: "done"; text: string; ok: boolean } | { kind: "think" };
+  pill?: { kind: "listen"; text?: string } | { kind: "work"; text: string } | { kind: "done"; text: string; ok: boolean } | { kind: "think"; text?: string };
   bubble?: { text: string; long: boolean };
   /** Show the words in the bottom caption bar (a drawing is on screen). */
   bar: boolean;
 }
 
-export function cuesFor({ look, working, done, now = 0, narrate, caption, drawing }: CueInputs): Cues {
+export function cuesFor({ look, working, topic, done, now = 0, narrate, caption, drawing }: CueInputs): Cues {
   const cues: Cues = { bar: drawing && !!(caption.user || caption.model) };
   if (working) cues.pill = { kind: "work", text: working };
   else if (look === "listening") cues.pill = drawing ? { kind: "listen" } : { kind: "listen", text: caption.user };
   else if (done && now - done.at < DONE_HOLD_MS) cues.pill = { kind: "done", text: done.label, ok: done.ok };
+  else if (topic && (look === "thinking" || look === "speaking")) cues.pill = { kind: "think", text: topic };
   else if (look === "thinking") cues.pill = { kind: "think" };
   if (narrate) cues.bubble = { text: narrate, long: narrate.length > BUBBLE_FOLD };
   else if (!drawing && caption.model && look !== "offline") cues.bubble = { text: caption.model, long: caption.model.length > BUBBLE_FOLD };

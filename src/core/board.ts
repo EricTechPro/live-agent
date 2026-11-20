@@ -1,7 +1,8 @@
 // The chat's canvas, core side (tickets 31, 33, 34): the marks on it, by id.
 //
 //   const board = createBoard(emit);
-//   board.draw(callId, beats);        // canvas.beat per beat; throws if an id is taken
+//   board.draw(callId, beats);        // canvas.beat per beat; throws if an id is taken by another kind
+//                                     // a card that repeats one on the board updates it (canvas.edit)
 //   board.change(callId, { edits, erase });  // canvas.edit per edit, then canvas.erase ("all" clears)
 //   board.heard(text);                // the model's words: canvas.speak as each beat's line starts
 //   board.interrupted();              // the user talked over it: unspoken beats are erased
@@ -29,7 +30,12 @@ export interface CanvasChange {
 export interface Board {
   /** The ids on the canvas now, in drawing order. */
   ids(): string[];
-  draw(callId: string, beats: Beat[]): void;
+  /**
+   * Draw the beats. A card that repeats one already on the board (same id and kind, a model of
+   * the same shape, or a card of the same kind and title) updates that card instead of adding a
+   * near-copy: a `canvas.edit` right after its beat, and ink on it follows it. `merged` names those.
+   */
+  draw(callId: string, beats: Beat[]): { merged: { from: string; into: string }[] };
   /** Edits first, then erases. Throws (and changes nothing) on an unknown id or a bad edit. */
   change(callId: string, change: CanvasChange): { edited: string[]; erased: string[] };
   /**
@@ -48,6 +54,24 @@ export interface Board {
 /** Lowercase words only, so "THEN, it" matches "then it". */
 export function words(text: string): string[] {
   return text.toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [];
+}
+
+const titleOf = (m: Mark) => ((m as { title?: string }).title ?? "").trim().toLowerCase();
+
+/**
+ * The card on the board `m` repeats, if any (feedback: a black hole came out as three model
+ * cards, sphere, sphere, disk, when it was one thing built up). Pictures never merge.
+ */
+function twinOf(m: Mark, board: Map<string, Mark>): Mark | undefined {
+  if (!isCard(m) || m.kind === "image") return undefined;
+  const same = board.get(m.id);
+  if (same) return same.kind === m.kind ? same : undefined;
+  for (const o of board.values()) {
+    if (o.kind !== m.kind) continue;
+    if (m.kind === "model" && (o as { shape?: string }).shape === (m as { shape?: string }).shape) return o;
+    if (titleOf(m) && titleOf(m) === titleOf(o)) return o;
+  }
+  return undefined;
 }
 
 /** How many of a line's first words must be heard to call it started. */
@@ -76,7 +100,32 @@ export function createBoard(emit: (event: AgentEvent) => void): Board {
     ids: () => [...marks.keys()],
 
     draw(callId, beats) {
-      const ids = beats.flatMap((b) => b.marks.map((m) => m.id));
+      // Repeats of a card on the board (or earlier in this call) become updates of it.
+      const seen = new Map(marks);
+      const rename = new Map<string, string>();
+      const merged: { from: string; into: string }[] = [];
+      const plan = beats.map(({ say, marks: drawn }) => {
+        const add: Mark[] = [];
+        const update: Mark[] = [];
+        for (const raw of drawn) {
+          const r = raw as { on?: string; to_card?: string };
+          const on = r.on && rename.get(r.on), to = r.to_card && rename.get(r.to_card);
+          const m = (on || to ? { ...raw, ...(on ? { on } : {}), ...(to ? { to_card: to } : {}) } : raw) as Mark;
+          const twin = twinOf(m, seen);
+          if (twin) {
+            const next = { ...m, id: twin.id, title: (m as { title?: string }).title ?? (twin as { title?: string }).title } as Mark;
+            rename.set(m.id, twin.id);
+            if (m.id !== twin.id) merged.push({ from: m.id, into: twin.id });
+            seen.set(twin.id, next);
+            update.push(next);
+          } else {
+            add.push(m);
+            if (!marks.has(m.id)) seen.set(m.id, m);
+          }
+        }
+        return { say, add, update };
+      });
+      const ids = plan.flatMap((b) => b.add.map((m) => m.id));
       const taken = ids.filter((id) => marks.has(id));
       if (taken.length) {
         throw new Error(
@@ -87,20 +136,26 @@ export function createBoard(emit: (event: AgentEvent) => void): Board {
       // Ink placed on a card needs that card: drawn earlier in this call or already on the canvas.
       const cards = new Set([...marks.values()].filter(isCard).map((m) => m.id));
       const missing: string[] = [];
-      for (const b of beats)
-        for (const m of b.marks) {
+      for (const b of plan)
+        for (const m of [...b.update, ...b.add]) {
           if (isCard(m)) cards.add(m.id);
           const r = m as { on?: string; to_card?: string };
           for (const ref of [r.on, r.to_card]) if (ref && !cards.has(ref)) missing.push(`${m.id} is on ${ref}, which is not a card drawn before it`);
         }
       if (missing.length) throw new Error(`Nothing was drawn. ${missing.slice(0, 3).join("; ")}.`);
-      for (const b of beats) for (const m of b.marks) marks.set(m.id, m);
-      beats.forEach(({ say, marks: drawn }, beat) => emit({ type: "canvas.beat", id: callId, beat, say, marks: drawn }));
       if (!pending.length) heard = "";
-      beats.forEach(({ say, marks: drawn }, beat) => {
+      plan.forEach(({ say, add, update }, beat) => {
+        for (const m of add) marks.set(m.id, m);
+        emit({ type: "canvas.beat", id: callId, beat, say, marks: add });
+        for (const m of update) {
+          marks.set(m.id, m);
+          emit({ type: "canvas.edit", id: callId, change: {}, mark: m });
+        }
         const lead = words(say).slice(0, LEAD_WORDS).join(" ");
-        if (lead) pending.push({ callId, beat, lead, ids: drawn.map((m) => m.id) });
+        // Only new marks: an interrupted update must not erase the card it changed.
+        if (lead) pending.push({ callId, beat, lead, ids: add.map((m) => m.id) });
       });
+      return { merged };
     },
 
     change(callId, { edits, erase }) {

@@ -50,7 +50,7 @@ export interface ToolContext {
    */
   canvas: {
     ids(): string[];
-    draw(beats: Beat[]): void;
+    draw(beats: Beat[]): { merged: { from: string; into: string }[] };
     change(change: CanvasChange): { edited: string[]; erased: string[] };
     /** Swap a mark for a new one with the same id (`canvas.edit`). False when it is gone. */
     replace(mark: Mark): boolean;
@@ -129,6 +129,8 @@ export interface Tool<Args extends Record<string, any> = Record<string, any>> {
   risk: RiskClass;
   /** JSON Schema of the args object. */
   parameters: Record<string, unknown>;
+  /** Its answer is silent: the model only notes it and does not start speaking again (set_topic). */
+  quiet?: boolean;
   /** Do the work. Return plain JSON for the model; throw to report an error. */
   run(args: Args, context: ToolContext): Promise<unknown> | unknown;
 }
