@@ -10,7 +10,7 @@
 
 import { CELL, ditherCells, photoLum } from "./dither.ts";
 import { paintCells } from "./dither-paint.ts";
-import { modelLabels, modelSdf, modelTexture, projectPoint, renderModel, type ModelSpec } from "./model3d.ts";
+import { modelLabels, modelSdf, modelShade, projectPoint, renderModel, type ModelSpec } from "./model3d.ts";
 
 type Mermaid = typeof import("mermaid").default;
 let mermaid: Promise<Mermaid> | undefined;
@@ -266,7 +266,7 @@ function showModel(card: Card, spec: ModelSpec) {
   canvas.setAttribute("aria-hidden", "true");
   card.el.replaceChildren(canvas);
   const sdf = modelSdf(spec);
-  const texture = modelTexture(spec);
+  const shade = modelShade(spec);
   const labels = modelLabels(spec);
   let box = { w: 0, h: 0 };
   let shownAt: number | undefined;
@@ -295,7 +295,7 @@ function showModel(card: Card, spec: ModelSpec) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, box.w, box.h);
     const ox = Math.floor((box.w - cols * CELL) / 2), oy = Math.floor((box.h - rows * CELL) / 2);
-    paintCells(ctx, ditherCells(renderModel(sdf, cols, rows, yaw, pitch, texture), cols, rows), CELL, ox, oy, p);
+    paintCells(ctx, ditherCells(renderModel(sdf, cols, rows, yaw, pitch, shade), cols, rows), CELL, ox, oy, p);
     // Labels: bold white mono with a dark edge, pinned to their 3D point; in once it is built.
     const a = Math.max(0, Math.min(1, (p - 0.8) / 0.4));
     if (!a) return;

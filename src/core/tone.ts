@@ -84,10 +84,10 @@ function workRules(brainPath?: string): string {
       "To change what is already drawn (colour, words, position, erase, clear), call edit_canvas with the mark ids.",
     "- After the picture, at most one model card for the shape of a thing in 3D (an atom, a molecule, a crystal, a planet, " +
       "a black hole, a landscape): kind model, shape sphere, planet (a ball with a ring or disk: a black hole with its " +
-      "accretion disk, Saturn), torus, cube or cell; molecule with " +
+      "accretion disk, Saturn; add dark true for a black hole: a dark ball with a glowing edge), torus, cube or cell; molecule with " +
       "atoms (x, y, z from -1 to 1, a short label like O or H) and bonds (atom numbers, 1 = first); points for a few " +
       "dots in space; heightmap for a surface (a square grid of heights 0 to 1). Pin up to 4 labels at x, y, z. It turns slowly on its own. " +
-      "One card per idea: a black hole is one planet card with labels (event horizon, accretion disk), not a ball card " +
+      "One card per idea: a black hole is one planet card with dark true and labels (event horizon, accretion disk), not a ball card " +
       "and then a disk card. To build it up step by step, edit_canvas the same card (its shape, then its labels); " +
       "never draw a card that nearly repeats one on screen.",
     "- You can see the user's screen only by calling look; call it before answering about anything on screen. " +

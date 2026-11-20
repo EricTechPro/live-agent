@@ -74,6 +74,7 @@ const markSchema = {
     },
     points: { type: "array", description: "model points: 3 to 64 dots in space.", items: { type: "object", properties: { x: num("-1 to 1"), y: num("-1 to 1"), z: num("-1 to 1") }, required: ["x", "y", "z"] } },
     heights: { type: "array", items: { type: "number" }, description: "model heightmap: a square grid of heights 0 to 1, row by row (16 = 4 x 4, up to 256)." },
+    dark: { type: "boolean", description: "model planet: true for a black hole, a dark ball with a glowing edge inside a bright disk." },
     labels: {
       type: "array",
       description: "model: up to 4 labels pinned to points of the shape; they turn with it.",

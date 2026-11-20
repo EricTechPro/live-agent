@@ -3,7 +3,7 @@
 // Seam: the core's event stream (scripted model), the prompt text, and the pure model renderer.
 import { expect, test } from "bun:test";
 import { addWork, cuesFor, noWork, type Work } from "../app/src/cues.ts";
-import { modelSdf, modelTexture, renderModel, type ModelSpec } from "../app/src/model3d.ts";
+import { modelSdf, modelShade, renderModel, type ModelSpec } from "../app/src/model3d.ts";
 import { startSession } from "../src/core/agent.ts";
 import { bundledTools } from "../src/core/bundled-tools.ts";
 import type { AgentEvent, EventOf } from "../src/core/events.ts";
@@ -28,20 +28,44 @@ async function turns(script: ModelEvent[][], n: number) {
 
 // ---- 1. one card per idea ------------------------------------------------------
 
-test("a second model card of the same shape updates the first instead of stacking a near-copy", async () => {
-  const [a, b] = await turns(
+test("in one answer, a second model of the same shape updates the first instead of stacking a near-copy", async () => {
+  const [a] = await turns(
     [
-      drawCall("d1", { kind: "model", id: "p1", title: "黑洞", shape: "sphere" }), say("A ball."),
-      drawCall("d2", { kind: "model", id: "p2", title: "事件视界", shape: "sphere", labels: [{ text: "事件视界", x: 0.6, y: 0, z: 0 }] }), say("Its edge."),
+      drawCall("d1", { kind: "model", id: "p1", title: "黑洞", shape: "sphere" }),
+      drawCall("d2", { kind: "model", id: "p2", title: "事件视界", shape: "sphere", labels: [{ text: "事件视界", x: 0.6, y: 0, z: 0 }] }),
+      say("Its edge."),
+    ],
+    1,
+  );
+  const beatsOf = (id: string) => of(a!, "canvas.beat").filter((e) => e.id === id);
+  expect(beatsOf("d1")[0]!.marks.map((m) => m.id)).toEqual(["p1"]);
+  expect(beatsOf("d2")[0]!.marks).toEqual([]);
+  const [edit] = of(a!, "canvas.edit");
+  expect(edit!.mark).toMatchObject({ id: "p1", kind: "model", shape: "sphere", title: "事件视界", labels: [{ text: "事件视界" }] });
+  const result = of(a!, "tool.result").find((r) => r.id === "d2")!;
+  expect(result).toMatchObject({ status: "ok", output: { ids: ["p1"], canvas: ["p1"], updated: [{ from: "p2", into: "p1" }] } });
+});
+
+test("two beats of one draw call building the same model merge too", async () => {
+  const [a] = await turns(
+    [drawCall("d1", { kind: "model", id: "p1", shape: "planet" }, { kind: "model", id: "p2", shape: "planet", dark: true }), say("Done.")],
+    1,
+  );
+  expect(of(a!, "canvas.beat").flatMap((e) => e.marks.map((m) => m.id))).toEqual(["p1"]);
+  expect(of(a!, "canvas.edit")[0]!.mark).toMatchObject({ id: "p1", dark: true });
+});
+
+test("Earth and Mars stay two cards: same shape in different answers, different titles", async () => {
+  const [, b] = await turns(
+    [
+      drawCall("d1", { kind: "model", id: "p1", title: "Earth", shape: "sphere" }), say("Earth."),
+      drawCall("d2", { kind: "model", id: "p2", title: "Mars", shape: "sphere" }), say("Mars."),
     ],
     2,
   );
-  expect(of(a!, "canvas.beat")[0]!.marks.map((m) => m.id)).toEqual(["p1"]);
-  expect(of(b!, "canvas.beat")[0]!.marks).toEqual([]);
-  const [edit] = of(b!, "canvas.edit");
-  expect(edit!.mark).toMatchObject({ id: "p1", kind: "model", shape: "sphere", title: "事件视界", labels: [{ text: "事件视界" }] });
-  const result = of(b!, "tool.result").find((r) => r.id === "d2")!;
-  expect(result).toMatchObject({ status: "ok", output: { ids: ["p1"], canvas: ["p1"], updated: [{ from: "p2", into: "p1" }] } });
+  expect(of(b!, "canvas.edit")).toEqual([]);
+  expect(of(b!, "canvas.beat")[0]!.marks.map((m) => m.id)).toEqual(["p2"]);
+  expect(of(b!, "tool.result").find((r) => r.id === "d2")).toMatchObject({ output: { canvas: ["p1", "p2"] } });
 });
 
 test("a card with the same kind and title updates it too; different cards still add", async () => {
@@ -80,7 +104,7 @@ test("a shape on a card that is not a model is a tool error", async () => {
 test("the prompt says one card per idea, built up with edit_canvas, and a black hole is one planet card", () => {
   const text = systemInstruction("short");
   expect(text).toContain("One card per idea");
-  expect(text).toMatch(/black hole is one planet card/);
+  expect(text).toMatch(/black hole is one planet card with dark true/);
   expect(text).toMatch(/edit_canvas the same card/);
 });
 
@@ -90,7 +114,7 @@ test("every round shape visibly changes as it turns (a plain lit sphere looked f
   const TURN = (15 * Math.PI) / 180;
   for (const shape of ["sphere", "planet", "torus", "cell", "cube"] as const) {
     const spec: ModelSpec = { shape };
-    const frame = (t: number) => renderModel(modelSdf(spec), 60, 45, 0.6 + t * TURN, 0.24, modelTexture(spec));
+    const frame = (t: number) => renderModel(modelSdf(spec), 60, 45, 0.6 + t * TURN, 0.24, modelShade(spec));
     const a = frame(0), b = frame(1);
     let changed = 0, lit = 0;
     for (let i = 0; i < a.length; i++) {
@@ -100,6 +124,26 @@ test("every round shape visibly changes as it turns (a plain lit sphere looked f
     // One second of turning moves at least 5% of the dots.
     expect({ shape, moved: changed / lit > 0.05 }).toEqual({ shape, moved: true });
   }
+});
+
+test("a dark planet is a black hole: a dark centre, a bright disk and a thin glowing edge", () => {
+  const spec: ModelSpec = { shape: "planet", dark: true };
+  const img = renderModel(modelSdf(spec), 60, 60, 0.6, 0.24, modelShade(spec));
+  const lit = renderModel(modelSdf({ shape: "planet" }), 60, 60, 0.6, 0.24, modelShade({ shape: "planet" }));
+  const at = (a: Float32Array, x: number, y: number) => a[y * 60 + x]!;
+  // The ball's middle: near black when dark, lit on the plain planet.
+  expect(at(img, 30, 24)).toBeLessThan(0.15);
+  expect(at(lit, 30, 24)).toBeGreaterThan(0.3);
+  // The edge of the ball glows: some bright dot near its rim on the row through the middle.
+  const row = Array.from({ length: 60 }, (_, x) => at(img, x, 24));
+  expect(Math.max(...row.slice(0, 30))).toBeGreaterThan(0.9);
+  // The disk is bright even on the side away from the light.
+  expect(Math.max(...Array.from({ length: 60 }, (_, x) => at(img, x, 30)).slice(40))).toBeGreaterThan(0.6);
+});
+
+test("dark is only for a planet", async () => {
+  const [a] = await turns([drawCall("d1", { kind: "model", id: "p1", shape: "sphere", dark: true }), say("No.")], 1);
+  expect(of(a!, "tool.result")[0]).toMatchObject({ status: "error", error: expect.stringContaining("dark is for shape planet") });
 });
 
 // ---- 2. language ------------------------------------------------------------------

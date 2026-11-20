@@ -60,15 +60,16 @@ const titleOf = (m: Mark) => ((m as { title?: string }).title ?? "").trim().toLo
 
 /**
  * The card on the board `m` repeats, if any (feedback: a black hole came out as three model
- * cards, sphere, sphere, disk, when it was one thing built up). Pictures never merge.
+ * cards, sphere, sphere, disk, when it was one thing built up). Pictures never merge. A model of
+ * the same shape merges only within one answer (`thisTurn`): Earth and Mars stay two cards.
  */
-function twinOf(m: Mark, board: Map<string, Mark>): Mark | undefined {
+function twinOf(m: Mark, board: Map<string, Mark>, thisTurn: Set<string>): Mark | undefined {
   if (!isCard(m) || m.kind === "image") return undefined;
   const same = board.get(m.id);
   if (same) return same.kind === m.kind ? same : undefined;
   for (const o of board.values()) {
     if (o.kind !== m.kind) continue;
-    if (m.kind === "model" && (o as { shape?: string }).shape === (m as { shape?: string }).shape) return o;
+    if (m.kind === "model" && thisTurn.has(o.id) && (o as { shape?: string }).shape === (m as { shape?: string }).shape) return o;
     if (titleOf(m) && titleOf(m) === titleOf(o)) return o;
   }
   return undefined;
@@ -83,6 +84,8 @@ export function createBoard(emit: (event: AgentEvent) => void): Board {
   type Pending = { callId: string; beat: number; lead: string; ids: string[] };
   let pending: Pending[] = [];
   let heard = "";
+  // Cards drawn in this answer (turn): a same-shape model among them is a step of one build-up.
+  const thisTurn = new Set<string>();
   const forgetSpeech = () => {
     pending = [];
     heard = "";
@@ -104,6 +107,7 @@ export function createBoard(emit: (event: AgentEvent) => void): Board {
       const seen = new Map(marks);
       const rename = new Map<string, string>();
       const merged: { from: string; into: string }[] = [];
+      const turnNow = new Set(thisTurn);
       const plan = beats.map(({ say, marks: drawn }) => {
         const add: Mark[] = [];
         const update: Mark[] = [];
@@ -111,7 +115,7 @@ export function createBoard(emit: (event: AgentEvent) => void): Board {
           const r = raw as { on?: string; to_card?: string };
           const on = r.on && rename.get(r.on), to = r.to_card && rename.get(r.to_card);
           const m = (on || to ? { ...raw, ...(on ? { on } : {}), ...(to ? { to_card: to } : {}) } : raw) as Mark;
-          const twin = twinOf(m, seen);
+          const twin = twinOf(m, seen, turnNow);
           if (twin) {
             const next = { ...m, id: twin.id, title: (m as { title?: string }).title ?? (twin as { title?: string }).title } as Mark;
             rename.set(m.id, twin.id);
@@ -120,7 +124,10 @@ export function createBoard(emit: (event: AgentEvent) => void): Board {
             update.push(next);
           } else {
             add.push(m);
-            if (!marks.has(m.id)) seen.set(m.id, m);
+            if (!marks.has(m.id)) {
+              seen.set(m.id, m);
+              turnNow.add(m.id);
+            }
           }
         }
         return { say, add, update };
@@ -145,7 +152,10 @@ export function createBoard(emit: (event: AgentEvent) => void): Board {
       if (missing.length) throw new Error(`Nothing was drawn. ${missing.slice(0, 3).join("; ")}.`);
       if (!pending.length) heard = "";
       plan.forEach(({ say, add, update }, beat) => {
-        for (const m of add) marks.set(m.id, m);
+        for (const m of add) {
+          marks.set(m.id, m);
+          thisTurn.add(m.id);
+        }
         emit({ type: "canvas.beat", id: callId, beat, say, marks: add });
         for (const m of update) {
           marks.set(m.id, m);
@@ -217,10 +227,14 @@ export function createBoard(emit: (event: AgentEvent) => void): Board {
       for (const [callId, ids] of byCall) emit({ type: "canvas.erase", id: callId, ids, all: false });
     },
 
-    turnDone: forgetSpeech,
+    turnDone() {
+      forgetSpeech();
+      thisTurn.clear();
+    },
 
     clear() {
       marks.clear();
+      thisTurn.clear();
       forgetSpeech();
     },
   };

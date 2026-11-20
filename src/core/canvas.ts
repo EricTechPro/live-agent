@@ -112,9 +112,11 @@ const model = z.object({
   points: z.array(z.object(v3)).max(64).optional(),
   heights: z.array(z.number().finite().min(0).max(1)).max(256).optional(),
   labels: z.array(z.object({ text: words(24), ...v3 })).max(4).optional(),
+  dark: z.boolean().optional(),
   color,
   card_size,
 }).superRefine((m, ctx) => {
+  if (m.dark && m.shape !== "planet") ctx.addIssue({ code: "custom", path: ["dark"], message: "dark is for shape planet (a black hole)" });
   const atoms = m.atoms?.length ?? 0;
   if (m.shape === "molecule" && atoms < 2) ctx.addIssue({ code: "custom", path: ["atoms"], message: "a molecule needs at least 2 atoms" });
   m.bonds?.forEach((b, i) => {

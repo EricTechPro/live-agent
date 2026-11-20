@@ -13,6 +13,8 @@ export interface ModelSpec {
   points?: V3[];
   heights?: number[];
   labels?: (V3 & { text: string })[];
+  /** planet only: a black hole, a dark ball with a thin glowing edge inside a bright disk. */
+  dark?: boolean;
 }
 export type Sdf = (x: number, y: number, z: number) => number;
 
@@ -113,27 +115,36 @@ export function modelSdf(m: ModelSpec): Sdf {
   }
 }
 
-/** A surface pattern: brightness x 0.6..1 at a model-space point. */
-export type Texture = (x: number, y: number, z: number) => number;
+/**
+ * A dot's brightness from where the ray hit (model space), its Lambert light and how square
+ * the surface faces the viewer (1 = straight on, 0 = the very edge).
+ */
+export type Shade = (x: number, y: number, z: number, lambert: number, facing: number) => number;
+const plain: Shade = (_x, _y, _z, lambert) => 0.22 + 0.78 * lambert;
 
 /**
- * Stripes that turn with the shape (feedback: a plain sphere or ring lit from a fixed light looks
- * the same at every angle, so the turning card looked frozen). Round shapes get them; a cube,
- * molecule, points and heightmap already change as they turn.
+ * Round shapes get stripes that turn with them (feedback: a plain sphere or ring lit from a fixed
+ * light looks the same at every angle, so the turning card looked frozen). A cube, molecule, points
+ * and heightmap already change as they turn. A dark planet is a black hole: a near-black ball with
+ * a thin glowing edge, in a disk that glows on its own.
  */
-export function modelTexture(m: ModelSpec): Texture | undefined {
+export function modelShade(m: ModelSpec): Shade {
   const band = (a: number, n: number) => (Math.sin(a * n) > 0 ? 1 : 0.6);
+  const striped = (n: number): Shade => (x, _y, z, lambert) => 0.22 + 0.78 * lambert * band(Math.atan2(z, x), n);
+  const disk = (x: number, y: number, z: number) => band(Math.atan2(z, x * 0.97 + y * 0.24), 7);
   switch (m.shape) {
     case "sphere":
     case "cell":
-      return (x, _y, z) => band(Math.atan2(z, x), 4);
+      return striped(4);
     case "torus":
-      return (x, _y, z) => band(Math.atan2(z, x), 6);
+      return striped(6);
     case "planet":
-      // The ball and its disk both swirl round the vertical axis.
-      return (x, y, z) => (Math.hypot(x, y, z) < 0.6 ? band(Math.atan2(z, x), 4) : band(Math.atan2(z, x * 0.97 + y * 0.24), 7));
+      if (m.dark)
+        return (x, y, z, lambert, facing) =>
+          Math.hypot(x, y, z) < 0.6 ? (facing < 0.35 ? 0.95 : 0.08) : (0.7 + 0.3 * lambert) * disk(x, y, z);
+      return (x, y, z, lambert) => 0.22 + 0.78 * lambert * (Math.hypot(x, y, z) < 0.6 ? band(Math.atan2(z, x), 4) : disk(x, y, z));
     default:
-      return undefined;
+      return plain;
   }
 }
 
@@ -160,7 +171,7 @@ const LIGHT = (() => {
  * One brightness per dot (cols x rows, row by row): 0 = no surface, else 0.22 (shadow, deep
  * teal) to 1 (lit, near white).
  */
-export function renderModel(sdf: Sdf, cols: number, rows: number, yaw: number, pitch: number, texture?: Texture): Float32Array {
+export function renderModel(sdf: Sdf, cols: number, rows: number, yaw: number, pitch: number, shade: Shade = plain): Float32Array {
   const out = new Float32Array(cols * rows);
   const k = (2 * VIEW) / Math.min(cols, rows);
   const dir = toModel({ x: 0, y: 0, z: 1 }, yaw, pitch);
@@ -188,7 +199,8 @@ export function renderModel(sdf: Sdf, cols: number, rows: number, yaw: number, p
       const nx = a - b - c + d, ny = -a - b + c + d, nz = -a + b - c + d;
       const nl = len3(nx, ny, nz) || 1;
       const lambert = Math.max(0, (nx * light.x + ny * light.y + nz * light.z) / nl);
-      out[j * cols + i] = 0.22 + 0.78 * lambert * (texture ? texture(px, py, pz) : 1);
+      const facing = Math.abs(nx * dir.x + ny * dir.y + nz * dir.z) / nl;
+      out[j * cols + i] = shade(px, py, pz, lambert, facing);
     }
   return out;
 }
